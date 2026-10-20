@@ -1,0 +1,89 @@
+{
+  "ngm": {
+    "org": "Needlework Guild of Minnesota",
+    "newsletter": "The Needle's *Eye*",
+    "site": "https://needleworkguildmn.org",
+    "signup_url": "",
+    "logo": "ngm-mark.png",
+    "colors": {
+      "outer": "#F0EAE0",
+      "card": "#FAF7F2",
+      "line": "#DDD5C8",
+      "rule": "#E5DDD0",
+      "ink": "#242424",
+      "muted": "#656565",
+      "primary": "#3E5538",
+      "primary_soft": "#5C7A52",
+      "accent": "#B87260",
+      "pale": "#EEF3EC",
+      "pale_accent": "#F5EBE7",
+      "dark": "#3E5538",
+      "on_dark": "#FAF7F2",
+      "on_dark_em": "#F5EBE7"
+    },
+    "head_stack": "'Cormorant Garamond',Georgia,'Times New Roman',serif",
+    "body_stack": "Arial,Helvetica,sans-serif",
+    "head_weight": 400,
+    "card_fonts": {
+      "head": [
+        "Cormorant Garamond",
+        "cormorant-garamond",
+        400
+      ],
+      "body": [
+        "DM Sans",
+        "dm-sans",
+        400
+      ]
+    },
+    "footer": [
+      "<a href=\"https://www.facebook.com/NeedleworkGuildMN\">Facebook</a> · <a href=\"https://www.instagram.com/needleworkguildmn/\">Instagram</a> · <a href=\"mailto:inquiry@needleworkguildmn.org\">inquiry@needleworkguildmn.org</a>",
+      "Needlework Guild of Minnesota · PO Box 16506, St. Louis Park, MN 55416",
+      "A 501(c)(3) nonprofit educational organization, connecting needleworkers since 1972."
+    ],
+    "join_url": "https://needleworkguildmn.org/join"
+  },
+  "open-frame": {
+    "org": "Open Frame",
+    "newsletter": "Open *Frame* Notes",
+    "site": "https://openframe.design",
+    "signup_url": "https://openframe.design/links",
+    "logo": "of-mark.jpg",
+    "colors": {
+      "outer": "#E9E6DC",
+      "card": "#FBFAF6",
+      "line": "#D9D5C8",
+      "rule": "#E4E0D4",
+      "ink": "#111110",
+      "muted": "#6D6B64",
+      "primary": "#111110",
+      "primary_soft": "#4B4A46",
+      "accent": "#F24333",
+      "pale": "#F3F1EA",
+      "pale_accent": "#FDE7E4",
+      "dark": "#111110",
+      "on_dark": "#F3F1EA",
+      "on_dark_em": "#F24333"
+    },
+    "head_stack": "'Fraunces',Georgia,'Times New Roman',serif",
+    "body_stack": "Arial,Helvetica,sans-serif",
+    "head_weight": 500,
+    "card_fonts": {
+      "head": [
+        "Fraunces",
+        "fraunces",
+        500
+      ],
+      "body": [
+        "Inter",
+        "inter",
+        400
+      ]
+    },
+    "footer": [
+      "<a href=\"https://www.instagram.com/open.framedesign/\">Instagram</a> · <a href=\"https://openframe.design/links\">openframe.design</a>",
+      "Open Frame · Design and marketing for mission-driven organizations · Minneapolis and Barcelona"
+    ],
+    "join_url": "https://openframe.design/links"
+  }
+}

@@ -1,0 +1,55 @@
+{
+  "brand": "ngm",
+  "month": "2026-11",
+  "subject": "A Fall Finish, Tea & Stitch and every November meeting",
+  "preview_text": "A Fall Finish this weekend, Sunday Tea & Stitch, every November meeting, and the 2027 Retreat teachers.",
+  "send_at": "2026-10-27T09:00:00-05:00",
+  "review_deadline": "2026-10-26T17:00:00-05:00",
+  "sections": [
+    { "type": "note", "body": [
+      "Hello, stitchers.",
+      "November is a good month for finishing things. Holiday gifts, that piece that's been in the drawer since spring, the last few rows of a sampler. This month the guild has a whole weekend set aside for exactly that, plus our usual groups and a first look at next summer's Retreat.",
+      "See you at a table soon."
+    ]},
+    { "type": "feature", "tone": "pale", "kicker": "Special event", "title": "A Fall *Finish*",
+      "meta": "Saturday and Sunday, November 7 and 8 · Plymouth Comfort Inn, 3000 Harbor Lane North",
+      "body": ["Two days of open stitching to get projects over the finish line, with a catered lunch, gift-certificate drawings each day and the free giveaway table. Bring anything you'd like to pass on. Whatever isn't claimed goes home with you."],
+      "social": { "hook": "A Fall *Finish*", "line": "Two days of open stitching. November 7 and 8, Plymouth." } },
+    { "type": "calendar", "title": "Mark your *calendar*",
+      "intro": "Members are welcome at every group, every month. Public sessions are free for everyone. Bring a friend.",
+      "rows": [
+        { "when": "Sun, Nov 1", "title": "Sunday Tea & Stitch", "detail": "1 to 4 pm · Richfield", "note": "Free and open to everyone" },
+        { "when": "Nov 7 and 8", "title": "A Fall Finish", "detail": "Plymouth", "note": "For registered attendees" },
+        { "when": "Tue, Nov 10", "title": "Daytime Counted Thread & Needlepoint", "detail": "10 am to 2 pm", "note": "Hybrid · Bloomington and Zoom" },
+        { "when": "Tue, Nov 17", "title": "Potpourri Stitchers", "detail": "10 am to 2 pm", "note": "In person, in members' homes" },
+        { "when": "Sat, Nov 21", "title": "Come & Stitch", "detail": "10 am to 12 pm", "note": "Free and open to everyone · in person or Zoom, see the calendar" },
+        { "when": "Tue, Nov 24", "items": [ { "title": "Daytime Stitch-In", "detail": "10 am to 2 pm · hybrid" }, { "title": "Evening Stitch-In", "detail": "7 to 9 pm · Zoom" } ] }
+      ],
+      "link": { "text": "See the full calendar", "url": "https://needleworkguildmn.org/calendar" } },
+    { "type": "article", "kicker": "Technique spotlight", "title": "*Blackwork*",
+      "body": [
+        "One color of thread, counted stitches and a small motif repeated until it reads like lace. Stitchers in Tudor England wore it on their collars and cuffs, and it's still one of the most satisfying things to watch grow on a piece of linen.",
+        "Want to try it? The Daytime Counted Thread & Needlepoint group meets on the second Tuesday. Bring a question and someone will happily point you to a first pattern."
+      ],
+      "social": { "hook": "Try *blackwork*", "line": "One color of thread, counted stitches, a motif that reads like lace." } },
+    { "type": "spotlight", "kicker": "Member spotlight", "title": "Meet [first name]",
+      "body": ["[Member since year. One or two sentences on what she stitches and which group she's in.]"],
+      "quote": "[One line in her own words.]" },
+    { "type": "article", "kicker": "From the library", "title": "Borrow a book this *month*",
+      "body": ["The lending library cabinets at MVUUF are open during every meeting. Find the card inside the cover, sign and date it, and drop it in the pink box in cabinet 1. Books go out for a month, and when you're done they go back in the green box."] },
+    { "type": "poll", "id": "2026-11-workshop", "title": "What would you *come* to?",
+      "body": ["We're planning spring. Tap the one you'd most like."],
+      "options": [ { "label": "A beginner blackwork class", "value": "blackwork" }, { "label": "A finishing workshop", "value": "finishing" }, { "label": "More Tea & Stitch afternoons", "value": "tea-stitch" } ] },
+    { "type": "feature", "tone": "dark", "kicker": "Save the date · August 11 to 14, 2027", "title": "Retreat 2027: Stitching with *Sass*",
+      "body": [
+        "Four days at the Crowne Plaza Minneapolis West in Plymouth. Our teachers are confirmed: Tricia Wilson Nguyen (Thistle Threads), Maggie Thompson (Maggie T Designs), Lee Popp, Beth Seal (Summer House Stitche Workes) and Toni Gerdes (Toni Gerdes Needlearts).",
+        "The invitation comes out in spring 2027. Retreat is for members, so now is a good time to make sure yours is current."
+      ],
+      "social": { "hook": "Retreat 2027: Stitching with *Sass*", "line": "August 11 to 14, 2027. Five teachers confirmed." } },
+    { "type": "feature", "tone": "rose", "kicker": "Send us your news", "title": "Help write the next *issue*",
+      "body": ["Finished something? Have a tip, a photo from a meeting or a date we should know? Reply to this email or write to [grahamivy.co+ngm@gmail.com](mailto:grahamivy.co+ngm@gmail.com) by the 12th and it may go in December's issue."] },
+    { "type": "cta", "title": "Know someone who'd love *this*?",
+      "body": ["Forward this email. Membership is $30 a year and covers every meeting, workshops, the Retreat, this newsletter and the library."],
+      "button": { "text": "Join the Guild", "url": "https://needleworkguildmn.org/join" } }
+  ]
+}
