@@ -1,7 +1,7 @@
 /**
  * Open Frame Hub
- * One page for everything that needs Graham, a no-login review page per client,
- * and a morning email. Runs free inside Google Apps Script, bound to the
+ * One-card-at-a-time page for everything that needs Graham, a no-login review
+ * page per client, and a weekly (or every-2-weeks) check-in email. Runs free in Google Apps Script, bound to the
  * "NGM social queue" Sheet. Reads and writes the same tabs n8n uses.
  *
  * Setup (once): paste this file into Extensions > Apps Script, run setup(),
@@ -10,7 +10,12 @@
  */
 
 const TZ = 'America/Chicago';
-const DIGEST_HOUR = 7;
+// Check-in: one email with everything that needs you. 1 = every week, 2 = every 2 weeks.
+const CHECKIN_EVERY_WEEKS = 1;
+const CHECKIN_DAY = 'MONDAY';
+const CHECKIN_HOUR = 9;
+// Between check-ins you only hear about things that can't wait: a failed post, posting that stopped, a DM (Meta closes replies after 24 hours).
+const URGENT_HOUR = 8;
 const OUTREACH_SHEET_ID = '1VgiiTBTpmFh5bqutvYvjvNZmSicc8Es2vLSmnPlpHaU';
 // Column names follow /mnt/project-files/automation/queue-schema.md. review_note is Graham's own note.
 const QUEUE_EXTRA = ['client_decision', 'client_note', 'answered_by', 'decided_at', 'revision', 'review_note'];
@@ -40,16 +45,17 @@ function setup() {
   }
 
   ScriptApp.getProjectTriggers()
-    .filter(t => t.getHandlerFunction() === 'morningDigest')
+    .filter(t => ['morningDigest', 'checkIn', 'urgentCheck'].indexOf(t.getHandlerFunction()) >= 0)
     .forEach(t => ScriptApp.deleteTrigger(t));
-  ScriptApp.newTrigger('morningDigest').timeBased().atHour(DIGEST_HOUR).everyDays(1).inTimezone(TZ).create();
+  ScriptApp.newTrigger('checkIn').timeBased().onWeekDay(ScriptApp.WeekDay[CHECKIN_DAY]).atHour(CHECKIN_HOUR).inTimezone(TZ).create();
+  ScriptApp.newTrigger('urgentCheck').timeBased().atHour(URGENT_HOUR).everyDays(1).inTimezone(TZ).create();
   Logger.log('Setup done. Now deploy as a web app, then run emailMeMyLinks.');
 }
 
 function onOpen() {
   SpreadsheetApp.getUi().createMenu('Hub')
     .addItem('Email me my links', 'emailMeMyLinks')
-    .addItem('Send morning summary now', 'morningDigest')
+    .addItem('Send check-in now', 'checkInNow')
     .addToUi();
 }
 
@@ -346,33 +352,47 @@ function clientDecide(token, ids, decision, note) {
   });
 }
 
-// ---------- morning email ----------
+// ---------- check-in emails ----------
 
-function morningDigest() {
+function checkIn() {
+  const props = PropertiesService.getScriptProperties();
+  const last = Number(props.getProperty('LAST_CHECKIN') || 0);
+  if (CHECKIN_EVERY_WEEKS > 1 && Date.now() - last < (CHECKIN_EVERY_WEEKS * 7 - 1) * 864e5) return;
+  checkInNow();
+  props.setProperty('LAST_CHECKIN', String(Date.now()));
+}
+
+function checkInNow() {
   const d = getDashboard(adminKey_());
-  const sec = [
-    ['Topics to approve', d.topics.map(g => g.clientName + ', ' + g.when + ': ' + (g.posts[0].caption || '').slice(0, 60))],
-    ['Posts to approve', d.approve.map(g => g.clientName + ', ' + g.when + ', ' + g.type)],
-    ['Client asked for changes', d.feedback.map(g => g.clientName + ', ' + g.when + ': ' + g.client_note)],
-    ['Messages to answer', d.inbox.map(m => (m.who || 'Someone') + ': ' + m.text.slice(0, 80))],
-    ['Comments ready to post', d.engage.map(e => '@' + e.handle)],
-    ['New photos sent in', d.photos.map(p => (p.from || 'Someone') + ': ' + (p.what || p.file || ''))],
-    ['Needs fixing', d.fixes.concat(d.failed.map(g => ({ text: g.clientName + ': a post on ' + g.when + ' failed to publish' }))).map(f => f.text)],
-    ['Waiting on clients', d.review.map(g => g.clientName + ', ' + g.when)],
-  ].filter(s => s[1].length);
+  const parts = [
+    [d.topics.length, 'topic idea', 'topic ideas'], [d.approve.length, 'post', 'posts'], [d.inbox.length, 'message', 'messages'],
+    [d.engage.length, 'comment to leave', 'comments to leave'], [d.photos.length, 'photo sent in', 'photos sent in'],
+    [d.failed.length + d.fixes.length, 'thing to fix', 'things to fix'],
+  ].filter(p => p[0]).map(p => p[0] + ' ' + (p[0] === 1 ? p[1] : p[2]));
+  const total = d.topics.length + d.approve.length + d.inbox.length + d.engage.length + d.photos.length + d.failed.length + d.fixes.length;
+  const lines = total
+    ? ['You have ' + total + ' to go through: ' + parts.join(', ') + '.', '', 'Tap Yes or Change on each one:', '', adminUrl_()]
+    : ['Nothing needs you this time.'];
+  const fyi = [];
+  if (d.upcoming.length) fyi.push(d.upcoming.length + (d.upcoming.length === 1 ? ' post' : ' posts') + ' going out this week');
+  if (d.review.length) fyi.push(d.review.length + ' waiting on clients');
+  if (fyi.length) lines.push('', fyi.join(', ') + '.');
+  MailApp.sendEmail(me_(), total ? 'Check-in: ' + total + (total === 1 ? ' thing needs you' : ' things need you') : 'Check-in: nothing needs you', lines.join('\n'));
+}
 
-  const total = sec.reduce((n, s) => n + (s[0] === 'Waiting on clients' ? 0 : s[1].length), 0);
-  const lines = [];
-  if (!total) lines.push('Nothing needs you today.', '');
-  sec.forEach(s => {
-    lines.push(s[0] + ' (' + s[1].length + ')');
-    s[1].slice(0, 5).forEach(x => lines.push('- ' + x));
-    if (s[1].length > 5) lines.push('- and ' + (s[1].length - 5) + ' more');
-    lines.push('');
-  });
-  lines.push('Open your dashboard:', '', adminUrl_());
-  if (d.upcoming.length) lines.push('', d.upcoming.length + ' approved posts go out in the next 7 days.');
-  MailApp.sendEmail(me_(), total ? total + ' things need you today' : 'Nothing needs you today', lines.join('\n'));
+// Daily, but only emails when something new can't wait for the check-in.
+function urgentCheck() {
+  const d = getDashboard(adminKey_());
+  const items = d.failed.map(g => ['f' + g.ids[0], g.clientName + ': the post for ' + g.when + " didn't go out."])
+    .concat(d.fixes.filter(f => f.kind === 'stuck').map(f => ['s' + f.text, f.text]))
+    .concat(d.inbox.map(m => ['m' + m.id, (m.who || 'Someone') + ' sent a message: ' + m.text.slice(0, 80)]));
+  const props = PropertiesService.getScriptProperties();
+  const seen = JSON.parse(props.getProperty('URGENT_SEEN') || '[]');
+  const fresh = items.filter(x => seen.indexOf(x[0]) < 0);
+  props.setProperty('URGENT_SEEN', JSON.stringify(items.map(x => x[0]).slice(-200)));
+  if (!fresh.length) return;
+  MailApp.sendEmail(me_(), fresh.length === 1 ? 'One thing can\'t wait' : fresh.length + " things can't wait",
+    fresh.map(x => '- ' + x[1]).join('\n') + '\n\nHandle it here:\n\n' + adminUrl_());
 }
 
 // ---------- helpers ----------
@@ -457,24 +477,31 @@ function token_(n) {
 }
 
 // ---------- pages ----------
+// Both pages show one card at a time: Yes, Change, or a small Skip.
 
 const BASE_CSS = `
-:root{--bg:#f6f4ef;--card:#fff;--ink:#1d1b18;--mute:#6b665d;--line:#e4dfd4;--accent:#2f5d50;--accent-ink:#fff;--warn:#a5481f;--soft:#eef3f0}
-*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
-.wrap{max-width:980px;margin:0 auto;padding:16px}h1{font-size:22px;margin:8px 0 2px}h2{font-size:17px;margin:28px 0 10px}
-.sub{color:var(--mute);font-size:13px}.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px;margin:10px 0}
-.row{display:flex;gap:14px;flex-wrap:wrap}.media{display:flex;gap:6px;overflow-x:auto;max-width:100%}
-.media img,.media video{height:180px;border-radius:8px;background:#ddd;flex:none}
-.meta{font-size:13px;color:var(--mute);margin-bottom:6px}.pill{display:inline-block;font-size:12px;padding:2px 8px;border-radius:99px;background:var(--soft);margin-right:4px}
-textarea{width:100%;min-height:90px;font:inherit;padding:8px;border:1px solid var(--line);border-radius:8px}
-button,.btn{font:inherit;border:1px solid var(--line);background:#fff;border-radius:8px;padding:8px 12px;cursor:pointer;color:var(--ink);text-decoration:none;display:inline-block}
-button.go{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}button.warn{color:var(--warn)}
-.acts{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}.note{background:#fff7e8;border-radius:8px;padding:8px;margin-top:8px;font-size:14px}
-.cap{white-space:pre-wrap;font-size:14px}.empty{color:var(--mute);font-size:14px}.done{opacity:.45;pointer-events:none}
-.tabs{display:flex;gap:6px;flex-wrap:wrap;margin-top:12px}.tabs a{font-size:13px;padding:6px 10px;border-radius:99px;background:#fff;border:1px solid var(--line);color:var(--ink);text-decoration:none}
-.tabs a b{color:var(--accent)}select{font:inherit;padding:6px;border-radius:8px;border:1px solid var(--line)}
-.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}.tile{margin:0}.big{font-size:26px;font-weight:600;margin:2px 0}
-.opt{display:block;width:100%;text-align:left;margin:4px 0;font-size:14px;white-space:pre-wrap}
+:root{--bg:#f6f4ef;--card:#fff;--ink:#1d1b18;--mute:#6b665d;--line:#e4dfd4;--accent:#2f5d50;--accent-ink:#fff;--soft:#eef3f0;--note:#fff7e8}
+*{box-sizing:border-box}html,body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+.wrap{max-width:560px;margin:0 auto;padding:16px 16px 40px}
+.top{display:flex;justify-content:space-between;align-items:baseline;margin:6px 0 14px}.top h1{font-size:20px;margin:0}.count{color:var(--mute);font-size:14px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:16px}
+.label{font-size:13px;color:var(--mute);margin-bottom:10px}.label b{color:var(--ink);font-weight:600}
+.media{display:flex;gap:8px;overflow-x:auto;scroll-snap-type:x mandatory;margin:0 -4px 12px;padding:0 4px}
+.media img,.media video{width:100%;max-height:440px;object-fit:contain;border-radius:10px;background:#e9e5dc;flex:none;scroll-snap-align:center}
+.media.many img,.media.many video{width:85%}
+.text{white-space:pre-wrap;font-size:15px;margin:0 0 6px}.quote{background:var(--soft);border-radius:10px;padding:10px 12px;white-space:pre-wrap;font-size:15px;margin:8px 0}
+.note{background:var(--note);border-radius:10px;padding:10px 12px;font-size:14px;margin:8px 0}
+.ask{font-weight:600;margin:14px 0 10px}
+.btns{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+button{font:inherit;font-size:16px;border-radius:12px;padding:14px 10px;cursor:pointer;border:1px solid var(--line);background:#fff;color:var(--ink)}
+button.yes{background:var(--accent);border-color:var(--accent);color:var(--accent-ink);font-weight:600}
+button:disabled{opacity:.5}
+.skip{display:block;margin:14px auto 0;background:none;border:0;color:var(--mute);font-size:14px;padding:6px;text-decoration:underline}
+textarea{width:100%;min-height:96px;font:inherit;font-size:15px;padding:10px;border:1px solid var(--line);border-radius:10px;margin:4px 0 10px}
+.done{text-align:center;padding:40px 16px}.done h2{font-size:22px;margin:0 0 6px}.mute{color:var(--mute);font-size:14px}
+.more{margin-top:28px;font-size:14px;color:var(--mute)}.more a,.link{color:var(--accent)}
+.tiles{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}.tile{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px}
+.tile b{display:block;font-size:22px}.row{display:flex;justify-content:space-between;gap:10px;padding:8px 0;border-top:1px solid var(--line)}
 `;
 
 const SHARED_JS = `
@@ -483,192 +510,151 @@ const $ = (t, a = {}, ...kids) => { const e = document.createElement(t); Object.
 const call = (fn, ...args) => new Promise((ok, no) => google.script.run.withSuccessHandler(ok).withFailureHandler(e => { alert(e.message || e); no(e); })[fn](...args));
 function mediaEl(urls, poster) {
   if (!urls.length && poster) urls = [poster];
-  return $('div', { class: 'media' }, urls.map(u => /\\.(mp4|mov|webm)(\\?|$)/i.test(u)
+  if (!urls.length) return '';
+  return $('div', { class: 'media' + (urls.length > 1 ? ' many' : '') }, urls.map(u => /\\.(mp4|mov|webm)(\\?|$)/i.test(u)
     ? $('video', Object.assign({ src: u, controls: '', preload: 'metadata', playsinline: '' }, poster ? { poster } : {}))
-    : $('a', { href: u, target: '_blank' }, $('img', { src: u, loading: 'lazy', alt: '' }))));
+    : $('img', { src: u, loading: 'lazy', alt: '' })));
 }
+// One card at a time. Each item: { label, body: [nodes], ask, yes: [text, fn], change: [text, placeholder, fn, prefill] | null, skip: [text, fn] | null }
+function runQueue(items, box, countEl, onDone) {
+  let i = 0;
+  const show = () => {
+    box.innerHTML = '';
+    if (i >= items.length) { countEl.textContent = ''; return onDone(); }
+    countEl.textContent = (i + 1) + ' of ' + items.length;
+    const it = items[i], next = () => { i++; show(); window.scrollTo(0, 0); };
+    const busy = (b, fn) => { b.querySelectorAll('button').forEach(x => x.disabled = true); return fn().then(next, () => b.querySelectorAll('button').forEach(x => x.disabled = false)); };
+    const card = $('div', { class: 'card' }, $('div', { class: 'label' }, it.label), ...it.body, $('div', { class: 'ask', text: it.ask }));
+    const btns = $('div', { class: 'btns' });
+    btns.append($('button', { class: 'yes', text: it.yes[0], on: { click: () => busy(card, it.yes[1]) } }));
+    if (it.change) btns.append($('button', { text: it.change[0], on: { click: () => {
+      const ta = $('textarea', { placeholder: it.change[1] }); ta.value = it.change[3] || '';
+      const send = $('button', { class: 'yes', text: 'Send', on: { click: () => { if (!ta.value.trim()) return ta.focus(); busy(card, () => it.change[2](ta.value.trim())); } } });
+      const back = $('button', { text: 'Back', on: { click: show } });
+      btns.replaceWith($('div', {}, ta, $('div', { class: 'btns' }, back, send))); ta.focus();
+    } } }));
+    else btns.style.gridTemplateColumns = '1fr';
+    card.append(btns);
+    if (it.skip) card.append($('button', { class: 'skip', text: it.skip[0], on: { click: () => busy(card, it.skip[1]) } }));
+    box.append(card);
+  };
+  show();
+}
+const fmt = v => (v == null ? '–' : Math.round(v).toLocaleString('en-US'));
+const plural = (n, one, many) => n + ' ' + (n === 1 ? one : many);
+const pct = (a, b) => (a == null || b == null || b === 0) ? '' : ' (' + (a >= b ? 'up ' : 'down ') + Math.abs(Math.round((a - b) / b * 100)) + '%)';
 `;
 
 const ADMIN_HTML = `<!doctype html><html><head><meta charset="utf-8"><style>${BASE_CSS}</style></head><body><div class="wrap">
-<h1>What needs you</h1><div class="sub" id="sub">Loading...</div>
-<div class="row" style="margin-top:10px;align-items:center"><label class="sub">Client <select id="f"><option value="">All clients</option></select></label><button onclick="load()">Refresh</button></div>
-<div class="tabs" id="tabs"></div><div id="out"></div></div>
+<div class="top"><h1>Check-in</h1><span class="count" id="count">Loading...</span></div>
+<div id="box"></div><div class="more" id="more"></div></div>
 <script>${SHARED_JS}
-let D = null;
-const SECTIONS = [
-  ['topics', 'Topics to approve'], ['approve', 'Posts to approve'], ['feedback', 'Client asked for changes'], ['inbox', 'Messages to answer'],
-  ['engage', 'Comments ready to post'], ['photos', 'New photos sent in'], ['fixes', 'Needs fixing'],
-  ['review', 'Waiting on clients'], ['upcoming', 'Going out this week'],
-];
-function load() { call('getDashboard', BOOT.key).then(d => { D = d; fill(); render(); }); }
-function fill() {
-  const f = document.getElementById('f'); const v = f.value;
-  f.innerHTML = '<option value="">All clients</option>';
-  D.clients.forEach(c => f.append($('option', { value: c.brand, text: c.client })));
-  f.value = v; f.onchange = render;
+const K = BOOT.key;
+const nothing = () => Promise.resolve();
+function postLabel(g, what) { return [$('b', { text: g.clientName }), ' · ' + what + ' · ' + g.when]; }
+function postBody(g) {
+  const caps = g.posts.filter((p, i, a) => a.findIndex(x => x.caption === p.caption) === i);
+  return [mediaEl(g.media, g.preview), ...caps.map(p => $('p', { class: 'text', text: p.caption || '' })),
+    g.client_note ? $('div', { class: 'note', text: 'Client said: ' + g.client_note }) : ''];
 }
-function pick(list) { const b = document.getElementById('f').value; return b ? list.filter(x => !x.brand || x.brand === b) : list; }
-function render() {
-  const out = document.getElementById('out'), tabs = document.getElementById('tabs'); out.innerHTML = ''; tabs.innerHTML = '';
-  const failed = pick(D.failed).map(g => ({ kind: 'failed', g, text: g.clientName + ': post on ' + g.when + ' failed to publish' }));
-  const data = Object.assign({}, D, { fixes: failed.concat(D.fixes) });
-  let needs = 0;
-  SECTIONS.forEach(([k, title]) => {
-    const list = k === 'fixes' ? data.fixes : pick(data[k]);
-    if (!['review', 'upcoming'].includes(k)) needs += list.length;
-    tabs.append($('a', { href: '#' + k }, title + ' ', $('b', { text: String(list.length) })));
-    out.append($('h2', { id: k, text: title + ' (' + list.length + ')' }));
-    if (!list.length) out.append($('div', { class: 'empty', text: 'Nothing here.' }));
-    list.forEach(x => out.append(CARD[k](x)));
-  });
-  clientLinks(out);
-  document.getElementById('sub').textContent = needs ? needs + ' things need you' : 'Nothing needs you right now';
+function build(d) {
+  const q = [];
+  d.failed.forEach(g => q.push({ label: postLabel(g, 'post didn\\'t go out'), body: postBody(g), ask: 'Try posting it again?',
+    yes: ['Try again', () => call('adminPost', K, g.sheetId, g.ids, 'retry', '')], change: null,
+    skip: ['Drop this post', () => call('adminPost', K, g.sheetId, g.ids, 'skip', '')] }));
+  d.fixes.forEach(f => q.push({ label: ['Heads up'], body: [$('p', { class: 'text', text: f.text })], ask: '',
+    yes: ['Got it', nothing], change: null, skip: null }));
+  d.topics.forEach(g => q.push({ label: postLabel(g, 'topic idea'), body: postBody(g), ask: 'Make this post?',
+    yes: ['Yes', () => call('adminTopic', K, g.sheetId, g.ids, 'approve', '')],
+    change: ['Change', 'What should change?', n => call('adminTopic', K, g.sheetId, g.ids, 'change', n)],
+    skip: ['Skip this topic', () => call('adminTopic', K, g.sheetId, g.ids, 'skip', '')] }));
+  d.approve.forEach(g => q.push({ label: postLabel(g, g.type || 'post'), body: postBody(g),
+    ask: g.clientApproves ? 'Send to ' + g.clientName + ' to approve?' : 'Post this?',
+    yes: [g.clientApproves ? 'Yes, send' : 'Yes', () => call('adminPost', K, g.sheetId, g.ids, g.clientApproves ? 'toClient' : 'approve', '')],
+    change: ['Change', 'What should change?', n => call('adminPost', K, g.sheetId, g.ids, 'change', n)],
+    skip: ['Don\\'t post this', () => call('adminPost', K, g.sheetId, g.ids, 'skip', '')] }));
+  d.inbox.forEach(m => { const reply = m.draft || m.options[0] || ''; q.push({
+    label: [$('b', { text: m.who || 'Someone' }), ' · ' + (m.kind === 'comment' ? 'comment' : 'message')],
+    body: [$('div', { class: 'quote', text: m.text }), reply ? $('p', { class: 'text', text: 'Reply: ' + reply }) : ''],
+    ask: reply ? 'Send this reply?' : 'Write a reply?',
+    yes: reply ? ['Send', () => call('adminReply', K, m.sheetId, m.id, reply, 'send')] : ['I handled it', () => call('adminReply', K, m.sheetId, m.id, '', 'done')],
+    change: ['Change', 'Your reply', n => call('adminReply', K, m.sheetId, m.id, n, 'send'), reply],
+    skip: reply ? ['I handled it myself', () => call('adminReply', K, m.sheetId, m.id, '', 'done')] : null }); });
+  const openPost = (x, text) => { try { navigator.clipboard.writeText(text).catch(() => {}); } catch (e) {} window.open(x.url, '_blank'); return call('adminEngage', K, x.id, 'sent', text); };
+  d.engage.forEach(x => q.push({ label: [$('b', { text: '@' + x.handle }), ' · comment to leave'],
+    body: [$('div', { class: 'quote', text: x.caption }), $('p', { class: 'text', text: 'Your comment: ' + x.comment })],
+    ask: 'Post this comment? It gets copied and the post opens. Paste and send.',
+    yes: ['Copy and open', () => openPost(x, x.comment)],
+    change: ['Change', 'Your comment', n => openPost(x, n), x.comment],
+    skip: ['Skip this one', () => call('adminEngage', K, x.id, 'skip', '')] }));
+  d.photos.forEach(p => q.push({ label: [$('b', { text: p.from || 'Someone' }), ' · sent a photo'],
+    body: [p.file ? $('img', { src: p.file, alt: '', style: 'width:100%;border-radius:10px;margin-bottom:10px' }) : '', $('p', { class: 'text', text: [p.what, p.issues ? 'Note: ' + p.issues : ''].filter(Boolean).join('\\n') })],
+    ask: 'Use it in a post?', yes: ['Yes', () => call('adminPhoto', K, p.sheetId, p.row, p.received, 'use')], change: null,
+    skip: ['No', () => call('adminPhoto', K, p.sheetId, p.row, p.received, 'skip')] }));
+  return q;
 }
-function done(el, msg) { el.classList.add('done'); el.querySelector('.acts') && (el.querySelector('.acts').innerHTML = '<span class=sub>' + msg + '</span>'); }
-function postCard(g, acts, opts = {}) {
-  const el = $('div', { class: 'card' });
-  const caps = g.posts.map(p => {
-    const ta = $('textarea', {}); ta.value = p.caption || '';
-    const save = $('button', { text: 'Save caption', on: { click: () => call('adminCaption', BOOT.key, g.sheetId, p.id, ta.value).then(() => save.textContent = 'Saved') } });
-    return opts.edit ? $('div', {}, $('div', { class: 'meta', text: p.platform }), ta, $('div', { class: 'acts', style: 'margin-top:4px' }, save))
-      : $('div', {}, $('div', { class: 'meta', text: p.platform }), $('div', { class: 'cap', text: p.caption || '' }));
-  });
-  el.append(
-    $('div', { class: 'meta' }, $('span', { class: 'pill', text: g.clientName }), $('span', { class: 'pill', text: g.type || 'post' }), g.when),
-    mediaEl(g.media, g.preview), ...caps,
-    g.client_note ? $('div', { class: 'note', text: 'Client: ' + g.client_note }) : '',
-    g.review_note ? $('div', { class: 'note', text: 'Your note: ' + g.review_note }) : '',
-    $('div', { class: 'acts' }, acts(el)));
-  return el;
+function summary(d) {
+  const more = document.getElementById('more'); more.innerHTML = '';
+  const bits = [];
+  if (d.upcoming.length) bits.push(plural(d.upcoming.length, 'post', 'posts') + ' going out this week');
+  if (d.review.length) bits.push(plural(d.review.length, 'post', 'posts') + ' waiting on clients');
+  if (d.feedback.length) bits.push(plural(d.feedback.length, 'post', 'posts') + ' being revised');
+  if (bits.length) more.append($('p', { text: bits.join(' · ') }));
+  const links = $('div', { style: 'display:none' }, d.clients.map(c => $('div', { class: 'row' }, $('span', { text: c.client }),
+    $('span', {}, $('a', { class: 'link', href: c.link, target: '_blank', text: 'Open' }), ' · ',
+      $('a', { class: 'link', href: '#', text: 'Copy link', on: { click: e => { e.preventDefault(); try { navigator.clipboard.writeText(c.link).then(() => e.target.textContent = 'Copied', () => {}); } catch (x) {} } } }),
+      c.contact_email ? [' · ', $('a', { class: 'link', href: '#', text: 'Email it', on: { click: e => { e.preventDefault(); call('adminNotifyClient', K, c.brand).then(() => e.target.textContent = 'Sent'); } } })] : ''))));
+  more.append($('a', { class: 'link', href: '#', text: 'Client links', on: { click: e => { e.preventDefault(); links.style.display = links.style.display ? '' : 'none'; } } }), links);
 }
-const act = (g, el, action, label, msg, cls) => $('button', { class: cls || '', text: label, on: { click: () => {
-  let note = '';
-  if (action === 'change') { note = prompt('What should change?'); if (!note) return; }
-  call('adminPost', BOOT.key, g.sheetId, g.ids, action, note).then(() => done(el, msg));
-} } });
-const topicAct = (g, el, d, label, msg, cls) => $('button', { class: cls || '', text: label, on: { click: () => {
-  let note = '';
-  if (d === 'change') { note = prompt('What should change?'); if (!note) return; }
-  call('adminTopic', BOOT.key, g.sheetId, g.ids, d, note).then(() => done(el, msg));
-} } });
-const CARD = {
-  topics: g => postCard(g, el => [topicAct(g, el, 'approve', 'Approve topic', 'Approved. It gets made on the 18th.', 'go'),
-    topicAct(g, el, 'change', 'Change', 'Noted'), topicAct(g, el, 'skip', 'Skip', 'Skipped', 'warn')]),
-  approve: g => postCard(g, el => [
-    g.clientApproves ? act(g, el, 'toClient', 'Send to client', 'Sent to client for review', 'go') : act(g, el, 'approve', 'Approve', 'Approved. It posts on schedule.', 'go'),
-    g.clientApproves ? act(g, el, 'approve', 'Approve without client', 'Approved') : '',
-    act(g, el, 'change', 'Change', 'Marked for changes'), act(g, el, 'skip', 'Skip', 'Skipped', 'warn')], { edit: true }),
-  feedback: g => postCard(g, el => [
-    act(g, el, g.clientApproves ? 'toClient' : 'approve', g.clientApproves ? 'Fixed, send back to client' : 'Fixed, approve', 'Done', 'go'),
-    act(g, el, 'approve', 'Approve as is', 'Approved'), act(g, el, 'skip', 'Skip', 'Skipped', 'warn')], { edit: true }),
-  review: g => postCard(g, el => g.status === 'plan'
-    ? [topicAct(g, el, 'approve', 'Approve topic for them', 'Approved'), topicAct(g, el, 'skip', 'Skip', 'Skipped', 'warn')]
-    : [act(g, el, 'approve', 'Approve for them', 'Approved'), act(g, el, 'back', 'Pull back to draft', 'Back to draft')]),
-  upcoming: g => postCard(g, el => [act(g, el, 'back', 'Pull back to draft', 'Pulled back', 'warn')]),
-  inbox: m => {
-    const el = $('div', { class: 'card' }); const ta = $('textarea', {}); ta.value = m.draft || m.options[0] || '';
-    el.append($('div', { class: 'meta' }, $('span', { class: 'pill', text: m.kind }), $('span', { class: 'pill', text: m.intent }), (m.who || '') + ' ' + (m.at || '')),
-      $('div', { class: 'cap', text: m.text }),
-      ...m.options.map(o => $('button', { class: 'opt', text: o, on: { click: () => ta.value = o } })), ta,
-      $('div', { class: 'acts' },
-        $('button', { class: 'go', text: 'Send reply', on: { click: () => call('adminReply', BOOT.key, m.sheetId, m.id, ta.value, 'send').then(() => done(el, 'Sending within 5 minutes')) } }),
-        $('button', { text: 'I handled it', on: { click: () => call('adminReply', BOOT.key, m.sheetId, m.id, '', 'done').then(() => done(el, 'Done')) } })));
-    return el;
-  },
-  engage: x => {
-    const el = $('div', { class: 'card' }); const ta = $('textarea', {}); ta.value = x.comment;
-    el.append($('div', { class: 'meta', text: '@' + x.handle }), $('div', { class: 'cap', text: x.caption }), ta,
-      $('div', { class: 'acts' },
-        $('button', { text: 'Copy and open post', on: { click: () => { navigator.clipboard && navigator.clipboard.writeText(ta.value); window.open(x.url, '_blank'); } } }),
-        $('button', { class: 'go', text: 'Posted it', on: { click: () => call('adminEngage', BOOT.key, x.id, 'sent', ta.value).then(() => done(el, 'Logged')) } }),
-        $('button', { class: 'warn', text: 'Skip', on: { click: () => call('adminEngage', BOOT.key, x.id, 'skip', '').then(() => done(el, 'Skipped')) } })));
-    return el;
-  },
-  photos: p => {
-    const el = $('div', { class: 'card' });
-    el.append($('div', { class: 'meta', text: (p.from || 'Someone') + ', ' + p.received + (p.verdict ? ', ' + p.verdict : '') }),
-      $('div', { class: 'cap', text: [p.what, p.caption, p.issues ? 'Issues: ' + p.issues : ''].filter(Boolean).join('\\n') }),
-      p.file ? $('a', { href: p.file, target: '_blank', class: 'btn', text: 'See photo' }) : '',
-      $('div', { class: 'acts' },
-        $('button', { class: 'go', text: 'Use it', on: { click: () => call('adminPhoto', BOOT.key, p.sheetId, p.row, p.received, 'use').then(() => done(el, 'Claude will add it to a post')) } }),
-        $('button', { class: 'warn', text: 'Skip', on: { click: () => call('adminPhoto', BOOT.key, p.sheetId, p.row, p.received, 'skip').then(() => done(el, 'Skipped')) } })));
-    return el;
-  },
-  fixes: f => f.g ? postCard(f.g, el => [act(f.g, el, 'retry', 'Try again', 'Will retry on the next run', 'go'), act(f.g, el, 'skip', 'Skip', 'Skipped', 'warn')])
-    : $('div', { class: 'card' }, $('div', { class: 'cap', text: f.text })),
-};
-function clientLinks(out) {
-  out.append($('h2', { id: 'clients', text: 'Client review pages' }));
-  pick(D.clients).forEach(c => {
-    const waiting = D.review.filter(g => g.brand === c.brand).length;
-    const el = $('div', { class: 'card' });
-    el.append($('div', { class: 'meta', text: c.client + (c.client_approves ? ', approves their own posts' : ', you approve') + (waiting ? ', ' + waiting + ' waiting' : '') }),
-      $('div', { class: 'acts' },
-        $('button', { text: 'Copy review link', on: { click: () => { navigator.clipboard && navigator.clipboard.writeText(c.link); } } }),
-        $('a', { class: 'btn', href: c.link, target: '_blank', text: 'Open as client' }),
-        c.contact_email ? $('button', { class: 'go', text: 'Email them the link', on: { click: (e) => call('adminNotifyClient', BOOT.key, c.brand).then(() => e.target.textContent = 'Sent') } }) : ''));
-    out.append(el);
-  });
-}
-load();
+call('getDashboard', K).then(d => {
+  summary(d);
+  const box = document.getElementById('box');
+  runQueue(build(d), box, document.getElementById('count'), () =>
+    box.append($('div', { class: 'card done' }, $('h2', { text: 'All done' }), $('p', { class: 'mute', text: 'Nothing else needs you right now.' }))));
+});
 </script></body></html>`;
 
 const CLIENT_HTML = `<!doctype html><html><head><meta charset="utf-8"><style>${BASE_CSS}</style></head><body><div class="wrap">
-<h1 id="h"></h1><div class="sub">Tap Approve or Request change on each post. Posts you don't answer by their date go out as planned, except posts that name a person or event. Those wait for your OK.</div><div id="out"><p class="empty">Loading...</p></div></div>
+<div class="top"><h1 id="h"></h1><span class="count" id="count"></span></div>
+<div id="box"><p class="mute">Loading...</p></div><div class="more" id="more"></div></div>
 <script>${SHARED_JS}
-document.getElementById('h').textContent = BOOT.client + ': posts to review';
-function load() {
-  call('getClientPosts', BOOT.token).then(d => {
-    const out = document.getElementById('out'); out.innerHTML = '';
-    const open = d.posts.filter(p => p.status === 'in_review' || p.status === 'plan');
-    if (!open.length) out.append($('p', { class: 'empty', text: 'All caught up. We will email you when new posts are ready.' }));
-    d.posts.forEach(p => out.append(card(p)));
-    out.append(results(d.results));
-  });
-}
+document.getElementById('h').textContent = BOOT.client;
 function results(R) {
-  const box = $('div', {}, $('h2', { text: R.empty ? 'Results' : 'Results: ' + R.month + ' so far vs ' + R.prevMonth }));
-  if (R.empty) box.append($('p', { class: 'empty', text: 'Results appear after the first stats pull.' }));
-  else {
-    const fmt = v => (v == null ? '–' : Math.round(v).toLocaleString('en-US'));
-    const delta = (a, b) => a == null ? 'Not reported' : (b == null || b === 0) ? 'First month tracked'
-      : (a >= b ? '▲ ' : '▼ ') + Math.abs(Math.round((a - b) / b * 100)) + '% vs ' + R.prevMonth;
-    box.append($('div', { class: 'tiles' }, R.tiles.map(t => $('div', { class: 'card tile' },
-      $('div', { class: 'meta', text: t.title }), $('div', { class: 'big', text: fmt(t.value) }),
-      $('div', { class: 'sub', text: delta(t.value, t.prev) }), $('div', { class: 'sub', text: t.sub })))));
-    if (R.top.length) {
-      box.append($('h2', { text: 'Top posts this month' }));
-      R.top.forEach(p => box.append($('div', { class: 'card' },
-        $('div', { class: 'meta' }, $('span', { class: 'pill', text: p.platform }), $('span', { class: 'pill', text: p.type || 'post' })),
-        $('div', { class: 'cap', text: p.caption }),
-        $('div', { class: 'sub', text: ['Reach ' + fmt(p.reach), 'Saves ' + fmt(p.saves), 'Shares ' + fmt(p.shares), 'Comments ' + fmt(p.comments), 'Likes ' + fmt(p.likes)].join(' · ') }),
-        p.url ? $('div', { class: 'acts' }, $('a', { class: 'btn', href: p.url, target: '_blank', text: 'See post' })) : '')));
-    }
-  }
-  if (R.report_url) box.append($('div', { class: 'acts' }, $('a', { class: 'btn', href: R.report_url, target: '_blank', text: 'Monthly report (PDF)' })));
-  return box;
+  const more = document.getElementById('more'); more.innerHTML = '';
+  if (!R || R.empty) { more.append($('p', { text: 'Results appear after the first stats pull.' })); return; }
+  const t = {}; R.tiles.forEach(x => t[x.title] = x);
+  const reach = t['Accounts reached'], fol = t['New followers'], clk = t['Clicks and taps'];
+  const parts = [];
+  if (reach && reach.value != null) parts.push('reached ' + fmt(reach.value) + ' people' + pct(reach.value, reach.prev));
+  if (fol && fol.value != null) parts.push(fmt(fol.value) + ' new followers');
+  if (clk && clk.value != null) parts.push(fmt(clk.value) + ' clicks');
+  more.append($('p', { text: parts.length ? R.month + ' so far: ' + parts.join(', ') + '.' : 'Results appear after the first stats pull.' }));
+  const detail = $('div', { style: 'display:none' },
+    $('div', { class: 'tiles' }, R.tiles.map(x => $('div', { class: 'tile' }, $('b', { text: fmt(x.value) }), x.title + pct(x.value, x.prev)))),
+    R.top.length ? $('p', { style: 'margin:14px 0 4px', text: 'Top posts' }) : '',
+    R.top.map(p => $('div', { class: 'row' }, $('span', { text: p.caption.slice(0, 70) }), p.url ? $('a', { class: 'link', href: p.url, target: '_blank', text: 'See' }) : '')),
+    R.report_url ? $('p', {}, $('a', { class: 'link', href: R.report_url, target: '_blank', text: 'Monthly report (PDF)' })) : '');
+  more.append($('a', { class: 'link', href: '#', text: 'See more', on: { click: e => { e.preventDefault(); detail.style.display = detail.style.display ? '' : 'none'; } } }), detail);
 }
-function card(p) {
-  const el = $('div', { class: 'card' });
-  const caps = p.posts.map(x => $('div', {}, $('div', { class: 'meta', text: x.platform }), $('div', { class: 'cap', text: x.caption || '' })));
-  const ta = $('textarea', { placeholder: 'What should change?' }); ta.style.display = 'none';
-  const decide = (d) => call('clientDecide', BOOT.token, p.ids, d, ta.value).then(s => {
-    el.classList.add('done'); acts.innerHTML = '<span class=sub>' + ({ approved: 'Approved. Thank you!', changes: 'Got it. We will update it and send it back.', skipped: 'Skipped.' }[s]) + '</span>';
+call('getClientPosts', BOOT.token).then(d => {
+  results(d.results);
+  const open = d.posts.filter(p => p.status === 'in_review' || p.status === 'plan');
+  const box = document.getElementById('box');
+  const items = open.map(p => {
+    const caps = p.posts.filter((x, i, a) => a.findIndex(y => y.caption === x.caption) === i);
+    const plan = p.status === 'plan';
+    return {
+      label: [$('b', { text: plan ? 'Idea for a post' : 'Post' }), ' · ' + p.when],
+      body: [mediaEl(p.media, p.preview), ...caps.map(x => $('p', { class: 'text', text: x.caption || '' })),
+        p.deadline ? $('p', { class: 'mute', text: 'Please answer by ' + p.deadline + '.' }) : ''],
+      ask: plan ? 'Good idea?' : 'Good to post?',
+      yes: ['Looks good', () => call('clientDecide', BOOT.token, p.ids, 'approve', '')],
+      change: ['Change something', 'What should we change?', n => call('clientDecide', BOOT.token, p.ids, 'change', n)],
+      skip: ['Skip this one', () => call('clientDecide', BOOT.token, p.ids, 'skip', '')],
+    };
   });
-  const acts = $('div', { class: 'acts' });
-  if (p.status === 'in_review' || p.status === 'plan') {
-    acts.append(
-      $('button', { class: 'go', text: 'Approve', on: { click: () => decide('approve') } }),
-      $('button', { text: 'Request change', on: { click: () => { if (ta.style.display === 'none') { ta.style.display = 'block'; ta.focus(); } else decide('change'); } } }),
-      $('button', { class: 'warn', text: 'Skip this one', on: { click: () => decide('skip') } }));
-  } else {
-    el.classList.add('done');
-    acts.append($('span', { class: 'sub', text: { approved: 'Approved', changes: 'Change requested', skipped: 'Skipped' }[p.status] || p.status }));
-  }
-  el.append($('div', { class: 'meta' }, $('span', { class: 'pill', text: p.status === 'plan' ? 'Topic idea' : (p.type || 'post') }), 'Posts ' + p.when,
-      (p.status === 'in_review' || p.status === 'plan') && p.deadline ? ' · answer by ' + p.deadline : ''), mediaEl(p.media, p.preview), ...caps,
-    p.client_note ? $('div', { class: 'note', text: 'Your note: ' + p.client_note }) : '', ta, acts);
-  return el;
-}
-load();
+  runQueue(items, box, document.getElementById('count'), () => box.append($('div', { class: 'card done' },
+    $('h2', { text: items.length ? 'All done, thank you!' : 'All caught up' }),
+    $('p', { class: 'mute', text: 'We will email you when new posts are ready.' }))));
+});
 </script></body></html>`;

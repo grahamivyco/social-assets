@@ -1,10 +1,10 @@
-# Hub: one dashboard, client review pages, morning email
+# Hub: weekly check-in, client review pages
 
 Free. Runs in Google Apps Script inside the "NGM social queue" Sheet. Reads and writes the same tabs n8n uses, so nothing else changes.
 
-- **Your dashboard**: posts to approve, client change requests, DMs to answer, outreach comments to post, new photo submissions, failed or stuck posts, what's waiting on clients, what goes out this week. Tap Approve, Change, Send to client, Send reply.
-- **Client review page**: one private link per client, no login. They tap Approve, Request change (with a note) or Skip. Below that, Results: this month vs last (reach, interactions, views, new followers, clicks) and top 3 posts, from the Account stats and Post stats tabs.
-- **Morning email** at 7:00 Central with what needs you and a link to the dashboard.
+- **Your check-in page**: one card at a time. Yes, Change, or a small Skip. Covers topic ideas, posts, DMs, outreach comments, guild photos and anything broken. Ends with "All done".
+- **Client review page**: one private link per client, no login. One post at a time: Looks good, Change something (with a note) or Skip. Below that, one line of results ("October so far: reached 2,140 people, up 78%") with See more for the tiles, top posts and PDF.
+- **Check-in email**: every Monday 9:00 Central (or every 2 weeks) with how many things need you and one link. Between check-ins you only get an email for things that can't wait: a failed post, posting that stopped, a new DM (Meta closes replies after 24 hours). Clients asking for a change also email you right away.
 
 ## Setup (once, about 5 minutes)
 1. Open the Sheet: https://docs.google.com/spreadsheets/d/1nec5cD5RtjV6yDLzxeKX9vGhI0k123PIaFFDwXqFM6A/edit
@@ -31,3 +31,9 @@ Follows the shared schema: /mnt/project-files/automation/queue-schema.md
 
 ## Updating the code
 Paste the new `Code.gs`, then Deploy > Manage deployments > edit > Version: New version. The links stay the same.
+
+## Check-in timing
+At the top of `Code.gs`:
+- `CHECKIN_EVERY_WEEKS = 1` for weekly, `2` for every 2 weeks
+- `CHECKIN_DAY = 'MONDAY'`, `CHECKIN_HOUR = 9`
+After changing them, run `setup` again. A weekly check-in needs posts queued at least a week ahead (two weeks for every 2 weeks).
