@@ -14,6 +14,9 @@ Free. Runs in Google Apps Script inside the "NGM social queue" Sheet. Reads and 
 5. Paste the Web app URL (ends in /exec) into `WEB_APP_URL` at the top of Code.gs and into `API` in Open-Frame `review/index.html`. Save, then Deploy > Manage deployments > edit > Version: New version.
 6. Pick `emailMeMyLinks`, Run. Your check-in link arrives by email. Client links are only ever sent to the client
 
+## Health alerts
+The n8n health-check workflow (/mnt/project-files/automation/health/) writes a `Health` tab hourly. Problems from its latest run show as Heads up cards (with a "Fix it here" link), and `healthCheck` (hourly trigger) emails rows marked `email = yes` once per problem. If n8n hasn't checked in for 3 hours you get a card; after 20 hours, one email. No Health tab = nothing happens.
+
 ## Clients tab
 `client | brand | sheet_id | contact_email | client_approves | report_url` (an old `token` column is ignored)
 - `brand` matches the brand column in Queue
