@@ -1,0 +1,13 @@
+:root {
+  --ink: #111110; /* Ink */
+  --ink-2: #4B4A46; /* Ink 2 */
+  --muted: #84827B; /* Muted */
+  --white: #FFFFFF; /* White */
+  --cream: #F3F1EA; /* Cream */
+  --red: #F24333; /* Red */
+  --blue: #2F6BF0; /* Blue */
+  --yellow: #F4BF3A; /* Yellow */
+  --green: #33AC66; /* Green */
+  --font-head: 'Fraunces', Georgia, serif;
+  --font-body: 'Inter', Arial, sans-serif;
+}
