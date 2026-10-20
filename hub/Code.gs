@@ -87,7 +87,7 @@ function getDashboard(key) {
   const clients = clients_();
   const byBrand = {};
   clients.forEach(c => { byBrand[c.brand] = c; });
-  const out = { clients, approve: [], review: [], feedback: [], failed: [], upcoming: [], inbox: [], engage: [], photos: [], fixes: [] };
+  const out = { clients, topics: [], approve: [], review: [], feedback: [], failed: [], upcoming: [], inbox: [], engage: [], photos: [], fixes: [] };
   const now = Date.now(), week = now + 7 * 864e5;
 
   uniq_(clients.map(c => c.sheet_id)).forEach(sid => {
@@ -95,7 +95,8 @@ function getDashboard(key) {
     if (q) {
       groupPosts_(q.rows.filter(r => r.id), sid, byBrand).forEach(g => {
         const t = g.publish_at ? new Date(g.publish_at).getTime() : 0;
-        if (g.status === 'draft') out.approve.push(g);
+        if (g.status === 'plan') { if (!g.decision) (g.clientApproves ? out.review : out.topics).push(g); }
+        else if (g.status === 'draft') out.approve.push(g);
         else if (g.status === 'in_review') out.review.push(g);
         else if (g.status === 'changes') out.feedback.push(g);
         else if (g.status === 'failed') out.failed.push(g);
@@ -126,7 +127,7 @@ function getDashboard(key) {
   clients.filter(c => c.client_approves && !c.contact_email)
     .forEach(c => out.fixes.push({ kind: 'setup', text: c.client + ' has no contact email in the Clients tab, so review emails can\'t go out. You can still send them the link yourself.' }));
   const sortT = (a, b) => String(a.publish_at).localeCompare(String(b.publish_at));
-  ['approve', 'review', 'feedback', 'failed', 'upcoming'].forEach(k => out[k].sort(sortT));
+  ['topics', 'approve', 'review', 'feedback', 'failed', 'upcoming'].forEach(k => out[k].sort(sortT));
   return out;
 }
 
@@ -144,6 +145,7 @@ function groupPosts_(rows, sid, byBrand) {
     g.posts.push({ id: r.id, platform: r.platform, caption: r.caption || r.hook || r.pillar || '' });
     String(r.media_url || '').split(/\s+/).filter(Boolean).forEach(u => { if (g.media.indexOf(u) < 0) g.media.push(u); });
     if (r.client_note) g.client_note = r.client_note;
+    if (r.client_decision) g.decision = r.client_decision;
     if (r.review_note) g.review_note = r.review_note;
     if (r.preview_url) g.preview = r.preview_url;
     if (r.review_deadline) g.deadline = fmtWhen_(r.review_deadline);
@@ -173,6 +175,20 @@ function adminPost(key, sheetId, ids, action, note) {
       setCells_(q, r._row, set);
     });
     return status;
+  });
+}
+
+// Plan rows keep status plan; the monthly loop's make run reads client_decision.
+function adminTopic(key, sheetId, ids, decision, note) {
+  checkKey_(key);
+  const val = { approve: 'Approve', change: 'Request change', skip: 'Skip' }[decision];
+  if (!val) throw new Error('Unknown choice');
+  return withLock_(() => {
+    const q = table_(sheetId, 'Queue');
+    ids.forEach(id => setCells_(q, findRow_(q, 'id', id)._row, {
+      client_decision: val, client_note: note || '', answered_by: 'Graham', decided_at: new Date().toISOString(),
+    }));
+    return val;
   });
 }
 
@@ -279,6 +295,7 @@ function clientDecide(token, ids, decision, note) {
 function morningDigest() {
   const d = getDashboard(adminKey_());
   const sec = [
+    ['Topics to approve', d.topics.map(g => g.clientName + ', ' + g.when + ': ' + (g.posts[0].caption || '').slice(0, 60))],
     ['Posts to approve', d.approve.map(g => g.clientName + ', ' + g.when + ', ' + g.type)],
     ['Client asked for changes', d.feedback.map(g => g.clientName + ', ' + g.when + ': ' + g.client_note)],
     ['Messages to answer', d.inbox.map(m => (m.who || 'Someone') + ': ' + m.text.slice(0, 80))],
@@ -422,7 +439,7 @@ const ADMIN_HTML = `<!doctype html><html><head><meta charset="utf-8"><style>${BA
 <script>${SHARED_JS}
 let D = null;
 const SECTIONS = [
-  ['approve', 'Posts to approve'], ['feedback', 'Client asked for changes'], ['inbox', 'Messages to answer'],
+  ['topics', 'Topics to approve'], ['approve', 'Posts to approve'], ['feedback', 'Client asked for changes'], ['inbox', 'Messages to answer'],
   ['engage', 'Comments ready to post'], ['photos', 'New photos sent in'], ['fixes', 'Needs fixing'],
   ['review', 'Waiting on clients'], ['upcoming', 'Going out this week'],
 ];
@@ -472,7 +489,14 @@ const act = (g, el, action, label, msg, cls) => $('button', { class: cls || '', 
   if (action === 'change') { note = prompt('What should change?'); if (!note) return; }
   call('adminPost', BOOT.key, g.sheetId, g.ids, action, note).then(() => done(el, msg));
 } } });
+const topicAct = (g, el, d, label, msg, cls) => $('button', { class: cls || '', text: label, on: { click: () => {
+  let note = '';
+  if (d === 'change') { note = prompt('What should change?'); if (!note) return; }
+  call('adminTopic', BOOT.key, g.sheetId, g.ids, d, note).then(() => done(el, msg));
+} } });
 const CARD = {
+  topics: g => postCard(g, el => [topicAct(g, el, 'approve', 'Approve topic', 'Approved. It gets made on the 18th.', 'go'),
+    topicAct(g, el, 'change', 'Change', 'Noted'), topicAct(g, el, 'skip', 'Skip', 'Skipped', 'warn')]),
   approve: g => postCard(g, el => [
     g.clientApproves ? act(g, el, 'toClient', 'Send to client', 'Sent to client for review', 'go') : act(g, el, 'approve', 'Approve', 'Approved. It posts on schedule.', 'go'),
     g.clientApproves ? act(g, el, 'approve', 'Approve without client', 'Approved') : '',
@@ -480,7 +504,9 @@ const CARD = {
   feedback: g => postCard(g, el => [
     act(g, el, g.clientApproves ? 'toClient' : 'approve', g.clientApproves ? 'Fixed, send back to client' : 'Fixed, approve', 'Done', 'go'),
     act(g, el, 'approve', 'Approve as is', 'Approved'), act(g, el, 'skip', 'Skip', 'Skipped', 'warn')], { edit: true }),
-  review: g => postCard(g, el => [act(g, el, 'approve', 'Approve for them', 'Approved'), act(g, el, 'back', 'Pull back to draft', 'Back to draft')]),
+  review: g => postCard(g, el => g.status === 'plan'
+    ? [topicAct(g, el, 'approve', 'Approve topic for them', 'Approved'), topicAct(g, el, 'skip', 'Skip', 'Skipped', 'warn')]
+    : [act(g, el, 'approve', 'Approve for them', 'Approved'), act(g, el, 'back', 'Pull back to draft', 'Back to draft')]),
   upcoming: g => postCard(g, el => [act(g, el, 'back', 'Pull back to draft', 'Pulled back', 'warn')]),
   inbox: m => {
     const el = $('div', { class: 'card' }); const ta = $('textarea', {}); ta.value = m.draft || m.options[0] || '';

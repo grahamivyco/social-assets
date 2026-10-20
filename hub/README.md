@@ -24,6 +24,7 @@ Free. Runs in Google Apps Script inside the "NGM social queue" Sheet. Reads and 
 ## Statuses (Queue)
 Follows the shared schema: /mnt/project-files/automation/queue-schema.md
 - Graham: draft > in_review (or approved when client_approves = no). "Fixed, send back" bumps revision.
+- Dashboard: plan rows (topics) for clients you approve show under "Topics to approve"; Approve/Change/Skip writes client_decision only, status stays plan.
 - Client page: in_review > approved / changes / skipped, writes client_decision (Approve, Request change, Skip), client_note, answered_by, decided_at. Plan rows (status plan) only get client_decision; the monthly loop acts on it.
 - Extra column only the hub uses: review_note (Graham's own change note).
 
