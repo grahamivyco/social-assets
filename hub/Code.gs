@@ -12,7 +12,8 @@
 const TZ = 'America/Chicago';
 const DIGEST_HOUR = 7;
 const OUTREACH_SHEET_ID = '1VgiiTBTpmFh5bqutvYvjvNZmSicc8Es2vLSmnPlpHaU';
-const QUEUE_EXTRA = ['client_decision', 'client_note', 'decided_at', 'review_note'];
+// Column names follow /mnt/project-files/automation/queue-schema.md. review_note is Graham's own note.
+const QUEUE_EXTRA = ['client_decision', 'client_note', 'answered_by', 'answered_at', 'revision', 'review_note'];
 const CLIENT_HEAD = ['client', 'brand', 'sheet_id', 'token', 'contact_email', 'client_approves'];
 const STUCK_HOURS = 2;
 
@@ -137,13 +138,17 @@ function groupPosts_(rows, sid, byBrand) {
     const g = groups[k] || (groups[k] = {
       sheetId: sid, ids: [], brand: r.brand, clientName: c.client || r.brand, clientApproves: !!c.client_approves,
       type: r.type, status: r.status, publish_at: r.publish_at, when: fmtWhen_(r.publish_at),
-      media: [], posts: [], client_note: '', review_note: '',
+      media: [], posts: [], client_note: '', review_note: '', preview: '', deadline: '', sensitive: false, revision: 0,
     });
     g.ids.push(r.id);
     g.posts.push({ id: r.id, platform: r.platform, caption: r.caption });
     String(r.media_url || '').split(/\s+/).filter(Boolean).forEach(u => { if (g.media.indexOf(u) < 0) g.media.push(u); });
     if (r.client_note) g.client_note = r.client_note;
     if (r.review_note) g.review_note = r.review_note;
+    if (r.preview_url) g.preview = r.preview_url;
+    if (r.review_deadline) g.deadline = fmtWhen_(r.review_deadline);
+    if (/^y/i.test(r.sensitive || '')) g.sensitive = true;
+    g.revision = Math.max(g.revision, Number(r.revision) || 0);
   });
   return Object.keys(groups).map(k => groups[k]);
 }
@@ -160,6 +165,10 @@ function adminPost(key, sheetId, ids, action, note) {
       const r = findRow_(q, 'id', id);
       const set = { status };
       if (note) set.review_note = note;
+      if (action === 'toClient' && r.status === 'changes') {
+        set.revision = (Number(r.revision) || 0) + 1;
+        set.client_decision = '';
+      }
       if (action === 'approve' || action === 'retry') set.review_note = '';
       setCells_(q, r._row, set);
     });
@@ -229,9 +238,10 @@ function adminNotifyClient(key, brand) {
 function getClientPosts(token) {
   const c = clientByToken_(token);
   const q = table_(c.sheet_id, 'Queue');
-  const rows = q.rows.filter(r => r.brand === c.brand && (r.status === 'in_review' || (r.decided_at && within_(r.decided_at, 3))));
+  const rows = q.rows.filter(r => r.brand === c.brand && (r.status === 'in_review' || (r.answered_at && within_(r.answered_at, 3))));
   const groups = groupPosts_(rows, c.sheet_id, { [c.brand]: c }).map(g => ({
-    ids: g.ids, when: g.when, type: g.type, media: g.media, status: g.status, client_note: g.client_note,
+    ids: g.ids, when: g.when, type: g.type, media: g.media, preview: g.preview, status: g.status, client_note: g.client_note,
+    deadline: g.deadline, sensitive: g.sensitive,
     posts: g.posts.map(p => ({ platform: p.platform, caption: p.caption })),
   }));
   groups.sort((a, b) => (a.status === 'in_review' ? 0 : 1) - (b.status === 'in_review' ? 0 : 1));
@@ -240,7 +250,7 @@ function getClientPosts(token) {
 
 function clientDecide(token, ids, decision, note) {
   const c = clientByToken_(token);
-  const map = { approve: ['approved', 'Approve'], change: ['changes', 'Request change'], skip: ['skipped', 'Skip'] }[decision];
+  const map = { approve: ['approved', 'approve'], change: ['changes', 'change'], skip: ['skipped', 'skip'] }[decision];
   if (!map) throw new Error('Unknown choice');
   if (decision === 'change' && !String(note || '').trim()) throw new Error('Tell us what to change.');
   return withLock_(() => {
@@ -250,7 +260,7 @@ function clientDecide(token, ids, decision, note) {
       if (r.brand !== c.brand || r.status !== 'in_review') throw new Error('This post was already updated. Refresh the page.');
       setCells_(q, r._row, {
         status: map[0], client_decision: map[1], client_note: String(note || '').slice(0, 2000),
-        decided_at: Utilities.formatDate(new Date(), TZ, 'yyyy-MM-dd HH:mm'),
+        answered_by: 'client review page', answered_at: new Date().toISOString(),
       });
     });
     if (decision === 'change') {
@@ -393,9 +403,10 @@ const SHARED_JS = `
 const BOOT = __BOOT__;
 const $ = (t, a = {}, ...kids) => { const e = document.createElement(t); Object.entries(a).forEach(([k, v]) => k === 'on' ? Object.entries(v).forEach(([n, f]) => e.addEventListener(n, f)) : k === 'text' ? e.textContent = v : e.setAttribute(k, v)); kids.flat().forEach(c => c && e.append(c)); return e; };
 const call = (fn, ...args) => new Promise((ok, no) => google.script.run.withSuccessHandler(ok).withFailureHandler(e => { alert(e.message || e); no(e); })[fn](...args));
-function mediaEl(urls) {
+function mediaEl(urls, poster) {
+  if (!urls.length && poster) urls = [poster];
   return $('div', { class: 'media' }, urls.map(u => /\\.(mp4|mov|webm)(\\?|$)/i.test(u)
-    ? $('video', { src: u, controls: '', preload: 'metadata', playsinline: '' })
+    ? $('video', Object.assign({ src: u, controls: '', preload: 'metadata', playsinline: '' }, poster ? { poster } : {}))
     : $('a', { href: u, target: '_blank' }, $('img', { src: u, loading: 'lazy', alt: '' }))));
 }
 `;
@@ -446,7 +457,7 @@ function postCard(g, acts, opts = {}) {
   });
   el.append(
     $('div', { class: 'meta' }, $('span', { class: 'pill', text: g.clientName }), $('span', { class: 'pill', text: g.type || 'post' }), g.when),
-    mediaEl(g.media), ...caps,
+    mediaEl(g.media, g.preview), ...caps,
     g.client_note ? $('div', { class: 'note', text: 'Client: ' + g.client_note }) : '',
     g.review_note ? $('div', { class: 'note', text: 'Your note: ' + g.review_note }) : '',
     $('div', { class: 'acts' }, acts(el)));
@@ -516,7 +527,7 @@ load();
 </script></body></html>`;
 
 const CLIENT_HTML = `<!doctype html><html><head><meta charset="utf-8"><style>${BASE_CSS}</style></head><body><div class="wrap">
-<h1 id="h"></h1><div class="sub">Tap Approve or Request change on each post.</div><div id="out"><p class="empty">Loading...</p></div></div>
+<h1 id="h"></h1><div class="sub">Tap Approve or Request change on each post. Posts you don't answer by their date go out as planned, except posts that name a person or event. Those wait for your OK.</div><div id="out"><p class="empty">Loading...</p></div></div>
 <script>${SHARED_JS}
 document.getElementById('h').textContent = BOOT.client + ': posts to review';
 function load() {
@@ -544,7 +555,8 @@ function card(p) {
     el.classList.add('done');
     acts.append($('span', { class: 'sub', text: { approved: 'Approved', changes: 'Change requested', skipped: 'Skipped' }[p.status] || p.status }));
   }
-  el.append($('div', { class: 'meta' }, $('span', { class: 'pill', text: p.type || 'post' }), p.when), mediaEl(p.media), ...caps,
+  el.append($('div', { class: 'meta' }, $('span', { class: 'pill', text: p.type || 'post' }), 'Posts ' + p.when,
+      p.status === 'in_review' && p.deadline ? ' · answer by ' + p.deadline : ''), mediaEl(p.media, p.preview), ...caps,
     p.client_note ? $('div', { class: 'note', text: 'Your note: ' + p.client_note }) : '', ta, acts);
   return el;
 }
