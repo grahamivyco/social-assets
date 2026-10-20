@@ -22,3 +22,10 @@ Token end date comes from `oauth/access_token_info`. If Meta gives no end date (
 
 ## Change what's watched
 "Settings" node: `watch` list (name match, mustBeOn, staleHours), `warnDays`, `urgentDays`.
+
+
+# Lead follow-up
+
+`lead-followup.json`: Calendly booking emails and Targets replies become rows on the `Leads` tab of "Open Frame outreach"; an hourly planner drafts each lead's next follow-up as a Hub card; approved emails go out every 15 minutes over Gmail SMTP. Setup, sequence and columns: /mnt/project-files/business-ops/lead-followup/README.md (source: build-workflow.py + code/).
+
+Import from URL: https://raw.githubusercontent.com/grahamivyco/social-assets/main/n8n/lead-followup.json

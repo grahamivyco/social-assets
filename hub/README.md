@@ -14,6 +14,9 @@ Free. Runs in Google Apps Script inside the "NGM social queue" Sheet. Reads and 
 5. Paste the Web app URL (ends in /exec) into `WEB_APP_URL` at the top of Code.gs and into `API` in Open-Frame `review/index.html`. Save, then Deploy > Manage deployments > edit > Version: New version.
 6. Pick `emailMeMyLinks`, Run. Your check-in link arrives by email. Client links are only ever sent to the client
 
+## Leads
+Cards from the `Leads` tab of the outreach Sheet (n8n "Open Frame lead follow-up"): follow-up emails (Send / Change / Don't send; n8n sends within 15 minutes), DMs (Copy and open the Meta inbox), to-dos, "Did you meet them?" and "Did they say yes?". The check-in email and page footer show a pipeline line. `LEADS_URGENT = true` adds lead cards to the daily 8:00 can't-wait email. Details: /mnt/project-files/business-ops/lead-followup/README.md
+
 ## Health alerts
 The n8n health-check workflow (/mnt/project-files/automation/health/) writes a `Health` tab hourly. Problems from its latest run show as Heads up cards (with a "Fix it here" link), and `healthCheck` (hourly trigger) emails rows marked `email = yes` once per problem. If n8n hasn't checked in for 3 hours you get a card; after 20 hours, one email. No Health tab = nothing happens.
 

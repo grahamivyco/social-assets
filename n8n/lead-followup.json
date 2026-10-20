@@ -1,0 +1,1100 @@
+{
+ "name": "Open Frame lead follow-up",
+ "nodes": [
+  {
+   "id": "lf1",
+   "name": "Calendly email",
+   "type": "n8n-nodes-base.emailReadImap",
+   "typeVersion": 2.1,
+   "position": [
+    0,
+    0
+   ],
+   "parameters": {
+    "mailbox": "Calendly",
+    "postProcessAction": "read",
+    "downloadAttachments": false,
+    "format": "simple",
+    "options": {
+     "customEmailConfig": "[\"UNSEEN\"]"
+    }
+   },
+   "credentials": {
+    "imap": {
+     "id": "",
+     "name": "Gmail IMAP"
+    }
+   }
+  },
+  {
+   "id": "lf2",
+   "name": "Parse Calendly",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    220,
+    0
+   ],
+   "parameters": {
+    "jsCode": "// Code node \"Parse Calendly\". One item per Calendly email from the \"Calendly\" Gmail label.\n// Host emails look like:\n//   Subject: New Event: Dana Lee - 10:00am Tue, Oct 21, 2026 - 30 Minute Meeting\n//   Body: Invitee: Dana Lee / Invitee Email: dana@x.org / Event Date/Time: 10:00am - Tuesday, October 21, 2026 (Central Time - US & Canada)\n//   Subject: Canceled: Dana Lee - ...\n// Anything we can't read still becomes a row with parse = \"check\", so nothing is lost.\nconst TZ = 'America/Chicago';\nconst strip = h => String(h || '')\n  .replace(/<br\\s*\\/?>/gi, '\\n').replace(/<\\/(p|div|tr|li|h\\d)>/gi, '\\n').replace(/<[^>]+>/g, ' ')\n  .replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&#39;/g, \"'\").replace(/&quot;/g, '\"');\n\nfunction field(text, label) {\n  // \"Label: value\" on one line, or the label alone with the value on the next line.\n  const re = new RegExp('^\\\\s*' + label + ':?\\\\s*(.*)$', 'im');\n  const m = text.match(re);\n  if (!m) return '';\n  if (m[1].trim()) return m[1].trim();\n  const after = text.slice(m.index + m[0].length).split('\\n').map(s => s.trim()).filter(Boolean);\n  return after[0] || '';\n}\n\nfunction when(s) {\n  // \"10:00am - Tuesday, October 21, 2026 (Central ...)\" or \"10:00am Tue, Oct 21, 2026\"\n  const m = String(s).match(/(\\d{1,2}:\\d{2}\\s*[ap]m)\\s*-?\\s*(?:[A-Za-z]+,\\s*)?([A-Za-z]+)\\s+(\\d{1,2}),\\s*(\\d{4})/i);\n  if (!m) return '';\n  const time = m[1].replace(/\\s+/g, '').toLowerCase();\n  const mon = m[2].slice(0, 3);\n  const d = DateTime.fromFormat(`${time} ${mon} ${m[3]} ${m[4]}`, 'h:mma LLL d yyyy', { zone: TZ, locale: 'en-US' });\n  return d.isValid ? d.toISO() : '';\n}\n\nreturn $input.all().map(i => {\n  const j = i.json;\n  const subject = String(j.subject || '').trim();\n  const text = (j.text || j.textPlain || strip(j.textHtml || j.html)).replace(/\\r/g, '');\n  const canceled = /^\\s*(canceled|cancelled)\\b/i.test(subject);\n  const head = subject.replace(/^[^:]*:\\s*/, '').split(' - ');\n  const name = field(text, 'Invitee') || head[0] || '';\n  const email = (field(text, 'Invitee Email').match(/[^\\s<>()]+@[^\\s<>()]+\\.[a-z]{2,}/i) || [''])[0].toLowerCase();\n  const at = when(field(text, 'Event Date/Time')) || when(head[1] || '');\n  // Calendly lists custom questions after \"Questions:\"; keep the first 600 characters.\n  const qi = text.search(/^\\s*Questions:?\\s*$/im);\n  const answers = qi >= 0 ? text.slice(qi).replace(/^\\s*Questions:?\\s*/i, '').split(/\\n\\s*(View event|Reschedule|Cancel|Pro Tip)/i)[0].replace(/\\n{2,}/g, '\\n').trim().slice(0, 600) : '';\n  return { json: {\n    kind: canceled ? 'canceled' : 'booked',\n    name: name.replace(/\\s+/g, ' ').trim(),\n    email,\n    consult_at: at,\n    answers,\n    parse: name && email && at ? 'ok' : 'check',\n    subject,\n  } };\n});\n"
+   }
+  },
+  {
+   "id": "lf3",
+   "name": "Read Leads (booking)",
+   "type": "n8n-nodes-base.googleSheets",
+   "typeVersion": 4.5,
+   "position": [
+    440,
+    0
+   ],
+   "parameters": {
+    "authentication": "serviceAccount",
+    "documentId": {
+     "__rl": true,
+     "mode": "url",
+     "value": "https://docs.google.com/spreadsheets/d/1VgiiTBTpmFh5bqutvYvjvNZmSicc8Es2vLSmnPlpHaU/edit"
+    },
+    "sheetName": {
+     "__rl": true,
+     "mode": "name",
+     "value": "Leads"
+    },
+    "options": {}
+   },
+   "credentials": {
+    "googleApi": {
+     "id": "",
+     "name": "Google Service Account account"
+    }
+   },
+   "executeOnce": true,
+   "alwaysOutputData": true
+  },
+  {
+   "id": "lf4",
+   "name": "Merge booking",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    660,
+    0
+   ],
+   "parameters": {
+    "jsCode": "// Code node \"Merge booking\". Turns each parsed Calendly email into a Leads row (new or updated).\n// Matches an existing lead by email, then by name. A booking puts a prep card in the Hub.\nconst now = DateTime.now().setZone('America/Chicago').toISO();\nconst leads = $('Read Leads (booking)').all().map(i => i.json).filter(r => r.id);\nconst COLS = ['id', 'added', 'source', 'name', 'org', 'email', 'handle', 'stage', 'consult_at', 'met_at', 'last_contact', 'step', 'kind', 'card', 'subject', 'body', 'status', 'sent_at', 'notes'];\nconst low = s => String(s || '').trim().toLowerCase();\nconst when = s => { const d = DateTime.fromISO(String(s || '')); return d.isValid ? d.setZone('America/Chicago').toFormat(\"ccc LLL d 'at' h:mma\").replace(/AM|PM/, x => x.toLowerCase()) : 'a time I could not read'; };\nconst out = {};\n\n$('Parse Calendly').all().map(i => i.json).forEach(b => {\n  let l = (b.email && leads.find(x => low(x.email) === b.email)) || (b.name && leads.find(x => low(x.name) === low(b.name) && !['won', 'lost'].includes(x.stage)));\n  if (!l) {\n    l = { id: b.email ? 'em:' + b.email : 'cal:' + Date.now() + Math.random().toString(36).slice(2, 6), added: now, source: 'calendly', name: b.name, org: '', email: b.email,\n      handle: '', stage: 'talking', consult_at: '', met_at: '', last_contact: now, step: '', kind: '', card: '', subject: '', body: '', status: '', sent_at: '', notes: '' };\n    leads.push(l);\n  }\n  if (!l.email && b.email) l.email = b.email;\n  if (!l.name && b.name) l.name = b.name;\n  l.last_contact = now;\n  if (b.kind === 'canceled') {\n    Object.assign(l, { stage: 'talking', consult_at: '', step: 'canceled_pending', kind: '', card: '', subject: '', body: '', status: '' });\n  } else {\n    const fix = b.parse === 'ok' ? '' : '\\n\\nI could not read every detail of this Calendly email (\"' + b.subject + '\"). Check the name, email and time in the Leads tab.';\n    Object.assign(l, {\n      stage: 'consult booked', consult_at: b.consult_at || l.consult_at, step: 'booked', kind: 'todo', subject: '', body: '', status: 'drafted',\n      card: `${b.name || 'Someone'} booked a consult for ${when(b.consult_at)}.${b.answers ? '\\n\\nThey wrote:\\n' + b.answers : ''}\\n\\nWant 3 quick fixes ready for the call? In the project, say:\\n\\nQuick audit for ${l.org || b.name || 'them'}${fix}`,\n    });\n    if (b.answers && String(l.notes || '').indexOf(b.answers) < 0) l.notes = [l.notes, b.answers].filter(Boolean).join('\\n');\n  }\n  out[l.id] = l;\n});\n\nreturn Object.values(out).map(l => {\n  const o = {};\n  COLS.forEach(c => { o[c] = l[c] == null ? '' : String(l[c]); });\n  o.updated_at = now;\n  return { json: o };\n});\n"
+   }
+  },
+  {
+   "id": "lf5",
+   "name": "Save booking",
+   "type": "n8n-nodes-base.googleSheets",
+   "typeVersion": 4.5,
+   "position": [
+    880,
+    0
+   ],
+   "parameters": {
+    "operation": "appendOrUpdate",
+    "authentication": "serviceAccount",
+    "documentId": {
+     "__rl": true,
+     "mode": "url",
+     "value": "https://docs.google.com/spreadsheets/d/1VgiiTBTpmFh5bqutvYvjvNZmSicc8Es2vLSmnPlpHaU/edit"
+    },
+    "sheetName": {
+     "__rl": true,
+     "mode": "name",
+     "value": "Leads"
+    },
+    "columns": {
+     "mappingMode": "autoMapInputData",
+     "value": {},
+     "matchingColumns": [
+      "id"
+     ],
+     "schema": [
+      {
+       "id": "id",
+       "displayName": "id",
+       "required": false,
+       "defaultMatch": false,
+       "display": true,
+       "type": "string",
+       "canBeUsedToMatch": true
+      },
+      {
+       "id": "added",
+       "displayName": "added",
+       "required": false,
+       "defaultMatch": false,
+       "display": true,
+       "type": "string",
+       "canBeUsedToMatch": true
+      },
+      {
+       "id": "source",
+       "displayName": "source",
+       "required": false,
+       "defaultMatch": false,
+       "display": true,
+       "type": "string",
+       "canBeUsedToMatch": true
+      },
+      {
+       "id": "name",
+       "displayName": "name",
+       "required": false,
+       "defaultMatch": false,
+       "display": true,
+       "type": "string",
+       "canBeUsedToMatch": true
+      },
+      {
+       "id": "org",
+       "displayName": "org",
+       "required": false,
+       "defaultMatch": false,
+       "display": true,
+       "type": "string",
+       "canBeUsedToMatch": true
+      },
+      {
+       "id": "email",
+       "displayName": "email",
+       "required": false,
+       "defaultMatch": false,
+       "display": true,
+       "type": "string",
+       "canBeUsedToMatch": true
+      },
+      {
+       "id": "handle",
+       "displayName": "handle",
+       "required": false,
+       "defaultMatch": false,
+       "display": true,
+       "type": "string",
+       "canBeUsedToMatch": true
+      },
+      {
+       "id": "stage",
+       "displayName": "stage",
+       "required": false,
+       "defaultMatch": false,
+       "display": true,
+       "type": "string",
+       "canBeUsedToMatch": true
+      },
+      {
+       "id": "consult_at",
+       "displayName": "consult_at",
+       "required": false,
+       "defaultMatch": false,
+       "display": true,
+       "type": "string",
+       "canBeUsedToMatch": true
+      },
+      {
+       "id": "met_at",
+       "displayName": "met_at",
+       "required": false,
+       "defaultMatch": false,
+       "display": true,
+       "type": "string",
+       "canBeUsedToMatch": true
+      },
+      {
+       "id": "last_contact",
+       "displayName": "last_contact",
+       "required": false,
+       "defaultMatch": false,
+       "display": true,
+       "type": "string",
+       "canBeUsedToMatch": true
+      },
+      {
+       "id": "step",
+       "displayName": "step",
+       "required": false,
+       "defaultMatch": false,
+       "display": true,
+       "type": "string",
+       "canBeUsedToMatch": true
+      },
+      {
+       "id": "kind",
+       "displayName": "kind",
+       "required": false,
+       "defaultMatch": false,
+       "display": true,
+       "type": "string",
+       "canBeUsedToMatch": true
+      },
+      {
+       "id": "card",
+       "displayName": "card",
+       "required": false,
+       "defaultMatch": false,
+       "display": true,
+       "type": "string",
+       "canBeUsedToMatch": true
+      },
+      {
+       "id": "subject",
+       "displayName": "subject",
+       "required": false,
+       "defaultMatch": false,
+       "display": true,
+       "type": "string",
+       "canBeUsedToMatch": true
+      },
+      {
+       "id": "body",
+       "displayName": "body",
+       "required": false,
+       "defaultMatch": false,
+       "display": true,
+       "type": "string",
+       "canBeUsedToMatch": true
+      },
+      {
+       "id": "status",
+       "displayName": "status",
+       "required": false,
+       "defaultMatch": false,
+       "display": true,
+       "type": "string",
+       "canBeUsedToMatch": true
+      },
+      {
+       "id": "sent_at",
+       "displayName": "sent_at",
+       "required": false,
+       "defaultMatch": false,
+       "display": true,
+       "type": "string",
+       "canBeUsedToMatch": true
+      },
+      {
+       "id": "notes",
+       "displayName": "notes",
+       "required": false,
+       "defaultMatch": false,
+       "display": true,
+       "type": "string",
+       "canBeUsedToMatch": true
+      },
+      {
+       "id": "updated_at",
+       "displayName": "updated_at",
+       "required": false,
+       "defaultMatch": false,
+       "display": true,
+       "type": "string",
+       "canBeUsedToMatch": true
+      }
+     ]
+    },
+    "options": {}
+   },
+   "credentials": {
+    "googleApi": {
+     "id": "",
+     "name": "Google Service Account account"
+    }
+   }
+  },
+  {
+   "id": "lf6",
+   "name": "Every hour",
+   "type": "n8n-nodes-base.scheduleTrigger",
+   "typeVersion": 1.2,
+   "position": [
+    0,
+    300
+   ],
+   "parameters": {
+    "rule": {
+     "interval": [
+      {
+       "field": "hours",
+       "hoursInterval": 1,
+       "triggerAtMinute": 10
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "lf7",
+   "name": "Read Leads",
+   "type": "n8n-nodes-base.googleSheets",
+   "typeVersion": 4.5,
+   "position": [
+    220,
+    300
+   ],
+   "parameters": {
+    "authentication": "serviceAccount",
+    "documentId": {
+     "__rl": true,
+     "mode": "url",
+     "value": "https://docs.google.com/spreadsheets/d/1VgiiTBTpmFh5bqutvYvjvNZmSicc8Es2vLSmnPlpHaU/edit"
+    },
+    "sheetName": {
+     "__rl": true,
+     "mode": "name",
+     "value": "Leads"
+    },
+    "options": {}
+   },
+   "credentials": {
+    "googleApi": {
+     "id": "",
+     "name": "Google Service Account account"
+    }
+   },
+   "executeOnce": true,
+   "alwaysOutputData": true
+  },
+  {
+   "id": "lf8",
+   "name": "Read Targets",
+   "type": "n8n-nodes-base.googleSheets",
+   "typeVersion": 4.5,
+   "position": [
+    440,
+    300
+   ],
+   "parameters": {
+    "authentication": "serviceAccount",
+    "documentId": {
+     "__rl": true,
+     "mode": "url",
+     "value": "https://docs.google.com/spreadsheets/d/1VgiiTBTpmFh5bqutvYvjvNZmSicc8Es2vLSmnPlpHaU/edit"
+    },
+    "sheetName": {
+     "__rl": true,
+     "mode": "name",
+     "value": "Targets"
+    },
+    "options": {}
+   },
+   "credentials": {
+    "googleApi": {
+     "id": "",
+     "name": "Google Service Account account"
+    }
+   },
+   "executeOnce": true,
+   "alwaysOutputData": true
+  },
+  {
+   "id": "lf9",
+   "name": "Plan follow-ups",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    660,
+    300
+   ],
+   "parameters": {
+    "jsCode": "// Code node \"Plan follow-ups\". Runs hourly. Reads the Leads and Targets tabs and writes back only rows that changed.\n// One open card per lead at a time: while a row is drafted or approved, nothing new is planned for it.\n// Copy follows the onboarding playbook (emails C and E) and Graham's rules: short, no em-dashes, links on their own line.\nconst BOOK = 'https://calendly.com/grahamivy-co/30min';\nconst CLOSED = ['won', 'lost', 'cold'];\nconst WAITING = ['drafted', 'approved'];\nconst now = DateTime.now().setZone('America/Chicago');\nconst iso = () => now.toISO();\nconst days = s => { const d = s ? DateTime.fromISO(String(s)) : null; return d && d.isValid ? now.diff(d, 'days').days : 0; };\nconst hours = s => days(s) * 24;\nconst first = n => String(n || '').trim().split(/\\s+/)[0] || 'there';\nconst orgOr = (l, alt) => l.org || alt;\nconst when = s => { const d = DateTime.fromISO(String(s || '')); return d.isValid ? d.setZone('America/Chicago').toFormat(\"ccc LLL d 'at' h:mma\").replace(/AM|PM/, x => x.toLowerCase()) : 'the call'; };\n\nconst T = {\n  nudge1: l => ({\n    subject: 'Quick follow-up',\n    email: `Hi ${first(l.name)},\\n\\nThanks again for reaching out to Open Frame. Happy to answer any questions, or we can talk it through on a free 30-minute call.\\n\\n${BOOK}\\n\\nGraham\\nOpen Frame`,\n    dm: `Hi ${first(l.name)}, thanks again for reaching out. Happy to answer any questions here, or you can grab a free 30-minute call:\\n\\n${BOOK}`,\n  }),\n  nudge2: l => ({\n    subject: 'Still happy to help',\n    email: `Hi ${first(l.name)},\\n\\nOne last check-in from me. If now isn't the right time, no problem. When it is, pick any open time here:\\n\\n${BOOK}\\n\\nGraham`,\n    dm: `Hi ${first(l.name)}, one last check-in from me. If now isn't the right time, no problem. When it is, pick any open time here:\\n\\n${BOOK}`,\n  }),\n  noshow: l => ({\n    subject: 'Sorry we missed each other',\n    email: `Hi ${first(l.name)},\\n\\nLooks like we missed each other. No problem at all. Here's the link to pick a new time:\\n\\n${BOOK}\\n\\nGraham`,\n    dm: `Hi ${first(l.name)}, looks like we missed each other. No problem at all. Here's the link to pick a new time:\\n\\n${BOOK}`,\n  }),\n  canceled: l => ({\n    subject: 'Want to pick a new time?',\n    email: `Hi ${first(l.name)},\\n\\nSaw the call was canceled. No problem. If you'd still like to talk, pick any time that works:\\n\\n${BOOK}\\n\\nGraham`,\n    dm: `Hi ${first(l.name)}, saw the call was canceled. No problem. If you'd still like to talk, pick any time that works:\\n\\n${BOOK}`,\n  }),\n  c: l => ({\n    subject: 'Any questions on the plan?',\n    email: `Hi ${first(l.name)},\\n\\nChecking in on the plan ${l.org ? 'for ' + l.org : 'we talked about'}. Happy to change anything on it, or walk through it together in 15 minutes.\\n\\n${BOOK}\\n\\nGraham`,\n    dm: `Hi ${first(l.name)}, checking in on the plan ${l.org ? 'for ' + l.org : 'we talked about'}. Happy to change anything on it, or walk through it together in 15 minutes:\\n\\n${BOOK}`,\n  }),\n  e: l => ({\n    subject: 'Should I close your file?',\n    email: `Hi ${first(l.name)},\\n\\nI haven't heard back, so I'm guessing the timing isn't right. No problem, I'll close your file for now.\\n\\nWant our monthly newsletter in the meantime? Reply yes and I'll add you.\\n\\nIf things change, pick a time here:\\n\\n${BOOK}\\n\\nGraham`,\n    dm: `Hi ${first(l.name)}, I haven't heard back, so I'm guessing the timing isn't right. No problem, I'll close your file for now. If things change, pick a time here:\\n\\n${BOOK}`,\n  }),\n};\n\n// A message card: email when we have an address, otherwise a DM Graham pastes in the Meta inbox.\nfunction message(l, step) {\n  const t = T[step](l);\n  return l.email\n    ? { kind: 'email', subject: t.subject, body: t.email, card: '' }\n    : { kind: 'dm', subject: '', body: t.dm, card: '' };\n}\nconst todo = (card) => ({ kind: 'todo', subject: '', body: '', card });\nconst ask = (kind, card) => ({ kind, subject: '', body: '', card });\n\n// What comes next for one lead, or null. Returns { step, ...card } or { stage } changes.\nfunction next(l) {\n  const st = l.stage || 'talking';\n  if (st === 'new' || st === 'talking') {\n    const since = days(l.last_contact || l.added);\n    if (l.step === 'noshow_pending') return { step: 'noshow', ...message(l, 'noshow') };\n    if (l.step === 'canceled_pending') return { step: 'canceled', ...message(l, 'canceled') };\n    if (!l.step || l.step === 'synced') return since >= 2 ? { step: 'nudge1', ...message(l, 'nudge1') } : null;\n    if (['nudge1', 'noshow', 'canceled'].includes(l.step)) return since >= 4 ? { step: 'nudge2', ...message(l, 'nudge2') } : null;\n    if (l.step === 'nudge2') return since >= 7 ? { stage: 'cold', step: 'cold', kind: '', card: '', subject: '', body: '', status: '' } : null;\n    return null;\n  }\n  if (st === 'consult booked') {\n    if (l.step === 'ask_met') return null; // answered \"not yet\", wait for the Hub\n    const due = l.consult_at ? hours(l.consult_at) >= 1 : days(l.last_contact || l.added) >= 7;\n    return due ? { step: 'ask_met', ...ask('ask_met', `Did you meet ${l.name || l.org || 'them'}${l.name && l.org ? ' from ' + l.org : ''}${l.consult_at ? ' on ' + when(l.consult_at) : ''}?`) } : null;\n  }\n  if (st === 'consult held') {\n    const d = days(l.met_at || l.last_contact);\n    const org = orgOr(l, l.name || 'them');\n    if (!l.step || l.step === 'met') return { step: 'start', ...todo(`Same day as the call. In the project, say:\\n\\nStart page for ${org}, <plan>, ${[l.name, l.email].filter(Boolean).join(' ')}, <one thing they said>\\n\\nClaude makes the Start here page and puts Email A in your Gmail drafts.`) };\n    if (l.step === 'start') return d >= 2 ? { step: 'fixes', ...todo(`3 quick fixes are due for ${org} (Email B). In the project, say:\\n\\nQuick fixes email for ${org}`) } : null;\n    if (l.step === 'fixes') return d >= 5 ? { step: 'c', ...message(l, 'c') } : null;\n    if (l.step === 'c') return d >= 7 ? { step: 'ask_signed', ...ask('ask_signed', `Did ${org} say yes?`) } : null;\n    if (l.step === 'ask_signed') return d >= 12 ? { step: 'd', ...todo(`Send ${org} a sample post (Email D). In the project, say:\\n\\nSample post for ${org}`) } : null;\n    if (l.step === 'd') return d >= 30 ? { step: 'e', ...message(l, 'e') } : null;\n    if (l.step === 'e') return { stage: 'lost', step: 'closed', kind: '', card: '', subject: '', body: '', status: '' };\n  }\n  return null;\n}\n\nconst leads = $('Read Leads').all().map(i => i.json).filter(r => r.id);\nconst byId = {};\nleads.forEach(l => { byId[String(l.id)] = l; });\nconst changed = {};\n\n// 1. People from outreach and the DM bot who replied, booked or signed (Targets tab) become leads once.\nconst MAP = { 'replied': 'talking', 'call booked': 'consult booked', 'client': 'won' };\n$('Read Targets').all().map(i => i.json).forEach(t => {\n  const stage = MAP[String(t.stage || '').trim().toLowerCase()];\n  const handle = String(t.handle || '').replace('@', '').trim().toLowerCase();\n  if (!stage || !handle || handle.startsWith('template')) return;\n  const id = 'ig:' + handle;\n  if (byId[id]) return;\n  const lead = {\n    id, added: iso(), source: t.type === 'prospect' ? 'outreach' : 'dm', name: t.type === 'prospect' ? '' : (t.name || t.handle), org: t.type === 'prospect' ? (t.name || '') : '',\n    email: '', handle, stage, consult_at: '', met_at: '', last_contact: t.last_touch || iso(), step: 'synced', kind: '', card: '',\n    subject: '', body: '', status: '', sent_at: '', notes: t.notes || t['why them'] || '',\n  };\n  byId[id] = lead; leads.push(lead); changed[id] = true;\n});\n\n// 2. Plan the next card for every open lead that isn't waiting on Graham.\nleads.forEach(l => {\n  if (CLOSED.includes(l.stage) || WAITING.includes(l.status)) return;\n  const n = next(l);\n  if (!n) return;\n  Object.assign(l, { status: n.kind ? 'drafted' : (n.status ?? l.status) }, n);\n  changed[l.id] = true;\n});\n\nconst COLS = ['id', 'added', 'source', 'name', 'org', 'email', 'handle', 'stage', 'consult_at', 'met_at', 'last_contact', 'step', 'kind', 'card', 'subject', 'body', 'status', 'sent_at', 'notes'];\nreturn leads.filter(l => changed[l.id]).map(l => {\n  const o = {};\n  COLS.forEach(c => { o[c] = l[c] == null ? '' : String(l[c]); });\n  o.updated_at = iso();\n  return { json: o };\n});\n"
+   }
+  },
+  {
+   "id": "lf10",
+   "name": "Save plan",
+   "type": "n8n-nodes-base.googleSheets",
+   "typeVersion": 4.5,
+   "position": [
+    880,
+    300
+   ],
+   "parameters": {
+    "operation": "appendOrUpdate",
+    "authentication": "serviceAccount",
+    "documentId": {
+     "__rl": true,
+     "mode": "url",
+     "value": "https://docs.google.com/spreadsheets/d/1VgiiTBTpmFh5bqutvYvjvNZmSicc8Es2vLSmnPlpHaU/edit"
+    },
+    "sheetName": {
+     "__rl": true,
+     "mode": "name",
+     "value": "Leads"
+    },
+    "columns": {
+     "mappingMode": "autoMapInputData",
+     "value": {},
+     "matchingColumns": [
+      "id"
+     ],
+     "schema": [
+      {
+       "id": "id",
+       "displayName": "id",
+       "required": false,
+       "defaultMatch": false,
+       "display": true,
+       "type": "string",
+       "canBeUsedToMatch": true
+      },
+      {
+       "id": "added",
+       "displayName": "added",
+       "required": false,
+       "defaultMatch": false,
+       "display": true,
+       "type": "string",
+       "canBeUsedToMatch": true
+      },
+      {
+       "id": "source",
+       "displayName": "source",
+       "required": false,
+       "defaultMatch": false,
+       "display": true,
+       "type": "string",
+       "canBeUsedToMatch": true
+      },
+      {
+       "id": "name",
+       "displayName": "name",
+       "required": false,
+       "defaultMatch": false,
+       "display": true,
+       "type": "string",
+       "canBeUsedToMatch": true
+      },
+      {
+       "id": "org",
+       "displayName": "org",
+       "required": false,
+       "defaultMatch": false,
+       "display": true,
+       "type": "string",
+       "canBeUsedToMatch": true
+      },
+      {
+       "id": "email",
+       "displayName": "email",
+       "required": false,
+       "defaultMatch": false,
+       "display": true,
+       "type": "string",
+       "canBeUsedToMatch": true
+      },
+      {
+       "id": "handle",
+       "displayName": "handle",
+       "required": false,
+       "defaultMatch": false,
+       "display": true,
+       "type": "string",
+       "canBeUsedToMatch": true
+      },
+      {
+       "id": "stage",
+       "displayName": "stage",
+       "required": false,
+       "defaultMatch": false,
+       "display": true,
+       "type": "string",
+       "canBeUsedToMatch": true
+      },
+      {
+       "id": "consult_at",
+       "displayName": "consult_at",
+       "required": false,
+       "defaultMatch": false,
+       "display": true,
+       "type": "string",
+       "canBeUsedToMatch": true
+      },
+      {
+       "id": "met_at",
+       "displayName": "met_at",
+       "required": false,
+       "defaultMatch": false,
+       "display": true,
+       "type": "string",
+       "canBeUsedToMatch": true
+      },
+      {
+       "id": "last_contact",
+       "displayName": "last_contact",
+       "required": false,
+       "defaultMatch": false,
+       "display": true,
+       "type": "string",
+       "canBeUsedToMatch": true
+      },
+      {
+       "id": "step",
+       "displayName": "step",
+       "required": false,
+       "defaultMatch": false,
+       "display": true,
+       "type": "string",
+       "canBeUsedToMatch": true
+      },
+      {
+       "id": "kind",
+       "displayName": "kind",
+       "required": false,
+       "defaultMatch": false,
+       "display": true,
+       "type": "string",
+       "canBeUsedToMatch": true
+      },
+      {
+       "id": "card",
+       "displayName": "card",
+       "required": false,
+       "defaultMatch": false,
+       "display": true,
+       "type": "string",
+       "canBeUsedToMatch": true
+      },
+      {
+       "id": "subject",
+       "displayName": "subject",
+       "required": false,
+       "defaultMatch": false,
+       "display": true,
+       "type": "string",
+       "canBeUsedToMatch": true
+      },
+      {
+       "id": "body",
+       "displayName": "body",
+       "required": false,
+       "defaultMatch": false,
+       "display": true,
+       "type": "string",
+       "canBeUsedToMatch": true
+      },
+      {
+       "id": "status",
+       "displayName": "status",
+       "required": false,
+       "defaultMatch": false,
+       "display": true,
+       "type": "string",
+       "canBeUsedToMatch": true
+      },
+      {
+       "id": "sent_at",
+       "displayName": "sent_at",
+       "required": false,
+       "defaultMatch": false,
+       "display": true,
+       "type": "string",
+       "canBeUsedToMatch": true
+      },
+      {
+       "id": "notes",
+       "displayName": "notes",
+       "required": false,
+       "defaultMatch": false,
+       "display": true,
+       "type": "string",
+       "canBeUsedToMatch": true
+      },
+      {
+       "id": "updated_at",
+       "displayName": "updated_at",
+       "required": false,
+       "defaultMatch": false,
+       "display": true,
+       "type": "string",
+       "canBeUsedToMatch": true
+      }
+     ]
+    },
+    "options": {}
+   },
+   "credentials": {
+    "googleApi": {
+     "id": "",
+     "name": "Google Service Account account"
+    }
+   }
+  },
+  {
+   "id": "lf11",
+   "name": "Every 15 minutes",
+   "type": "n8n-nodes-base.scheduleTrigger",
+   "typeVersion": 1.2,
+   "position": [
+    0,
+    600
+   ],
+   "parameters": {
+    "rule": {
+     "interval": [
+      {
+       "field": "minutes",
+       "minutesInterval": 15
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "lf12",
+   "name": "Read Leads (send)",
+   "type": "n8n-nodes-base.googleSheets",
+   "typeVersion": 4.5,
+   "position": [
+    220,
+    600
+   ],
+   "parameters": {
+    "authentication": "serviceAccount",
+    "documentId": {
+     "__rl": true,
+     "mode": "url",
+     "value": "https://docs.google.com/spreadsheets/d/1VgiiTBTpmFh5bqutvYvjvNZmSicc8Es2vLSmnPlpHaU/edit"
+    },
+    "sheetName": {
+     "__rl": true,
+     "mode": "name",
+     "value": "Leads"
+    },
+    "options": {}
+   },
+   "credentials": {
+    "googleApi": {
+     "id": "",
+     "name": "Google Service Account account"
+    }
+   },
+   "executeOnce": true,
+   "alwaysOutputData": true
+  },
+  {
+   "id": "lf13",
+   "name": "Approved emails",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    440,
+    600
+   ],
+   "parameters": {
+    "jsCode": "// Code node \"Approved emails\". Leads rows Graham said yes to in the Hub (kind email, status approved).\nreturn $input.all().map(i => i.json)\n  .filter(r => r.id && r.kind === 'email' && r.status === 'approved' && /@/.test(r.email || '') && r.body)\n  .map(r => ({ json: { id: r.id, to: r.email, subject: r.subject || 'Following up', text: r.body } }));\n"
+   }
+  },
+  {
+   "id": "lf14",
+   "name": "Send email",
+   "type": "n8n-nodes-base.emailSend",
+   "typeVersion": 2.1,
+   "position": [
+    660,
+    600
+   ],
+   "parameters": {
+    "fromEmail": "Graham at Open Frame <grahamivy.co@gmail.com>",
+    "toEmail": "={{ $json.to }}",
+    "subject": "={{ $json.subject }}",
+    "emailFormat": "text",
+    "text": "={{ $json.text }}",
+    "options": {
+     "appendAttribution": false
+    }
+   },
+   "credentials": {
+    "smtp": {
+     "id": "",
+     "name": "Gmail SMTP"
+    }
+   }
+  },
+  {
+   "id": "lf15",
+   "name": "Mark sent",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    880,
+    600
+   ],
+   "parameters": {
+    "jsCode": "// Code node \"Mark sent\". Runs once per email the SMTP node sent.\nconst now = DateTime.now().setZone('America/Chicago').toISO();\nreturn $('Approved emails').all().map(i => ({ json: { id: i.json.id, status: 'sent', sent_at: now, last_contact: now, updated_at: now } }));\n"
+   }
+  },
+  {
+   "id": "lf16",
+   "name": "Save sent",
+   "type": "n8n-nodes-base.googleSheets",
+   "typeVersion": 4.5,
+   "position": [
+    1100,
+    600
+   ],
+   "parameters": {
+    "operation": "appendOrUpdate",
+    "authentication": "serviceAccount",
+    "documentId": {
+     "__rl": true,
+     "mode": "url",
+     "value": "https://docs.google.com/spreadsheets/d/1VgiiTBTpmFh5bqutvYvjvNZmSicc8Es2vLSmnPlpHaU/edit"
+    },
+    "sheetName": {
+     "__rl": true,
+     "mode": "name",
+     "value": "Leads"
+    },
+    "columns": {
+     "mappingMode": "autoMapInputData",
+     "value": {},
+     "matchingColumns": [
+      "id"
+     ],
+     "schema": [
+      {
+       "id": "id",
+       "displayName": "id",
+       "required": false,
+       "defaultMatch": false,
+       "display": true,
+       "type": "string",
+       "canBeUsedToMatch": true
+      },
+      {
+       "id": "added",
+       "displayName": "added",
+       "required": false,
+       "defaultMatch": false,
+       "display": true,
+       "type": "string",
+       "canBeUsedToMatch": true
+      },
+      {
+       "id": "source",
+       "displayName": "source",
+       "required": false,
+       "defaultMatch": false,
+       "display": true,
+       "type": "string",
+       "canBeUsedToMatch": true
+      },
+      {
+       "id": "name",
+       "displayName": "name",
+       "required": false,
+       "defaultMatch": false,
+       "display": true,
+       "type": "string",
+       "canBeUsedToMatch": true
+      },
+      {
+       "id": "org",
+       "displayName": "org",
+       "required": false,
+       "defaultMatch": false,
+       "display": true,
+       "type": "string",
+       "canBeUsedToMatch": true
+      },
+      {
+       "id": "email",
+       "displayName": "email",
+       "required": false,
+       "defaultMatch": false,
+       "display": true,
+       "type": "string",
+       "canBeUsedToMatch": true
+      },
+      {
+       "id": "handle",
+       "displayName": "handle",
+       "required": false,
+       "defaultMatch": false,
+       "display": true,
+       "type": "string",
+       "canBeUsedToMatch": true
+      },
+      {
+       "id": "stage",
+       "displayName": "stage",
+       "required": false,
+       "defaultMatch": false,
+       "display": true,
+       "type": "string",
+       "canBeUsedToMatch": true
+      },
+      {
+       "id": "consult_at",
+       "displayName": "consult_at",
+       "required": false,
+       "defaultMatch": false,
+       "display": true,
+       "type": "string",
+       "canBeUsedToMatch": true
+      },
+      {
+       "id": "met_at",
+       "displayName": "met_at",
+       "required": false,
+       "defaultMatch": false,
+       "display": true,
+       "type": "string",
+       "canBeUsedToMatch": true
+      },
+      {
+       "id": "last_contact",
+       "displayName": "last_contact",
+       "required": false,
+       "defaultMatch": false,
+       "display": true,
+       "type": "string",
+       "canBeUsedToMatch": true
+      },
+      {
+       "id": "step",
+       "displayName": "step",
+       "required": false,
+       "defaultMatch": false,
+       "display": true,
+       "type": "string",
+       "canBeUsedToMatch": true
+      },
+      {
+       "id": "kind",
+       "displayName": "kind",
+       "required": false,
+       "defaultMatch": false,
+       "display": true,
+       "type": "string",
+       "canBeUsedToMatch": true
+      },
+      {
+       "id": "card",
+       "displayName": "card",
+       "required": false,
+       "defaultMatch": false,
+       "display": true,
+       "type": "string",
+       "canBeUsedToMatch": true
+      },
+      {
+       "id": "subject",
+       "displayName": "subject",
+       "required": false,
+       "defaultMatch": false,
+       "display": true,
+       "type": "string",
+       "canBeUsedToMatch": true
+      },
+      {
+       "id": "body",
+       "displayName": "body",
+       "required": false,
+       "defaultMatch": false,
+       "display": true,
+       "type": "string",
+       "canBeUsedToMatch": true
+      },
+      {
+       "id": "status",
+       "displayName": "status",
+       "required": false,
+       "defaultMatch": false,
+       "display": true,
+       "type": "string",
+       "canBeUsedToMatch": true
+      },
+      {
+       "id": "sent_at",
+       "displayName": "sent_at",
+       "required": false,
+       "defaultMatch": false,
+       "display": true,
+       "type": "string",
+       "canBeUsedToMatch": true
+      },
+      {
+       "id": "notes",
+       "displayName": "notes",
+       "required": false,
+       "defaultMatch": false,
+       "display": true,
+       "type": "string",
+       "canBeUsedToMatch": true
+      },
+      {
+       "id": "updated_at",
+       "displayName": "updated_at",
+       "required": false,
+       "defaultMatch": false,
+       "display": true,
+       "type": "string",
+       "canBeUsedToMatch": true
+      }
+     ]
+    },
+    "options": {}
+   },
+   "credentials": {
+    "googleApi": {
+     "id": "",
+     "name": "Google Service Account account"
+    }
+   }
+  }
+ ],
+ "connections": {
+  "Calendly email": {
+   "main": [
+    [
+     {
+      "node": "Parse Calendly",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Parse Calendly": {
+   "main": [
+    [
+     {
+      "node": "Read Leads (booking)",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Read Leads (booking)": {
+   "main": [
+    [
+     {
+      "node": "Merge booking",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Merge booking": {
+   "main": [
+    [
+     {
+      "node": "Save booking",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Every hour": {
+   "main": [
+    [
+     {
+      "node": "Read Leads",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Read Leads": {
+   "main": [
+    [
+     {
+      "node": "Read Targets",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Read Targets": {
+   "main": [
+    [
+     {
+      "node": "Plan follow-ups",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Plan follow-ups": {
+   "main": [
+    [
+     {
+      "node": "Save plan",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Every 15 minutes": {
+   "main": [
+    [
+     {
+      "node": "Read Leads (send)",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Read Leads (send)": {
+   "main": [
+    [
+     {
+      "node": "Approved emails",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Approved emails": {
+   "main": [
+    [
+     {
+      "node": "Send email",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Send email": {
+   "main": [
+    [
+     {
+      "node": "Mark sent",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Mark sent": {
+   "main": [
+    [
+     {
+      "node": "Save sent",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  }
+ },
+ "settings": {
+  "executionOrder": "v1",
+  "timezone": "America/Chicago"
+ },
+ "pinData": {}
+}
