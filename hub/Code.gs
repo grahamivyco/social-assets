@@ -365,7 +365,8 @@ function results_(c) {
   const month = Utilities.formatDate(new Date(), TZ, 'yyyy-MM');
   const [y, m] = month.split('-').map(Number);
   const prev = m === 1 ? (y - 1) + '-12' : y + '-' + String(m - 1).padStart(2, '0');
-  if (!acc.length && !posts.length) return { empty: true, report_url: c.report_url };
+  const newsletter = newsletter_(c, month);
+  if (!acc.length && !posts.length) return { empty: true, report_url: c.report_url, newsletter };
   const now = kpis_(acc, posts, month), was = kpis_(acc, posts, prev);
   const label = mo => ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'][Number(mo.slice(5)) - 1];
   const tiles = [
@@ -378,7 +379,30 @@ function results_(c) {
   const top = postsIn_(posts, month).filter(p => score_(p) != null).sort((a, b) => score_(b) - score_(a)).slice(0, 3)
     .map(p => ({ platform: p.platform, type: p.type, caption: String(p.caption || '').slice(0, 140), url: p.permalink,
       reach: num_(p.reach), likes: num_(p.likes), comments: num_(p.comments), saves: num_(p.saves), shares: num_(p.shares) }));
-  return { empty: false, month: label(month), prevMonth: label(prev), tiles, top, report_url: c.report_url };
+  return { empty: false, month: label(month), prevMonth: label(prev), tiles, top, report_url: c.report_url, newsletter };
+}
+
+// One plain sentence from the "Newsletter stats" tab (Brevo, written by n8n). Same math as the PDF report (build-report.js).
+// '' when the client has no newsletter rows at all.
+function newsletter_(c, month) {
+  const t = table_(c.sheet_id, 'Newsletter stats');
+  const all = t ? t.rows.filter(r => r.brand === c.brand).sort((a, b) => String(a.sent_at).localeCompare(String(b.sent_at))) : [];
+  if (!all.length) return '';
+  const issues = all.filter(r => String(r.month).slice(0, 7) === month);
+  if (!issues.length) return 'Newsletter: no newsletter this month.';
+  const sum = f => (issues.some(r => num_(r[f]) != null) ? issues.reduce((s, r) => s + (num_(r[f]) || 0), 0) : null);
+  const delivered = sum('delivered'), clicks = sum('unique_clicks'), opens = sum('unique_opens'), unsubs = sum('unsubscribes');
+  const pct = v => (v == null || !delivered ? '' : ' (' + Math.round(v / delivered * 1000) / 10 + '% of delivered)');
+  const last = issues[issues.length - 1], before = all.filter(r => String(r.month).slice(0, 7) < month).pop();
+  const a = last && num_(last.list_size_at_send), b = before && num_(before.list_size_at_send);
+  const growth = a != null && b != null ? a - b : null;
+  const n = v => Math.round(v).toLocaleString('en-US');
+  const parts = [];
+  if (clicks != null) parts.push(n(clicks) + (clicks === 1 ? ' person' : ' people') + ' clicked a link' + pct(clicks));
+  if (opens != null) parts.push(n(opens) + ' opened it (Apple Mail inflates opens)');
+  if (growth != null) parts.push((growth >= 0 ? n(growth) + ' new' : n(-growth) + ' fewer') + ' subscribers');
+  if (unsubs != null) parts.push(n(unsubs) + ' unsubscribed');
+  return parts.length ? 'Newsletter: ' + parts.join(', ') + '.' : 'Newsletter: numbers come in a day or two after it goes out.';
 }
 
 function kpis_(a, posts, month) {
@@ -800,14 +824,14 @@ const CLIENT_HTML = `<!doctype html><html><head><meta charset="utf-8"><style>${B
 document.getElementById('h').textContent = BOOT.client;
 function results(R) {
   const more = document.getElementById('more'); more.innerHTML = '';
-  if (!R || R.empty) { more.append($('p', { text: 'Results appear after the first stats pull.' })); return; }
+  if (!R || R.empty) { more.append($('p', { text: 'Results appear after the first stats pull.' }), R && R.newsletter ? $('p', { text: R.newsletter }) : ''); return; }
   const t = {}; R.tiles.forEach(x => t[x.title] = x);
   const reach = t['Accounts reached'], fol = t['New followers'], clk = t['Clicks and taps'];
   const parts = [];
   if (reach && reach.value != null) parts.push('reached ' + fmt(reach.value) + ' people' + pct(reach.value, reach.prev));
   if (fol && fol.value != null) parts.push(fmt(fol.value) + ' new followers');
   if (clk && clk.value != null) parts.push(fmt(clk.value) + ' clicks');
-  more.append($('p', { text: parts.length ? R.month + ' so far: ' + parts.join(', ') + '.' : 'Results appear after the first stats pull.' }));
+  more.append($('p', { text: parts.length ? R.month + ' so far: ' + parts.join(', ') + '.' : 'Results appear after the first stats pull.' }), R.newsletter ? $('p', { text: R.newsletter }) : '');
   const detail = $('div', { style: 'display:none' },
     $('div', { class: 'tiles' }, R.tiles.map(x => $('div', { class: 'tile' }, $('b', { text: fmt(x.value) }), x.title + pct(x.value, x.prev)))),
     R.top.length ? $('p', { style: 'margin:14px 0 4px', text: 'Top posts' }) : '',
