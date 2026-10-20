@@ -1,0 +1,84 @@
+{
+ "id": "ngm",
+ "name": "Needlework Guild of Minnesota",
+ "site": "https://needleworkguildmn.org",
+ "updated": "2026-10-20",
+ "colors": [
+  {
+   "token": "sage",
+   "name": "Sage",
+   "hex": "#3E5538",
+   "use": "Headings, bands, buttons"
+  },
+  {
+   "token": "mid-sage",
+   "name": "Mid sage",
+   "hex": "#5C7A52",
+   "use": "Secondary text, icons"
+  },
+  {
+   "token": "pale-sage",
+   "name": "Pale sage",
+   "hex": "#EEF3EC",
+   "use": "Soft panels"
+  },
+  {
+   "token": "rose",
+   "name": "Terracotta rose",
+   "hex": "#B87260",
+   "use": "The one accent"
+  },
+  {
+   "token": "pale-rose",
+   "name": "Pale rose",
+   "hex": "#F5EBE7",
+   "use": "Highlights, accent on sage"
+  },
+  {
+   "token": "cream",
+   "name": "Cream",
+   "hex": "#FAF7F2",
+   "use": "Main background"
+  },
+  {
+   "token": "linen",
+   "name": "Linen",
+   "hex": "#F0EAE0",
+   "use": "Page edges, email background"
+  },
+  {
+   "token": "hairline",
+   "name": "Hairline",
+   "hex": "#DDD5C8",
+   "use": "Rules and borders"
+  },
+  {
+   "token": "ink",
+   "name": "Charcoal ink",
+   "hex": "#242424",
+   "use": "Body text"
+  }
+ ],
+ "roles": {
+  "bg": "cream",
+  "text": "ink",
+  "heading": "sage",
+  "accent": "rose",
+  "band": "sage",
+  "on_band": "cream",
+  "line": "hairline"
+ },
+ "fonts": {
+  "head": {
+   "family": "Cormorant Garamond",
+   "weight": 400,
+   "rule": "Weight 400, sentence case. One italic rose word per headline."
+  },
+  "body": {
+   "family": "DM Sans",
+   "rule": "16 to 18px for reading. Semibold uppercase with wide spacing for small labels."
+  }
+ },
+ "logo_rules": "The outline of Minnesota in terracotta thread with a sage needle. Use the cream version on sage or dark backgrounds. Keep clear space the width of the needle all around.",
+ "color_rules": "Sage leads. Terracotta rose is the only accent, used for one word or one line. Cream and linen are the backgrounds."
+}

@@ -1,0 +1,13 @@
+:root {
+  --sage: #3E5538; /* Sage */
+  --mid-sage: #5C7A52; /* Mid sage */
+  --pale-sage: #EEF3EC; /* Pale sage */
+  --rose: #B87260; /* Terracotta rose */
+  --pale-rose: #F5EBE7; /* Pale rose */
+  --cream: #FAF7F2; /* Cream */
+  --linen: #F0EAE0; /* Linen */
+  --hairline: #DDD5C8; /* Hairline */
+  --ink: #242424; /* Charcoal ink */
+  --font-head: 'Cormorant Garamond', Georgia, serif;
+  --font-body: 'DM Sans', Arial, sans-serif;
+}

@@ -1,0 +1,89 @@
+{
+ "id": "open-frame",
+ "name": "Open Frame",
+ "site": "https://openframe.design",
+ "updated": "2026-10-20",
+ "colors": [
+  {
+   "token": "ink",
+   "name": "Ink",
+   "hex": "#111110",
+   "use": "Text, mark, wordmark"
+  },
+  {
+   "token": "ink-2",
+   "name": "Ink 2",
+   "hex": "#4B4A46",
+   "use": "Secondary text"
+  },
+  {
+   "token": "muted",
+   "name": "Muted",
+   "hex": "#84827B",
+   "use": "Captions, meta"
+  },
+  {
+   "token": "white",
+   "name": "White",
+   "hex": "#FFFFFF",
+   "use": "Page background"
+  },
+  {
+   "token": "cream",
+   "name": "Cream",
+   "hex": "#F3F1EA",
+   "use": "Panels, mark on dark"
+  },
+  {
+   "token": "red",
+   "name": "Red",
+   "hex": "#F24333",
+   "use": "Accent 1"
+  },
+  {
+   "token": "blue",
+   "name": "Blue",
+   "hex": "#2F6BF0",
+   "use": "Accent 2"
+  },
+  {
+   "token": "yellow",
+   "name": "Yellow",
+   "hex": "#F4BF3A",
+   "use": "Accent 3"
+  },
+  {
+   "token": "green",
+   "name": "Green",
+   "hex": "#33AC66",
+   "use": "Accent 4"
+  }
+ ],
+ "roles": {
+  "bg": "white",
+  "text": "ink",
+  "heading": "ink",
+  "accent": "red",
+  "band": "ink",
+  "on_band": "cream",
+  "line": "cream"
+ },
+ "fonts": {
+  "head": {
+   "family": "Fraunces",
+   "weight": 500,
+   "rule": "Serif headings, sentence case. One italic accent word allowed."
+  },
+  "body": {
+   "family": "Inter",
+   "rule": "Body and UI."
+  },
+  "wordmark": {
+   "family": "Manrope",
+   "weight": 600,
+   "rule": "Wordmark only. Outlined in logos/open-frame-wordmark*.svg so it renders without the font. TTFs in fonts/."
+  }
+ },
+ "logo_rules": "The mark is an open bracket frame with a 4-point spark inside. Always one color: ink on light, cream on dark. Never multicolor, never with shadows or effects. Use the mark on its own most of the time, and the wordmark sparingly: site header, end cards, documents.",
+ "color_rules": "Mostly ink, white and cream with lots of whitespace. The four accents are only for accents and icons, cycled red, blue, yellow, green. Flat color, no drop shadows."
+}

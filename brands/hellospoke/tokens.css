@@ -1,0 +1,10 @@
+:root {
+  --navy: #003A5D; /* Navy */
+  --emerald: #24C676; /* Emerald */
+  --spoke-navy: #182D3A; /* Spoke Navy */
+  --sky: #7CD0F4; /* Sky Foam */
+  --fog: #F8F8F7; /* Fog */
+  --white: #FFFFFF; /* White */
+  --font-head: 'Nunito', Georgia, serif;
+  --font-body: 'Nunito', Arial, sans-serif;
+}

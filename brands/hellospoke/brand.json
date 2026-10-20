@@ -1,0 +1,66 @@
+{
+ "id": "hellospoke",
+ "name": "HelloSpoke",
+ "site": "https://hellospoke.com",
+ "updated": "2026-10-20",
+ "colors": [
+  {
+   "token": "navy",
+   "name": "Navy",
+   "hex": "#003A5D",
+   "use": "Primary, backgrounds, headings"
+  },
+  {
+   "token": "emerald",
+   "name": "Emerald",
+   "hex": "#24C676",
+   "use": "Accent, mark, buttons"
+  },
+  {
+   "token": "spoke-navy",
+   "name": "Spoke Navy",
+   "hex": "#182D3A",
+   "use": "Dark text"
+  },
+  {
+   "token": "sky",
+   "name": "Sky Foam",
+   "hex": "#7CD0F4",
+   "use": "Light accent, shapes"
+  },
+  {
+   "token": "fog",
+   "name": "Fog",
+   "hex": "#F8F8F7",
+   "use": "Page background"
+  },
+  {
+   "token": "white",
+   "name": "White",
+   "hex": "#FFFFFF",
+   "use": "Text on navy"
+  }
+ ],
+ "roles": {
+  "bg": "fog",
+  "text": "spoke-navy",
+  "heading": "navy",
+  "accent": "emerald",
+  "band": "navy",
+  "on_band": "white",
+  "line": "sky"
+ },
+ "fonts": {
+  "head": {
+   "family": "Nunito",
+   "weight": 700,
+   "rule": "Headings and UI."
+  },
+  "body": {
+   "family": "Nunito",
+   "rule": "Regular for body copy."
+  }
+ },
+ "logo_rules": "Green speech-bubble mark with a white asterisk spoke, cut by a diagonal line, beside the HelloSpoke wordmark. White version on navy. Mascot: a green speech-bubble character with big eyes, for social and playful moments.",
+ "color_rules": "Navy leads, emerald green is the accent, sky foam for light accents and abstract background shapes, fog for page backgrounds."
+}
