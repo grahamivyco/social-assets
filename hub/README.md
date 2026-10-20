@@ -7,8 +7,8 @@ Free. Runs in Google Apps Script inside the "NGM social queue" Sheet. Reads and 
 - **Check-in email**: every Monday 9:00 Central (or every 2 weeks) with how many things need you and one link. Between check-ins you only get an email for things that can't wait: a failed post, posting that stopped, a new DM (Meta closes replies after 24 hours). Clients asking for a change also email you right away.
 
 ## Setup (once, about 5 minutes)
-1. Open the Sheet: https://docs.google.com/spreadsheets/d/1nec5cD5RtjV6yDLzxeKX9vGhI0k123PIaFFDwXqFM6A/edit
-2. Extensions > Apps Script. Delete what's in `Code.gs`, paste all of `Code.gs` from this folder, save
+1. Open https://script.google.com/home and start a new project (or open the Sheet and use Extensions > Apps Script)
+2. Delete what's in `Code.gs`, paste all of `Code.gs` from this folder, save
 3. Pick `setup` in the function menu, Run, allow access
 4. Deploy > New deployment > type Web app. Execute as: Me. Who has access: Anyone. Deploy
 5. Pick `emailMeMyLinks`, Run. Your dashboard link and each client's review link arrive by email
