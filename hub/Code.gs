@@ -39,6 +39,11 @@ const FROM_NAME = 'Open Frame';
 const HEALTH_MAC_CARD_HOURS = 3;
 const HEALTH_MAC_EMAIL_HOURS = 20;
 const REPLY_TO = 'hello@openframe.design';
+// "Leads" tab in the outreach Sheet, written by the n8n "Open Frame lead follow-up" workflow (thread "Business ops automation and $4k goal").
+// One open card per lead: kind email | dm | todo | ask_met | ask_signed, status drafted until you answer here.
+// true = a lead card waiting is one of the things that can't wait (daily 8:00 email, only on days one is waiting).
+const LEADS_URGENT = true;
+const META_INBOX = 'https://business.facebook.com/latest/inbox/all';
 
 // ---------- setup ----------
 
@@ -93,7 +98,7 @@ function doGet(e) {
   const url = ScriptApp.getService().getUrl() || '';
   if (/\/exec$/.test(url)) PropertiesService.getScriptProperties().setProperty('WEB_APP_URL', url);
   if (p.api) return api_(p);
-  if (p.k && p.k === adminKey_()) return page_('Hub', ADMIN_HTML, { key: p.k });
+  if (p.k && p.k === adminKey_()) return page_('Hub', ADMIN_HTML, { key: p.k, metaInbox: META_INBOX });
   if (p.c) {
     try {
       const c = clientByLink_(p.c);
@@ -132,7 +137,7 @@ function getDashboard(key) {
   const clients = clients_();
   const byBrand = {};
   clients.forEach(c => { byBrand[c.brand] = c; });
-  const out = { clients: clients.map(c => ({ client: c.client, brand: c.brand, contact_email: c.contact_email, client_approves: c.client_approves })), topics: [], approve: [], review: [], feedback: [], failed: [], upcoming: [], inbox: [], engage: [], photos: [], fixes: [] };
+  const out = { clients: clients.map(c => ({ client: c.client, brand: c.brand, contact_email: c.contact_email, client_approves: c.client_approves })), topics: [], approve: [], review: [], feedback: [], failed: [], upcoming: [], inbox: [], engage: [], photos: [], fixes: [], leads: [], pipeline: {} };
   const now = Date.now(), week = now + 7 * 864e5;
 
   uniq_(clients.map(c => c.sheet_id)).forEach(sid => {
@@ -164,6 +169,14 @@ function getDashboard(key) {
     }));
   });
 
+  const leads = table_(OUTREACH_SHEET_ID, 'Leads');
+  if (leads) {
+    leads.rows.filter(r => r.id && r.status === 'drafted').forEach(r => out.leads.push({
+      id: r.id, who: r.name || r.org || r.handle || r.email, org: r.name ? r.org : '', kind: r.kind, step: r.step,
+      card: r.card, subject: r.subject, body: r.body, email: r.email, handle: r.handle,
+    }));
+    leads.rows.filter(r => r.id).forEach(r => { const st = r.stage || 'talking'; out.pipeline[st] = (out.pipeline[st] || 0) + 1; });
+  }
   const eng = table_(OUTREACH_SHEET_ID, 'Engage');
   if (eng) eng.rows.filter(r => r.status === 'drafted' && r.draft_comment).forEach(r => out.engage.push({
     id: r.post_id, handle: r.handle, url: r.post_url, caption: (r.caption || '').slice(0, 220), comment: r.draft_comment,
@@ -264,6 +277,31 @@ function adminEngage(key, id, action, comment) {
     const r = findRow_(t, 'post_id', id);
     const set = action === 'sent' ? { status: 'sent', sent_at: new Date().toISOString() } : { status: 'skip' };
     if (comment) set.draft_comment = comment;
+    setCells_(t, r._row, set);
+    return 'ok';
+  });
+}
+
+// Lead cards. Emails go out from n8n within 15 minutes of a yes; DMs you paste yourself, so they count as sent.
+function adminLead(key, id, action, text) {
+  checkKey_(key);
+  return withLock_(() => {
+    const t = table_(OUTREACH_SHEET_ID, 'Leads');
+    const r = findRow_(t, 'id', id);
+    const now = new Date().toISOString();
+    const set = {
+      send: { status: r.kind === 'email' ? 'approved' : 'sent', sent_at: r.kind === 'email' ? '' : now, last_contact: r.kind === 'email' ? r.last_contact : now },
+      done: { status: 'done' },
+      skip: { status: 'skipped' },
+      met: { stage: 'consult held', met_at: now, last_contact: now, step: 'met', status: '' },
+      noshow: { stage: 'talking', step: 'noshow_pending', status: '' },
+      notyet: { status: 'done' },
+      won: { stage: 'won', status: 'done', last_contact: now },
+      lost: { stage: 'lost', status: 'done' },
+    }[action];
+    if (!set) throw new Error('Unknown action');
+    if (text && action === 'send') set.body = text;
+    set.updated_at = now;
     setCells_(t, r._row, set);
     return 'ok';
   });
@@ -488,9 +526,10 @@ function checkInNow() {
   const parts = [
     [d.topics.length, 'topic idea', 'topic ideas'], [d.approve.length, 'post', 'posts'], [d.inbox.length, 'message', 'messages'],
     [d.engage.length, 'comment to leave', 'comments to leave'], [d.photos.length, 'photo sent in', 'photos sent in'],
+    [d.leads.length, 'lead follow-up', 'lead follow-ups'],
     [d.failed.length + d.fixes.length, 'thing to fix', 'things to fix'],
   ].filter(p => p[0]).map(p => p[0] + ' ' + (p[0] === 1 ? p[1] : p[2]));
-  const total = d.topics.length + d.approve.length + d.inbox.length + d.engage.length + d.photos.length + d.failed.length + d.fixes.length;
+  const total = d.topics.length + d.approve.length + d.inbox.length + d.engage.length + d.photos.length + d.leads.length + d.failed.length + d.fixes.length;
   const lines = total
     ? ['You have ' + total + ' to go through: ' + parts.join(', ') + '.', '', 'Tap Yes or Change on each one:', '', adminUrl_()]
     : ['Nothing needs you this time.'];
@@ -498,6 +537,8 @@ function checkInNow() {
   if (d.upcoming.length) fyi.push(d.upcoming.length + (d.upcoming.length === 1 ? ' post' : ' posts') + ' going out this week');
   if (d.review.length) fyi.push(d.review.length + ' waiting on clients');
   if (fyi.length) lines.push('', fyi.join(', ') + '.');
+  const pipe = pipeline_(d.pipeline);
+  if (pipe) lines.push('', 'Leads: ' + pipe + '.');
   MailApp.sendEmail(me_(), total ? 'Check-in: ' + total + (total === 1 ? ' thing needs you' : ' things need you') : 'Check-in: nothing needs you', lines.join('\n'));
 }
 
@@ -506,7 +547,8 @@ function urgentCheck() {
   const d = getDashboard(adminKey_());
   const items = d.failed.map(g => ['f' + g.ids[0], g.clientName + ': the post for ' + g.when + " didn't go out."])
     .concat(d.fixes.filter(f => f.kind === 'stuck').map(f => ['s' + f.text, f.text]))
-    .concat(d.inbox.map(m => ['m' + m.id, (m.who || 'Someone') + ' sent a message: ' + m.text.slice(0, 80)]));
+    .concat(d.inbox.map(m => ['m' + m.id, (m.who || 'Someone') + ' sent a message: ' + m.text.slice(0, 80)]))
+    .concat(LEADS_URGENT ? d.leads.map(l => ['l' + l.id + '|' + l.step, (l.who || 'A lead') + ': ' + leadLine_(l)]) : []);
   const props = PropertiesService.getScriptProperties();
   const seen = JSON.parse(props.getProperty('URGENT_SEEN') || '[]');
   const fresh = items.filter(x => seen.indexOf(x[0]) < 0);
@@ -548,6 +590,15 @@ function health_() {
     text: "n8n on your Mac hasn't checked in since " + fmtWhen_(hb.updated_at) + '. The Mac may be off or asleep, so nothing posts or gets pulled.',
   });
   return out;
+}
+
+function leadLine_(l) {
+  return { email: 'follow-up email ready', dm: 'follow-up message ready', todo: 'something to do today', ask_met: 'did the consult happen?', ask_signed: 'did they say yes?' }[l.kind] || 'needs a look';
+}
+
+const STAGES = ['talking', 'consult booked', 'consult held', 'won'];
+function pipeline_(p) {
+  return STAGES.filter(s => p && p[s]).map(s => p[s] + ' ' + s).join(', ');
 }
 
 // ---------- helpers ----------
@@ -717,7 +768,7 @@ function mediaEl(urls, poster) {
     ? $('video', Object.assign({ src: u, controls: '', preload: 'metadata', playsinline: '' }, poster ? { poster } : {}))
     : $('img', { src: u, loading: 'lazy', alt: '' })));
 }
-// One card at a time. Each item: { label, body: [nodes], ask, yes: [text, fn], change: [text, placeholder, fn, prefill] | null, skip: [text, fn] | null }
+// One card at a time. Each item: { label, body: [nodes], ask, yes: [text, fn], change: [text, placeholder, fn, prefill] | null, alt: [text, fn] (second button when there's no change), skip: [text, fn] | null }
 function runQueue(items, box, countEl, onDone) {
   let i = 0;
   const show = () => {
@@ -735,6 +786,7 @@ function runQueue(items, box, countEl, onDone) {
       const back = $('button', { text: 'Back', on: { click: show } });
       btns.replaceWith($('div', {}, ta, $('div', { class: 'btns' }, back, send))); ta.focus();
     } } }));
+    else if (it.alt) btns.append($('button', { text: it.alt[0], on: { click: () => busy(card, it.alt[1]) } }));
     else btns.style.gridTemplateColumns = '1fr';
     card.append(btns);
     if (it.skip) card.append($('button', { class: 'skip', text: it.skip[0], on: { click: () => busy(card, it.skip[1]) } }));
@@ -790,6 +842,20 @@ function build(d) {
     yes: ['Copy and open', () => openPost(x, x.comment)],
     change: ['Change', 'Your comment', n => openPost(x, n), x.comment],
     skip: ['Skip this one', () => call('adminEngage', K, x.id, 'skip', '')] }));
+  d.leads.forEach(l => {
+    const label = [$('b', { text: l.who || 'A lead' }), l.org ? ' · ' + l.org : '', ' · lead'];
+    const go = a => () => call('adminLead', K, l.id, a, '');
+    if (l.kind === 'email') q.push({ label, body: [$('p', { class: 'text', text: 'To: ' + l.email + '\\nSubject: ' + l.subject }), $('div', { class: 'quote', text: l.body })],
+      ask: 'Send this follow-up?', yes: ['Send', go('send')],
+      change: ['Change', 'Your email', n => call('adminLead', K, l.id, 'send', n), l.body], skip: ['Don\\'t send', go('skip')] });
+    else if (l.kind === 'dm') { const open = text => { try { navigator.clipboard.writeText(text).catch(() => {}); } catch (e) {} window.open(BOOT.metaInbox, '_blank'); return call('adminLead', K, l.id, 'send', text); };
+      q.push({ label, body: [$('div', { class: 'quote', text: l.body })],
+      ask: 'Send this message' + (l.handle ? ' to @' + l.handle : '') + '? It gets copied and your inbox opens. Paste and send.',
+      yes: ['Copy and open', () => open(l.body)], change: ['Change', 'Your message', n => open(n), l.body], skip: ['Don\\'t send', go('skip')] }); }
+    else if (l.kind === 'ask_met') q.push({ label, body: [textEl(l.card)], ask: '', yes: ['We met', go('met')], change: null, alt: ['They didn\\'t show', go('noshow')], skip: null });
+    else if (l.kind === 'ask_signed') q.push({ label, body: [textEl(l.card)], ask: '', yes: ['Yes, they signed', go('won')], change: null, alt: ['Not yet', go('notyet')], skip: ['No, close their file', go('lost')] });
+    else q.push({ label, body: [textEl(l.card)], ask: '', yes: ['Got it', go('done')], change: null, skip: null });
+  });
   d.photos.forEach(p => q.push({ label: [$('b', { text: p.from || 'Someone' }), ' · sent a photo'],
     body: [p.file ? $('img', { src: p.file, alt: '', style: 'width:100%;border-radius:10px;margin-bottom:10px' }) : '', $('p', { class: 'text', text: [p.what, p.issues ? 'Note: ' + p.issues : ''].filter(Boolean).join('\\n') })],
     ask: 'Use it in a post?', yes: ['Yes', () => call('adminPhoto', K, p.sheetId, p.row, p.received, 'use')], change: null,
@@ -802,6 +868,8 @@ function summary(d) {
   if (d.upcoming.length) bits.push(plural(d.upcoming.length, 'post', 'posts') + ' going out this week');
   if (d.review.length) bits.push(plural(d.review.length, 'post', 'posts') + ' waiting on clients');
   if (d.feedback.length) bits.push(plural(d.feedback.length, 'post', 'posts') + ' being revised');
+  const pipe = ['talking', 'consult booked', 'consult held', 'won'].filter(s => d.pipeline[s]).map(s => d.pipeline[s] + ' ' + s).join(', ');
+  if (pipe) bits.push('Leads: ' + pipe);
   if (bits.length) more.append($('p', { text: bits.join(' · ') }));
   const links = $('div', { style: 'display:none' }, d.clients.map(c => $('div', { class: 'row' }, $('span', { text: c.client }),
     c.contact_email
