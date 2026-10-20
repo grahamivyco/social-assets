@@ -3,8 +3,8 @@
 Free. Runs in Google Apps Script inside the "NGM social queue" Sheet. Reads and writes the same tabs n8n uses, so nothing else changes.
 
 - **Your check-in page**: one card at a time. Yes, Change, or a small Skip. Covers topic ideas, posts, DMs, outreach comments, guild photos and anything broken. Ends with "All done".
-- **Client review page**: `https://openframe.design/review/#<token>` on Graham's site (source: `review/index.html` in grahamivyco/Open-Frame), no login, no Google bar. Clients get a branded "Your posts are ready" email with one button. One post at a time: Looks good, Change something (with a note) or Skip. Below that, one line of results ("October so far: reached 2,140 people, up 78%") with See more for the tiles, top posts and PDF.
-- **Check-in email**: every Monday 9:00 Central (or every 2 weeks) with how many things need you and one link. Between check-ins you only get an email for things that can't wait: a failed post, posting that stopped, a new DM (Meta closes replies after 24 hours). Clients asking for a change also email you right away.
+- **Client review page**: `https://openframe.design/review/#xxxx-xxxx-xxxx-xxxx` on Graham's site (source: `review/index.html` in grahamivyco/Open-Frame), no password, no Google bar. Each client contact gets a branded "posts ready for review" email with one button. That link is private to their address, stops working after 14 days or when a newer one is sent, and every approval is logged under their email (`answered_by`). An expired link shows "Email me a new link", which only sends to the address on file. Links live in the `Review links` tab. One post at a time: Looks good, Change something (with a note) or Skip. Below that, one line of results ("October so far: reached 2,140 people, up 78%") with See more for the tiles, top posts and PDF.
+- **Check-in email**: every Monday 9:00 Central (or every 2 weeks) with how many things need you and one link. Between check-ins you only get an email for things that can't wait: a failed post, posting that stopped, a new DM (Meta closes replies after 24 hours). Clients asking for a change also email you right away. At each check-in, clients with posts waiting get their review email automatically (at most once every 6 days; `AUTO_SEND_CLIENTS`).
 
 ## Setup (once, about 5 minutes)
 1. Open https://script.google.com/home and start a new project (or open the Sheet and use Extensions > Apps Script)
@@ -12,16 +12,16 @@ Free. Runs in Google Apps Script inside the "NGM social queue" Sheet. Reads and 
 3. Pick `setup` in the function menu, Run, allow access
 4. Deploy > New deployment > type Web app. Execute as: Me. Who has access: Anyone. Deploy
 5. Paste the Web app URL (ends in /exec) into `WEB_APP_URL` at the top of Code.gs and into `API` in Open-Frame `review/index.html`. Save, then Deploy > Manage deployments > edit > Version: New version.
-6. Pick `emailMeMyLinks`, Run. Your dashboard link and each client's review link arrive by email
+6. Pick `emailMeMyLinks`, Run. Your check-in link arrives by email. Client links are only ever sent to the client
 
 ## Clients tab
-`client | brand | sheet_id | token | contact_email | client_approves | report_url`
+`client | brand | sheet_id | contact_email | client_approves | report_url` (an old `token` column is ignored)
 - `brand` matches the brand column in Queue
 - `client_approves`: yes = posts go to the client's review page, no = you approve (Open Frame)
-- `contact_email`: needed for the "Email them the link" button
-- New client: add a row with a random token. A client with their own Sheet: put its id in `sheet_id`
+- `contact_email`: who gets review links. Several addresses are fine, separated by commas; each gets their own link
+- New client: add a row. A client with their own Sheet: put its id in `sheet_id`
 - `report_url`: optional link to the latest monthly report PDF, shown under Results
-- To cut off a link, change the token
+- To cut someone off, remove their address from `contact_email`; their links stop working right away
 
 ## Statuses (Queue)
 Follows the shared schema: /mnt/project-files/automation/queue-schema.md
