@@ -14,7 +14,7 @@ const DIGEST_HOUR = 7;
 const OUTREACH_SHEET_ID = '1VgiiTBTpmFh5bqutvYvjvNZmSicc8Es2vLSmnPlpHaU';
 // Column names follow /mnt/project-files/automation/queue-schema.md. review_note is Graham's own note.
 const QUEUE_EXTRA = ['client_decision', 'client_note', 'answered_by', 'decided_at', 'revision', 'review_note'];
-const CLIENT_HEAD = ['client', 'brand', 'sheet_id', 'token', 'contact_email', 'client_approves'];
+const CLIENT_HEAD = ['client', 'brand', 'sheet_id', 'token', 'contact_email', 'client_approves', 'report_url'];
 const STUCK_HOURS = 2;
 
 // ---------- setup ----------
@@ -34,8 +34,8 @@ function setup() {
     c.getRange(1, 1, 1, CLIENT_HEAD.length).setValues([CLIENT_HEAD]).setFontWeight('bold');
     c.setFrozenRows(1);
     c.getRange(2, 1, 2, CLIENT_HEAD.length).setValues([
-      ['Open Frame', 'open-frame', ss.getId(), token_(16), '', 'no'],
-      ['Needlework Guild of Minnesota', 'ngm', ss.getId(), token_(16), '', 'yes'],
+      ['Open Frame', 'open-frame', ss.getId(), token_(16), '', 'no', ''],
+      ['Needlework Guild of Minnesota', 'ngm', ss.getId(), token_(16), '', 'yes', ''],
     ]);
   }
 
@@ -262,7 +262,63 @@ function getClientPosts(token) {
   }));
   const open = s => (s === 'in_review' || s === 'plan' ? 0 : 1);
   groups.sort((a, b) => open(a.status) - open(b.status));
-  return { client: c.client, posts: groups };
+  return { client: c.client, posts: groups, results: results_(c) };
+}
+
+// ---------- client results (same formulas as analytics/report/build-report.js kpis()) ----------
+
+function results_(c) {
+  const at = table_(c.sheet_id, 'Account stats'), pt = table_(c.sheet_id, 'Post stats');
+  const acc = at ? at.rows.filter(r => r.client === c.brand) : [];
+  const posts = pt ? pt.rows.filter(r => r.client === c.brand) : [];
+  const month = Utilities.formatDate(new Date(), TZ, 'yyyy-MM');
+  const [y, m] = month.split('-').map(Number);
+  const prev = m === 1 ? (y - 1) + '-12' : y + '-' + String(m - 1).padStart(2, '0');
+  if (!acc.length && !posts.length) return { empty: true, report_url: c.report_url };
+  const now = kpis_(acc, posts, month), was = kpis_(acc, posts, prev);
+  const label = mo => ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'][Number(mo.slice(5)) - 1];
+  const tiles = [
+    ['reach', 'Accounts reached', 'People who saw your posts'],
+    ['interactions', 'Interactions', 'Likes, comments, saves and shares'],
+    ['views', 'Views', 'Times your posts were shown'],
+    ['follows', 'New followers', 'Across both accounts'],
+    ['clicks', 'Clicks and taps', 'Profile links and post clicks'],
+  ].map(([k, title, sub]) => ({ title, sub, value: now[k], prev: was[k] }));
+  const top = postsIn_(posts, month).filter(p => score_(p) != null).sort((a, b) => score_(b) - score_(a)).slice(0, 3)
+    .map(p => ({ platform: p.platform, type: p.type, caption: String(p.caption || '').slice(0, 140), url: p.permalink,
+      reach: num_(p.reach), likes: num_(p.likes), comments: num_(p.comments), saves: num_(p.saves), shares: num_(p.shares) }));
+  return { empty: false, month: label(month), prevMonth: label(prev), tiles, top, report_url: c.report_url };
+}
+
+function kpis_(a, posts, month) {
+  const ig = postsIn_(posts, month, 'instagram'), fb = postsIn_(posts, month, 'facebook');
+  const acct = (platform, ...metrics) => {
+    for (const m of metrics) {
+      const r = a.find(x => x.month === month && x.platform === platform && x.metric === m);
+      if (r && num_(r.value) != null) return num_(r.value);
+    }
+    return null;
+  };
+  const add = (...v) => (v.every(x => x == null) ? null : v.reduce((s, x) => s + (x || 0), 0));
+  const sum = (ps, f) => (ps.some(p => num_(p[f]) != null) ? ps.reduce((s, p) => s + (num_(p[f]) || 0), 0) : null);
+  const or = (x, y) => (x != null ? x : y);
+  return {
+    reach: add(acct('instagram', 'reach'), acct('facebook', 'page_impressions_unique', 'page_total_media_view_unique')),
+    clicks: add(acct('instagram', 'profile_links_taps'), acct('instagram', 'website_clicks'), sum(fb, 'clicks')),
+    follows: add(acct('instagram', 'new_followers'), acct('facebook', 'page_daily_follows_unique', 'page_follows')),
+    interactions: add(or(acct('instagram', 'total_interactions'), sum(ig, 'interactions')), or(acct('facebook', 'page_post_engagements'), sum(fb, 'interactions'))),
+    views: add(acct('instagram', 'views'), acct('facebook', 'page_media_view')),
+  };
+}
+
+function postsIn_(posts, month, platform) {
+  return posts.filter(p => String(p.published_at).slice(0, 7) === month && (!platform || p.platform === platform));
+}
+function num_(v) { const s = String(v == null ? '' : v).replace(/,/g, '').trim(); return s === '' || isNaN(Number(s)) ? null : Number(s); }
+// Signal score: the actions that mean someone valued the post. Reach breaks ties.
+function score_(p) {
+  const r = num_(p.reach);
+  return r == null ? null : (num_(p.saves) || 0) * 3 + (num_(p.shares) || 0) * 3 + (num_(p.comments) || 0) * 2 + (num_(p.likes) || 0) + r / 1e6;
 }
 
 function clientDecide(token, ids, decision, note) {
@@ -363,7 +419,7 @@ function clients_() {
   if (!t) return [];
   return t.rows.filter(r => r.brand && r.token).map(r => ({
     client: r.client || r.brand, brand: r.brand, sheet_id: r.sheet_id || hubId_(), token: r.token,
-    contact_email: r.contact_email || '', client_approves: /^(y|yes|true)$/i.test(r.client_approves || ''),
+    contact_email: r.contact_email || '', report_url: r.report_url || '', client_approves: /^(y|yes|true)$/i.test(r.client_approves || ''),
     link: baseUrl_() + '?c=' + r.token,
   }));
 }
@@ -417,6 +473,7 @@ button.go{background:var(--accent);color:var(--accent-ink);border-color:var(--ac
 .cap{white-space:pre-wrap;font-size:14px}.empty{color:var(--mute);font-size:14px}.done{opacity:.45;pointer-events:none}
 .tabs{display:flex;gap:6px;flex-wrap:wrap;margin-top:12px}.tabs a{font-size:13px;padding:6px 10px;border-radius:99px;background:#fff;border:1px solid var(--line);color:var(--ink);text-decoration:none}
 .tabs a b{color:var(--accent)}select{font:inherit;padding:6px;border-radius:8px;border:1px solid var(--line)}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}.tile{margin:0}.big{font-size:26px;font-weight:600;margin:2px 0}
 .opt{display:block;width:100%;text-align:left;margin:4px 0;font-size:14px;white-space:pre-wrap}
 `;
 
@@ -566,7 +623,30 @@ function load() {
     const open = d.posts.filter(p => p.status === 'in_review' || p.status === 'plan');
     if (!open.length) out.append($('p', { class: 'empty', text: 'All caught up. We will email you when new posts are ready.' }));
     d.posts.forEach(p => out.append(card(p)));
+    out.append(results(d.results));
   });
+}
+function results(R) {
+  const box = $('div', {}, $('h2', { text: R.empty ? 'Results' : 'Results: ' + R.month + ' so far vs ' + R.prevMonth }));
+  if (R.empty) box.append($('p', { class: 'empty', text: 'Results appear after the first stats pull.' }));
+  else {
+    const fmt = v => (v == null ? '–' : Math.round(v).toLocaleString('en-US'));
+    const delta = (a, b) => a == null ? 'Not reported' : (b == null || b === 0) ? 'First month tracked'
+      : (a >= b ? '▲ ' : '▼ ') + Math.abs(Math.round((a - b) / b * 100)) + '% vs ' + R.prevMonth;
+    box.append($('div', { class: 'tiles' }, R.tiles.map(t => $('div', { class: 'card tile' },
+      $('div', { class: 'meta', text: t.title }), $('div', { class: 'big', text: fmt(t.value) }),
+      $('div', { class: 'sub', text: delta(t.value, t.prev) }), $('div', { class: 'sub', text: t.sub })))));
+    if (R.top.length) {
+      box.append($('h2', { text: 'Top posts this month' }));
+      R.top.forEach(p => box.append($('div', { class: 'card' },
+        $('div', { class: 'meta' }, $('span', { class: 'pill', text: p.platform }), $('span', { class: 'pill', text: p.type || 'post' })),
+        $('div', { class: 'cap', text: p.caption }),
+        $('div', { class: 'sub', text: ['Reach ' + fmt(p.reach), 'Saves ' + fmt(p.saves), 'Shares ' + fmt(p.shares), 'Comments ' + fmt(p.comments), 'Likes ' + fmt(p.likes)].join(' · ') }),
+        p.url ? $('div', { class: 'acts' }, $('a', { class: 'btn', href: p.url, target: '_blank', text: 'See post' })) : '')));
+    }
+  }
+  if (R.report_url) box.append($('div', { class: 'acts' }, $('a', { class: 'btn', href: R.report_url, target: '_blank', text: 'Monthly report (PDF)' })));
+  return box;
 }
 function card(p) {
   const el = $('div', { class: 'card' });

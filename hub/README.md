@@ -3,7 +3,7 @@
 Free. Runs in Google Apps Script inside the "NGM social queue" Sheet. Reads and writes the same tabs n8n uses, so nothing else changes.
 
 - **Your dashboard**: posts to approve, client change requests, DMs to answer, outreach comments to post, new photo submissions, failed or stuck posts, what's waiting on clients, what goes out this week. Tap Approve, Change, Send to client, Send reply.
-- **Client review page**: one private link per client, no login. They tap Approve, Request change (with a note) or Skip.
+- **Client review page**: one private link per client, no login. They tap Approve, Request change (with a note) or Skip. Below that, Results: this month vs last (reach, interactions, views, new followers, clicks) and top 3 posts, from the Account stats and Post stats tabs.
 - **Morning email** at 7:00 Central with what needs you and a link to the dashboard.
 
 ## Setup (once, about 5 minutes)
@@ -14,11 +14,12 @@ Free. Runs in Google Apps Script inside the "NGM social queue" Sheet. Reads and 
 5. Pick `emailMeMyLinks`, Run. Your dashboard link and each client's review link arrive by email
 
 ## Clients tab
-`client | brand | sheet_id | token | contact_email | client_approves`
+`client | brand | sheet_id | token | contact_email | client_approves | report_url`
 - `brand` matches the brand column in Queue
 - `client_approves`: yes = posts go to the client's review page, no = you approve (Open Frame)
 - `contact_email`: needed for the "Email them the link" button
 - New client: add a row with a random token. A client with their own Sheet: put its id in `sheet_id`
+- `report_url`: optional link to the latest monthly report PDF, shown under Results
 - To cut off a link, change the token
 
 ## Statuses (Queue)
