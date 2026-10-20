@@ -3,7 +3,7 @@
 Free. Runs in Google Apps Script inside the "NGM social queue" Sheet. Reads and writes the same tabs n8n uses, so nothing else changes.
 
 - **Your check-in page**: one card at a time. Yes, Change, or a small Skip. Covers topic ideas, posts, DMs, outreach comments, guild photos and anything broken. Ends with "All done".
-- **Client review page**: one private link per client, no login. One post at a time: Looks good, Change something (with a note) or Skip. Below that, one line of results ("October so far: reached 2,140 people, up 78%") with See more for the tiles, top posts and PDF.
+- **Client review page**: `https://openframe.design/review/#<token>` on Graham's site (source: `review/index.html` in grahamivyco/Open-Frame), no login, no Google bar. Clients get a branded "Your posts are ready" email with one button. One post at a time: Looks good, Change something (with a note) or Skip. Below that, one line of results ("October so far: reached 2,140 people, up 78%") with See more for the tiles, top posts and PDF.
 - **Check-in email**: every Monday 9:00 Central (or every 2 weeks) with how many things need you and one link. Between check-ins you only get an email for things that can't wait: a failed post, posting that stopped, a new DM (Meta closes replies after 24 hours). Clients asking for a change also email you right away.
 
 ## Setup (once, about 5 minutes)
@@ -11,7 +11,8 @@ Free. Runs in Google Apps Script inside the "NGM social queue" Sheet. Reads and 
 2. Delete what's in `Code.gs`, paste all of `Code.gs` from this folder, save
 3. Pick `setup` in the function menu, Run, allow access
 4. Deploy > New deployment > type Web app. Execute as: Me. Who has access: Anyone. Deploy
-5. Pick `emailMeMyLinks`, Run. Your dashboard link and each client's review link arrive by email
+5. Paste the Web app URL (ends in /exec) into `WEB_APP_URL` at the top of Code.gs and into `API` in Open-Frame `review/index.html`. Save, then Deploy > Manage deployments > edit > Version: New version.
+6. Pick `emailMeMyLinks`, Run. Your dashboard link and each client's review link arrive by email
 
 ## Clients tab
 `client | brand | sheet_id | token | contact_email | client_approves | report_url`
