@@ -77,3 +77,7 @@ IG_TOKEN=paste-token-here node collect-ig.js ./inbox/from-instagram
 - iPhone HEIC photos convert automatically on a Mac
 - Photos with people and no recorded consent are flagged in `review.md`. Photos with consent=no are skipped
 - Do not use class-project photos from Retreat teachers (Summer House Stitche Workes, Maggie T) without their OK. They are the designers' images
+
+## Stitch patterns
+
+Each slide gets a faded stitch pattern in the background (cross stitch, blackwork, running stitch, herringbone, seed stitch, lazy daisy), rotating through a post so no two slides in a row match. Covers get a running-stitch frame. To force one pattern for a whole post, put `"pattern": "cross"` in its `post.json`.

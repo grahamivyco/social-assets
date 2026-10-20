@@ -84,10 +84,31 @@ function dataUrl(file) {
 }
 const pic = (p, style) => `<img src="${dataUrl(p.path)}" style="object-fit:cover;object-position:${p.focus || 'center'};${style}">`;
 
+
+// Faded stitch patterns behind the content. Each slide in a post gets a different one.
+const STITCH = {
+  cross: c => `<svg xmlns='http://www.w3.org/2000/svg' width='28' height='28'><g stroke='${c}' stroke-width='2.2' stroke-linecap='round'><path d='M8 8l12 12M20 8L8 20'/></g></svg>`,
+  blackwork: c => `<svg xmlns='http://www.w3.org/2000/svg' width='64' height='64'><g fill='none' stroke='${c}' stroke-width='2' stroke-linecap='round'><path d='M32 8l24 24-24 24L8 32z'/><path d='M32 20v24M20 32h24'/><path d='M0 0l8 8M64 0l-8 8M0 64l8-8M64 64l-8-8'/></g></svg>`,
+  running: c => `<svg xmlns='http://www.w3.org/2000/svg' width='160' height='56'><path d='M0 28c20-18 60-18 80 0s60 18 80 0' fill='none' stroke='${c}' stroke-width='2.4' stroke-linecap='round' stroke-dasharray='11 9'/></svg>`,
+  herringbone: c => `<svg xmlns='http://www.w3.org/2000/svg' width='36' height='40'><g stroke='${c}' stroke-width='2' stroke-linecap='round'><path d='M2 6l16 14M18 6L2 20M20 26l14-14M34 26L20 12'/></g></svg>`,
+  seed: c => `<svg xmlns='http://www.w3.org/2000/svg' width='90' height='90'><g stroke='${c}' stroke-width='2.6' stroke-linecap='round'><path d='M12 14l7 4M48 10l-3 8M76 24l8 2M28 44l2 8M62 50l7-5M16 74l8-1M50 78l-4 7M82 70l2 8'/></g></svg>`,
+  lazydaisy: c => `<svg xmlns='http://www.w3.org/2000/svg' width='120' height='120'><g fill='none' stroke='${c}' stroke-width='2.2'><g transform='translate(30 30)'><ellipse cx='0' cy='-11' rx='4.5' ry='9'/><ellipse cx='0' cy='11' rx='4.5' ry='9'/><ellipse cx='-11' cy='0' rx='9' ry='4.5'/><ellipse cx='11' cy='0' rx='9' ry='4.5'/></g><g transform='translate(90 90) rotate(45)'><ellipse cx='0' cy='-11' rx='4.5' ry='9'/><ellipse cx='0' cy='11' rx='4.5' ry='9'/><ellipse cx='-11' cy='0' rx='9' ry='4.5'/><ellipse cx='11' cy='0' rx='9' ry='4.5'/></g></g></svg>`,
+};
+const PAT_NAMES = Object.keys(STITCH);
+const hash = s => [...s].reduce((h, ch) => (h * 31 + ch.charCodeAt(0)) >>> 0, 7);
+// fade: where the pattern shows, as a CSS mask (default: strongest at the edges, gone in the middle)
+function stitchBg(P, s, color, opacity, fade = 'radial-gradient(ellipse at center,transparent 25%,#000 85%)', box = 'inset:0') {
+  const name = P.pattern || PAT_NAMES[(hash(P.id) + (s.idx || 0)) % PAT_NAMES.length];
+  const url = 'data:image/svg+xml,' + encodeURIComponent(STITCH[name](color));
+  return `<div style="position:absolute;${box};background-image:url(&quot;${url}&quot;);opacity:${opacity};-webkit-mask-image:${fade};mask-image:${fade}"></div>`;
+}
+
 // ---------- layouts ----------
 const L = {
   cover: (P, s) => `<div class="c dark">${pic(P.photos[0], 'position:absolute;inset:0;width:100%;height:100%')}
     <div style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(28,38,26,.55) 0%,rgba(28,38,26,0) 22%,rgba(28,38,26,0) 42%,rgba(28,38,26,.92) 78%)"></div>
+    ${stitchBg(P, s, '#FAF7F2', .16, 'linear-gradient(180deg,transparent 55%,#000 100%)')}
+    <div style="position:absolute;inset:26px;border:3px dashed rgba(250,247,242,.55);border-radius:6px"></div>
     <div style="position:absolute;left:64px;top:56px;width:420px;height:72px">${svg('logo-full-on-dark.svg')}</div>
     <div style="position:absolute;left:72px;right:72px;bottom:96px;display:flex;flex-direction:column;gap:22px">
       <div class="k">${esc(P.kicker)}</div>
@@ -98,7 +119,7 @@ const L = {
 
   // the photo as a mounted print: cream mat, running stitch in rose, a slight tilt
   slide: (P, s) => { const p = s.photo, tilt = s.i % 2 ? 1.1 : -1.3, text = p.quote ? `“${p.quote}”` : p.caption;
-    return `<div class="c" style="background:var(--linen)">
+    return `<div class="c" style="background:var(--linen)">${stitchBg(P, s, '#B87260', .22)}
     <div class="k" style="position:absolute;left:72px;top:68px">${esc(P.kicker)}</div><div class="num">${s.n}</div>
     <div style="position:absolute;left:84px;top:140px;width:912px;height:${text ? 900 : 1010}px;background:var(--cream);padding:26px;box-sizing:border-box;transform:rotate(${tilt}deg);box-shadow:0 18px 44px rgba(36,36,36,.18)">
       ${pic(p, 'width:100%;height:100%;display:block')}
@@ -110,12 +131,13 @@ const L = {
   single: (P, s) => { const p = P.photos[0];
     return `<div class="c">${pic(p, 'position:absolute;left:0;top:0;width:1080px;height:1000px')}
     <div class="dark" style="position:absolute;left:0;top:1000px;width:1080px;height:350px;background:var(--sage);padding:0 72px;box-sizing:border-box;display:flex;flex-direction:column;justify-content:center;gap:16px">
+      ${stitchBg(P, s, '#FAF7F2', .12, 'linear-gradient(90deg,transparent 35%,#000 100%)')}
       <div class="k">${esc(P.kicker)}</div>
       <h1 class="h" style="font-size:72px;line-height:1.02;color:var(--cream);max-width:860px">${accent(p.quote ? `“${p.quote}”` : P.title)}</h1>
       <div class="t" style="font-size:26px;line-height:1.4;color:rgba(250,247,242,.85)">${esc(p.caption || P.body)}${p.credit ? ` &middot; Photo: ${esc(p.credit)}` : ''}</div>
       <div style="position:absolute;right:64px;top:50px;width:60px;height:64px">${svg('logo-mark-on-dark.svg')}</div></div></div>`; },
 
-  pair: (P, s) => `<div class="c" style="background:var(--cream)">
+  pair: (P, s) => `<div class="c" style="background:var(--cream)">${stitchBg(P, s, '#3E5538', .16, 'linear-gradient(180deg,transparent 30%,#000 100%)')}
     <div style="position:absolute;left:72px;top:72px;right:180px;display:flex;flex-direction:column;gap:16px"><div class="k">${esc(P.kicker)}</div>
       <h1 class="h" style="font-size:72px;line-height:1.02;color:var(--sage)">${accent(P.title)}</h1></div>
     <div style="position:absolute;right:72px;top:68px;width:76px;height:80px">${svg('logo-mark.svg')}</div>
@@ -123,7 +145,7 @@ const L = {
     ${pic(P.photos[1], 'position:absolute;left:600px;top:420px;width:420px;height:620px;border-radius:24px;border:10px solid var(--cream);box-shadow:0 14px 36px rgba(36,36,36,.18)')}
     <div class="t" style="position:absolute;left:72px;right:72px;bottom:64px;font-size:28px;color:var(--ink)">${esc(P.body)}</div></div>`,
 
-  end: (P, s) => `<div class="c dark" style="background:var(--sage)">
+  end: (P, s) => `<div class="c dark" style="background:var(--sage)">${stitchBg(P, s, '#FAF7F2', .13)}
     <div style="position:absolute;left:96px;right:96px;top:0;bottom:0;display:flex;flex-direction:column;justify-content:center;gap:56px"><div style="width:460px;height:80px">${svg('logo-full-on-dark.svg')}</div>
     <div style="display:flex;gap:22px">${P.photos.slice(0, 4).map(p => pic(p, 'width:170px;height:170px;border-radius:50%;border:5px solid var(--cream)')).join('')}</div>
     <div style="display:flex;flex-direction:column;gap:30px">
@@ -169,7 +191,7 @@ function build(name, meta, files, notes) {
     const body = ph.slice(1, 9);
     P.slides = [{layout: 'cover'}, ...body.map((photo, i) => ({layout: 'slide', photo, i})), {layout: 'end'}];
   }
-  P.slides.forEach((s, i) => { s.n = P.slides.length > 1 ? `${i + 1}/${P.slides.length}` : ''; s.file = `${String(i + 1).padStart(2, '0')}.jpg`; });
+  P.slides.forEach((s, i) => { s.idx = i; s.n = P.slides.length > 1 ? `${i + 1}/${P.slides.length}` : ''; s.file = `${String(i + 1).padStart(2, '0')}.jpg`; });
   return P;
 }
 
