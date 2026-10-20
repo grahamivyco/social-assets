@@ -1,0 +1,4 @@
+Still a placeholder: [first name]
+Still a placeholder: [Member since year. One or two sentences on what she stitches and which group she's in.]
+Still a placeholder: [One line in her own words.]
+No newsletter sign-up link for ngm yet (brands.json signup_url). Social posts point to https://needleworkguildmn.org/join for now.
