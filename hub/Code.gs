@@ -15,7 +15,7 @@ const HUB_SHEET_ID = '1nec5cD5RtjV6yDLzxeKX9vGhI0k123PIaFFDwXqFM6A';
 // The branded review page on Graham's site. It talks to this script through the api= links below.
 const CLIENT_PAGE_URL = 'https://openframe.design/review/';
 // This script's live web app link (Deploy > Manage deployments > Web app URL, ends in /exec).
-const WEB_APP_URL = 'PASTE_WEB_APP_URL';
+const WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbyBkDfWO-LghULYws9PCWUuqyga7kbGz2cat0w8tMIw09DmoEgtxBB7XprqRfCUyfGhpg/exec';
 // Check-in: one email with everything that needs you. 1 = every week, 2 = every 2 weeks.
 const CHECKIN_EVERY_WEEKS = 1;
 const CHECKIN_DAY = 'MONDAY';
