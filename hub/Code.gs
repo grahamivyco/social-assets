@@ -680,6 +680,12 @@ const SHARED_JS = `
 const BOOT = __BOOT__;
 const $ = (t, a = {}, ...kids) => { const e = document.createElement(t); Object.entries(a).forEach(([k, v]) => k === 'on' ? Object.entries(v).forEach(([n, f]) => e.addEventListener(n, f)) : k === 'text' ? e.textContent = v : e.setAttribute(k, v)); kids.flat().forEach(c => c && e.append(c)); return e; };
 const call = (fn, ...args) => new Promise((ok, no) => google.script.run.withSuccessHandler(ok).withFailureHandler(e => { alert(e.message || e); no(e); })[fn](...args));
+// Caption text with any https link made clickable (a newsletter's "Full email" link).
+function textEl(t) {
+  return $('p', { class: 'text' }, String(t || '').split(/(https?:\\/\\/[^\\s<>"]+)/).map((x, i) => i % 2
+    ? $('a', { class: 'link', href: x, target: '_blank', rel: 'noopener', text: x }) : document.createTextNode(x)));
+}
+const isNews = g => g.posts.some(p => p.platform === 'newsletter');
 function mediaEl(urls, poster) {
   if (!urls.length && poster) urls = [poster];
   if (!urls.length) return '';
@@ -723,10 +729,10 @@ const ADMIN_HTML = `<!doctype html><html><head><meta charset="utf-8"><style>${BA
 <script>${SHARED_JS}
 const K = BOOT.key;
 const nothing = () => Promise.resolve();
-function postLabel(g, what) { return [$('b', { text: g.clientName }), ' · ' + what + ' · ' + g.when]; }
+function postLabel(g, what) { return [$('b', { text: g.clientName }), ' · ' + (isNews(g) && what === g.type ? 'newsletter' : what) + ' · ' + g.when]; }
 function postBody(g) {
   const caps = g.posts.filter((p, i, a) => a.findIndex(x => x.caption === p.caption) === i);
-  return [mediaEl(g.media, g.preview), ...caps.map(p => $('p', { class: 'text', text: p.caption || '' })),
+  return [mediaEl(g.media, g.preview), ...caps.map(p => textEl(p.caption)),
     g.client_note ? $('div', { class: 'note', text: 'Client said: ' + g.client_note }) : ''];
 }
 function build(d) {
@@ -817,10 +823,10 @@ call('getClientPosts', BOOT.token).then(d => {
     const caps = p.posts.filter((x, i, a) => a.findIndex(y => y.caption === x.caption) === i);
     const plan = p.status === 'plan';
     return {
-      label: [$('b', { text: plan ? 'Idea for a post' : 'Post' }), ' · ' + p.when],
-      body: [mediaEl(p.media, p.preview), ...caps.map(x => $('p', { class: 'text', text: x.caption || '' })),
+      label: [$('b', { text: plan ? 'Idea for a post' : isNews(p) ? 'Newsletter' : 'Post' }), ' · ' + p.when],
+      body: [mediaEl(p.media, p.preview), ...caps.map(x => textEl(x.caption)),
         p.deadline ? $('p', { class: 'mute', text: 'Please answer by ' + p.deadline + '.' }) : ''],
-      ask: plan ? 'Good idea?' : 'Good to post?',
+      ask: plan ? 'Good idea?' : isNews(p) ? 'Good to send?' : 'Good to post?',
       yes: ['Looks good', () => call('clientDecide', BOOT.token, p.ids, 'approve', '')],
       change: ['Change something', 'What should we change?', n => call('clientDecide', BOOT.token, p.ids, 'change', n)],
       skip: ['Skip this one', () => call('clientDecide', BOOT.token, p.ids, 'skip', '')],
