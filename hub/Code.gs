@@ -1,7 +1,7 @@
 /**
  * Open Frame Hub
  * One-card-at-a-time page for everything that needs Graham, a no-login review
- * page per client, and a weekly (or every-2-weeks) check-in email. Runs free in Google Apps Script, bound to the
+ * page per client (opened from a private link emailed at each check-in that expires), and a weekly (or every-2-weeks) check-in email. Runs free in Google Apps Script, bound to the
  * "NGM social queue" Sheet. Reads and writes the same tabs n8n uses.
  *
  * Setup (once): paste this file into a new Apps Script project (or Extensions > Apps Script in the Sheet), run setup(),
@@ -25,8 +25,16 @@ const URGENT_HOUR = 8;
 const OUTREACH_SHEET_ID = '1VgiiTBTpmFh5bqutvYvjvNZmSicc8Es2vLSmnPlpHaU';
 // Column names follow /mnt/project-files/automation/queue-schema.md. review_note is Graham's own note.
 const QUEUE_EXTRA = ['client_decision', 'client_note', 'answered_by', 'decided_at', 'revision', 'review_note'];
-const CLIENT_HEAD = ['client', 'brand', 'sheet_id', 'token', 'contact_email', 'client_approves', 'report_url'];
+const CLIENT_HEAD = ['client', 'brand', 'sheet_id', 'contact_email', 'client_approves', 'report_url'];
 const STUCK_HOURS = 2;
+// Client review links: a fresh private link per email, only for the address on file, that stops working after LINK_DAYS.
+// Sending a new one switches off the older ones. Every approval is logged under the email it was sent to.
+const LINK_DAYS = 14;
+const LINK_HEAD = ['link', 'brand', 'email', 'created', 'expires', 'last_used'];
+// At each check-in, email clients who have posts waiting (client_approves = yes and a contact_email).
+const AUTO_SEND_CLIENTS = true;
+const FROM_NAME = 'Open Frame';
+const REPLY_TO = 'hello@openframe.design';
 
 // ---------- setup ----------
 
@@ -45,10 +53,11 @@ function setup() {
     c.getRange(1, 1, 1, CLIENT_HEAD.length).setValues([CLIENT_HEAD]).setFontWeight('bold');
     c.setFrozenRows(1);
     c.getRange(2, 1, 2, CLIENT_HEAD.length).setValues([
-      ['Open Frame', 'open-frame', ss.getId(), token_(16), '', 'no', ''],
-      ['Needlework Guild of Minnesota', 'ngm', ss.getId(), token_(16), '', 'yes', ''],
+      ['Open Frame', 'open-frame', ss.getId(), '', 'no', ''],
+      ['Needlework Guild of Minnesota', 'ngm', ss.getId(), '', 'yes', ''],
     ]);
   }
+  linksTable_();
 
   ScriptApp.getProjectTriggers()
     .filter(t => ['morningDigest', 'checkIn', 'urgentCheck'].indexOf(t.getHandlerFunction()) >= 0)
@@ -67,9 +76,9 @@ function onOpen() {
 
 function emailMeMyLinks() {
   if (!/\/exec$/.test(baseUrl_())) throw new Error('Paste the Web app URL (ends in /exec) into WEB_APP_URL at the top, save, then run this again.');
-  const lines = ['Your check-in page. Bookmark it:', '', adminUrl_(), '', 'Client review pages:', ''];
-  clients_().forEach(c => lines.push(c.client + ':', c.link, ''));
-  MailApp.sendEmail(me_(), 'Your Open Frame Check-in links', lines.join('\n'));
+  const lines = ['Your check-in page. Bookmark it:', '', adminUrl_(), '',
+    'Clients get their own private review link by email. Send one from the check-in page (Clients > Send review email), or it goes out on its own at each check-in when they have posts waiting.'];
+  MailApp.sendEmail(me_(), 'Your Open Frame Check-in link', lines.join('\n'));
 }
 
 // ---------- web ----------
@@ -81,8 +90,10 @@ function doGet(e) {
   if (p.api) return api_(p);
   if (p.k && p.k === adminKey_()) return page_('Hub', ADMIN_HTML, { key: p.k });
   if (p.c) {
-    const c = clients_().find(x => x.token === p.c);
-    if (c) return page_(c.client + ' posts to review', CLIENT_HTML, { token: p.c, client: c.client });
+    try {
+      const c = clientByLink_(p.c);
+      return page_(c.client + ' posts to review', CLIENT_HTML, { token: p.c, client: c.client });
+    } catch (x) { /* falls through to the not-active note */ }
   }
   return HtmlService.createHtmlOutput('<p style="font-family:sans-serif;padding:24px">This link is not active. Ask Open Frame for a new one.</p>');
 }
@@ -93,9 +104,11 @@ function api_(p) {
   try {
     if (p.api === 'client') out = getClientPosts(p.c);
     else if (p.api === 'decide') out = { status: clientDecide(p.c, String(p.ids || '').split(',').filter(Boolean), p.d, p.note || '') };
+    else if (p.api === 'resend') out = { status: resendLink_(p.c) };
     else throw new Error('Unknown request');
   } catch (e) {
     out = { error: e.message || String(e) };
+    if (e.expired) out.expired = true;
   }
   return ContentService.createTextOutput(JSON.stringify(out)).setMimeType(ContentService.MimeType.JSON);
 }
@@ -114,7 +127,7 @@ function getDashboard(key) {
   const clients = clients_();
   const byBrand = {};
   clients.forEach(c => { byBrand[c.brand] = c; });
-  const out = { clients, topics: [], approve: [], review: [], feedback: [], failed: [], upcoming: [], inbox: [], engage: [], photos: [], fixes: [] };
+  const out = { clients: clients.map(c => ({ client: c.client, brand: c.brand, contact_email: c.contact_email, client_approves: c.client_approves })), topics: [], approve: [], review: [], feedback: [], failed: [], upcoming: [], inbox: [], engage: [], photos: [], fixes: [] };
   const now = Date.now(), week = now + 7 * 864e5;
 
   uniq_(clients.map(c => c.sheet_id)).forEach(sid => {
@@ -152,7 +165,7 @@ function getDashboard(key) {
   }));
 
   clients.filter(c => c.client_approves && !c.contact_email)
-    .forEach(c => out.fixes.push({ kind: 'setup', text: c.client + ' has no contact email in the Clients tab, so review emails can\'t go out. You can still send them the link yourself.' }));
+    .forEach(c => out.fixes.push({ kind: 'setup', text: c.client + ' has no contact email in the Clients tab, so review emails can\'t go out.' }));
   const sortT = (a, b) => String(a.publish_at).localeCompare(String(b.publish_at));
   ['topics', 'approve', 'review', 'feedback', 'failed', 'upcoming'].forEach(k => out[k].sort(sortT));
   return out;
@@ -266,28 +279,65 @@ function adminNotifyClient(key, brand) {
   checkKey_(key);
   const c = clients_().find(x => x.brand === brand);
   if (!c || !c.contact_email) throw new Error('Add a contact email for this client in the Clients tab first.');
-  sendReviewEmail_(c);
+  return sendReviewEmail_(c);
+}
+
+// One fresh link per address. Older links for that address stop working.
+function sendReviewEmail_(c, onlyEmail) {
+  const emails = emails_(c.contact_email).filter(e => !onlyEmail || e === onlyEmail);
+  if (!emails.length) throw new Error('No contact email on file.');
+  const q = table_(c.sheet_id, 'Queue');
+  const waiting = q ? q.rows.filter(r => r.brand === c.brand && (r.status === 'in_review' || (r.status === 'plan' && !r.client_decision))) : [];
+  const open = groupPosts_(waiting, c.sheet_id, { [c.brand]: c });
+  const first = waiting.map(r => r.review_deadline).filter(x => x && !isNaN(new Date(x))).sort((x, y) => new Date(x) - new Date(y))[0];
+  const due = first ? fmtWhen_(first) : '';
+  emails.forEach(email => {
+    const link = withLock_(() => newLink_(c.brand, email));
+    sendLinkEmail_(c, email, link, open.length, due);
+  });
   return 'sent';
 }
 
-function sendReviewEmail_(c) {
+function sendLinkEmail_(c, email, link, count, due) {
+  const until = Utilities.formatDate(new Date(Date.now() + LINK_DAYS * 864e5), TZ, 'EEEE, MMMM d');
+  const what = count === 1 ? '1 post is' : count ? count + ' posts are' : 'Your posts are';
+  const ask = due ? 'Please take a look by ' + due + '.' : 'It takes about two minutes.';
+  const esc = v => String(v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   const html = '<div style="background:#f3f1ea;padding:32px 16px;font-family:Inter,Helvetica,Arial,sans-serif;color:#111110">'
-    + '<div style="max-width:460px;margin:0 auto;background:#fff;border-radius:20px;padding:32px;text-align:center">'
-    + '<img src="https://openframe.design/icon-192.png" width="48" height="48" alt="Open Frame" style="display:block;margin:0 auto 16px">'
-    + '<h1 style="font-family:Georgia,serif;font-weight:500;font-size:26px;margin:0 0 10px">Your posts are ready</h1>'
-    + '<p style="color:#4b4a46;font-size:16px;line-height:1.5;margin:0 0 24px">Take a quick look and tap <b>Looks good</b> or <b>Change something</b> on each one. It takes about two minutes.</p>'
-    + '<a href="' + c.link + '" style="display:inline-block;background:#111110;color:#f3f1ea;text-decoration:none;font-weight:600;padding:14px 28px;border-radius:100px">Review your posts</a>'
-    + '<p style="color:#84827b;font-size:13px;margin:24px 0 0">Open Frame · openframe.design</p></div></div>';
+    + '<div style="max-width:480px;margin:0 auto;background:#fff;border:1px solid #e2ded2;border-radius:20px;padding:36px 32px;text-align:center">'
+    + '<img src="https://openframe.design/icon-192.png" width="44" height="44" alt="Open Frame" style="display:block;margin:0 auto 20px">'
+    + '<p style="font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:#4b4a46;margin:0 0 8px">' + esc(c.client) + '</p>'
+    + '<h1 style="font-family:Georgia,serif;font-weight:500;font-size:26px;line-height:1.25;margin:0 0 12px">' + esc(what) + ' ready for your review</h1>'
+    + '<p style="color:#4b4a46;font-size:16px;line-height:1.55;margin:0 0 26px">Look at each one and tap <b>Looks good</b> or <b>Change something</b>. ' + esc(ask) + '</p>'
+    + '<a href="' + esc(link) + '" style="display:inline-block;background:#111110;color:#f3f1ea;text-decoration:none;font-weight:600;font-size:16px;padding:15px 30px;border-radius:100px">Review your posts</a>'
+    + '<p style="color:#84827b;font-size:13px;line-height:1.5;margin:26px 0 0">This private link is just for ' + esc(email) + ' and works until ' + esc(until) + '. No password needed.</p>'
+    + '</div>'
+    + '<p style="max-width:480px;margin:18px auto 0;text-align:center;color:#84827b;font-size:12px;line-height:1.5">Open Frame · <a href="https://openframe.design" style="color:#84827b">openframe.design</a><br>Questions? Just reply to this email.</p></div>';
   MailApp.sendEmail({
-    to: c.contact_email, name: 'Open Frame', replyTo: me_(), subject: 'Your posts are ready to review',
-    body: 'Your posts are ready. Review them here:\n\n' + c.link + '\n\nOpen Frame', htmlBody: html,
+    to: email, name: FROM_NAME, replyTo: REPLY_TO,
+    subject: c.client + ': ' + (count === 1 ? '1 post' : count ? count + ' posts' : 'posts') + ' ready for review',
+    body: what + ' ready for your review. ' + ask + '\n\nReview your posts:\n\n' + link
+      + '\n\nThis private link is just for ' + email + ' and works until ' + until + '.\n\nOpen Frame\nhttps://openframe.design',
+    htmlBody: html,
   });
+}
+
+// From an expired or replaced link: send a fresh one to the same address on file. Never to a typed-in address.
+function resendLink_(code) {
+  const t = linksTable_();
+  const r = code && t.rows.find(x => x.link === String(code));
+  if (!r) throw new Error('This link is not active.');
+  const c = clients_().find(x => x.brand === r.brand);
+  if (!c || emails_(c.contact_email).indexOf(r.email) < 0) throw new Error('This link is not active.');
+  const recent = t.rows.some(x => x.brand === r.brand && x.email === r.email && within_(x.created, 10 / 1440));
+  if (!recent) sendReviewEmail_(c, r.email);
+  return 'sent';
 }
 
 // ---------- client page ----------
 
 function getClientPosts(token) {
-  const c = clientByToken_(token);
+  const c = clientByLink_(token);
   const q = table_(c.sheet_id, 'Queue');
   const rows = q.rows.filter(r => r.brand === c.brand && (r.status === 'in_review' || (r.status === 'plan' && !r.client_decision) || (r.decided_at && within_(r.decided_at, 3))));
   const groups = groupPosts_(rows, c.sheet_id, { [c.brand]: c }).map(g => ({
@@ -357,7 +407,7 @@ function score_(p) {
 }
 
 function clientDecide(token, ids, decision, note) {
-  const c = clientByToken_(token);
+  const c = clientByLink_(token, true);
   const map = { approve: ['approved', 'Approve'], change: ['changes', 'Request change'], skip: ['skipped', 'Skip'] }[decision];
   if (!map) throw new Error('Unknown choice');
   if (decision === 'change' && !String(note || '').trim()) throw new Error('Tell us what to change.');
@@ -369,13 +419,13 @@ function clientDecide(token, ids, decision, note) {
       if (r.brand !== c.brand || (r.status !== 'in_review' && !isPlan)) throw new Error('This post was already updated. Refresh the page.');
       const set = {
         client_decision: map[1], client_note: String(note || '').slice(0, 2000),
-        answered_by: 'client review page', decided_at: new Date().toISOString(),
+        answered_by: c.email, decided_at: new Date().toISOString(),
       };
       if (!isPlan) set.status = map[0]; // plan rows keep status plan; the monthly loop reads client_decision
       setCells_(q, r._row, set);
     });
     if (decision === 'change') {
-      MailApp.sendEmail(me_(), c.client + ' asked for a change', 'Note: ' + note + '\n\nOpen your dashboard:\n\n' + adminUrl_());
+      MailApp.sendEmail(me_(), c.client + ' asked for a change', c.email + ' wrote: ' + note + '\n\nOpen your dashboard:\n\n' + adminUrl_());
     }
     return map[0];
   });
@@ -389,6 +439,18 @@ function checkIn() {
   if (CHECKIN_EVERY_WEEKS > 1 && Date.now() - last < (CHECKIN_EVERY_WEEKS * 7 - 1) * 864e5) return;
   checkInNow();
   props.setProperty('LAST_CHECKIN', String(Date.now()));
+  if (AUTO_SEND_CLIENTS) sendClientEmails_();
+}
+
+// Clients with posts waiting get a fresh link, at most once every 6 days.
+function sendClientEmails_() {
+  const sent = linksTable_().rows;
+  clients_().filter(c => c.client_approves && c.contact_email).forEach(c => {
+    if (sent.some(x => x.brand === c.brand && within_(x.created, 6))) return;
+    const q = table_(c.sheet_id, 'Queue');
+    const waiting = q && q.rows.some(r => r.brand === c.brand && (r.status === 'in_review' || (r.status === 'plan' && !r.client_decision)));
+    if (waiting) { try { sendReviewEmail_(c); } catch (e) { Logger.log(c.client + ': ' + e.message); } }
+  });
 }
 
 function checkInNow() {
@@ -466,17 +528,43 @@ function findRow_(t, key, val) {
 function clients_() {
   const t = table_(hubId_(), 'Clients');
   if (!t) return [];
-  return t.rows.filter(r => r.brand && r.token).map(r => ({
-    client: r.client || r.brand, brand: r.brand, sheet_id: r.sheet_id || hubId_(), token: r.token,
+  return t.rows.filter(r => r.brand).map(r => ({
+    client: r.client || r.brand, brand: r.brand, sheet_id: r.sheet_id || hubId_(),
     contact_email: r.contact_email || '', report_url: r.report_url || '', client_approves: /^(y|yes|true)$/i.test(r.client_approves || ''),
-    link: CLIENT_PAGE_URL + '#' + r.token,
   }));
 }
 
-function clientByToken_(token) {
-  const c = token && clients_().find(x => x.token === token);
-  if (!c) throw new Error('This link is not active.');
-  return c;
+function emails_(s) { return String(s || '').split(/[,;\s]+/).map(e => e.trim().toLowerCase()).filter(e => /@/.test(e)); }
+
+function linksTable_() {
+  const ss = SpreadsheetApp.openById(hubId_());
+  if (!ss.getSheetByName('Review links')) {
+    const sh = ss.insertSheet('Review links');
+    sh.getRange(1, 1, 1, LINK_HEAD.length).setValues([LINK_HEAD]).setFontWeight('bold');
+    sh.setFrozenRows(1);
+  }
+  return table_(hubId_(), 'Review links');
+}
+
+function newLink_(brand, email) {
+  const t = linksTable_();
+  const now = new Date();
+  t.rows.filter(r => r.brand === brand && r.email === email && new Date(r.expires) > now)
+    .forEach(r => setCells_(t, r._row, { expires: now.toISOString() }));
+  const code = linkCode_();
+  t.sh.appendRow([code, brand, email, now.toISOString(), new Date(now.getTime() + LINK_DAYS * 864e5).toISOString(), '']);
+  return CLIENT_PAGE_URL + '#' + code;
+}
+
+// The link must exist, be unexpired, and its email must still be a contact for that client.
+function clientByLink_(code, touch) {
+  const t = linksTable_();
+  const r = code && t.rows.find(x => x.link === String(code));
+  const c = r && clients_().find(x => x.brand === r.brand);
+  if (!r || !c || emails_(c.contact_email).indexOf(r.email) < 0) throw new Error('This link is not active.');
+  if (!(new Date(r.expires) > new Date())) { const e = new Error('This link has expired.'); e.expired = true; throw e; }
+  if (touch) setCells_(t, r._row, { last_used: new Date().toISOString() });
+  return Object.assign({ email: r.email }, c);
 }
 
 function withLock_(fn) {
@@ -503,6 +591,15 @@ function fmtWhen_(s) {
   const d = s ? new Date(s) : null;
   return d && !isNaN(d) ? Utilities.formatDate(d, TZ, 'EEE MMM d, h:mm a') : 'no date yet';
 }
+// 16 random letters and numbers in groups of four, like k7m2-p9x4-c3q8-w6t2 (80 bits).
+function linkCode_() {
+  const a = 'abcdefghijkmnpqrstuvwxyz23456789';
+  const bytes = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, Utilities.getUuid() + Utilities.getUuid() + Date.now());
+  let s = '';
+  for (let i = 0; i < 16; i++) { s += a[(bytes[i] + 256) % 32]; if (i % 4 === 3 && i < 15) s += '-'; }
+  return s;
+}
+
 function token_(n) {
   const a = 'abcdefghijkmnpqrstuvwxyz23456789';
   let s = '';
@@ -636,10 +733,10 @@ function summary(d) {
   if (d.feedback.length) bits.push(plural(d.feedback.length, 'post', 'posts') + ' being revised');
   if (bits.length) more.append($('p', { text: bits.join(' · ') }));
   const links = $('div', { style: 'display:none' }, d.clients.map(c => $('div', { class: 'row' }, $('span', { text: c.client }),
-    $('span', {}, $('a', { class: 'link', href: c.link, target: '_blank', text: 'Open' }), ' · ',
-      $('a', { class: 'link', href: '#', text: 'Copy link', on: { click: e => { e.preventDefault(); try { navigator.clipboard.writeText(c.link).then(() => e.target.textContent = 'Copied', () => {}); } catch (x) {} } } }),
-      c.contact_email ? [' · ', $('a', { class: 'link', href: '#', text: 'Email it', on: { click: e => { e.preventDefault(); call('adminNotifyClient', K, c.brand).then(() => e.target.textContent = 'Sent'); } } })] : ''))));
-  more.append($('a', { class: 'link', href: '#', text: 'Client links', on: { click: e => { e.preventDefault(); links.style.display = links.style.display ? '' : 'none'; } } }), links);
+    c.contact_email
+      ? $('a', { class: 'link', href: '#', text: 'Send review email', on: { click: e => { e.preventDefault(); e.target.textContent = 'Sending...'; call('adminNotifyClient', K, c.brand).then(() => e.target.textContent = 'Sent to ' + c.contact_email, () => e.target.textContent = 'Send review email'); } } })
+      : $('span', { class: 'mute', text: 'Add an email in the Clients tab' }))));
+  more.append($('a', { class: 'link', href: '#', text: 'Clients', on: { click: e => { e.preventDefault(); links.style.display = links.style.display ? '' : 'none'; } } }), links);
 }
 call('getDashboard', K).then(d => {
   summary(d);
