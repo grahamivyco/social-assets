@@ -4,12 +4,14 @@
  * page per client, and a weekly (or every-2-weeks) check-in email. Runs free in Google Apps Script, bound to the
  * "NGM social queue" Sheet. Reads and writes the same tabs n8n uses.
  *
- * Setup (once): paste this file into Extensions > Apps Script, run setup(),
+ * Setup (once): paste this file into a new Apps Script project (or Extensions > Apps Script in the Sheet), run setup(),
  * then Deploy > New deployment > Web app (Execute as: Me, Access: Anyone),
  * then run emailMeMyLinks().
  */
 
 const TZ = 'America/Chicago';
+// The queue Sheet. Lets the script run as its own project or from Extensions > Apps Script in the Sheet.
+const HUB_SHEET_ID = '1nec5cD5RtjV6yDLzxeKX9vGhI0k123PIaFFDwXqFM6A';
 // Check-in: one email with everything that needs you. 1 = every week, 2 = every 2 weeks.
 const CHECKIN_EVERY_WEEKS = 1;
 const CHECKIN_DAY = 'MONDAY';
@@ -25,7 +27,7 @@ const STUCK_HOURS = 2;
 // ---------- setup ----------
 
 function setup() {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const ss = SpreadsheetApp.getActiveSpreadsheet() || SpreadsheetApp.openById(HUB_SHEET_ID);
   const props = PropertiesService.getScriptProperties();
   props.setProperty('HUB_ID', ss.getId());
   if (!props.getProperty('ADMIN_KEY')) props.setProperty('ADMIN_KEY', token_(24));
@@ -458,7 +460,7 @@ function withLock_(fn) {
 
 function checkKey_(key) { if (!key || key !== adminKey_()) throw new Error('Not allowed'); }
 function adminKey_() { return PropertiesService.getScriptProperties().getProperty('ADMIN_KEY'); }
-function hubId_() { return PropertiesService.getScriptProperties().getProperty('HUB_ID') || SpreadsheetApp.getActiveSpreadsheet().getId(); }
+function hubId_() { return PropertiesService.getScriptProperties().getProperty('HUB_ID') || HUB_SHEET_ID; }
 function baseUrl_() { return ScriptApp.getService().getUrl() || ''; }
 function adminUrl_() { return baseUrl_() + '?k=' + adminKey_(); }
 function me_() { return Session.getEffectiveUser().getEmail(); }
