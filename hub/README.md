@@ -22,8 +22,10 @@ Free. Runs in Google Apps Script inside the "NGM social queue" Sheet. Reads and 
 - To cut off a link, change the token
 
 ## Statuses (Queue)
-draft > in_review (client) > approved > posted. Also changes, skipped, failed.
-Columns added: client_decision, client_note, decided_at, review_note.
+Follows the shared schema: /mnt/project-files/automation/queue-schema.md
+- Graham: draft > in_review (or approved when client_approves = no). "Fixed, send back" bumps revision.
+- Client page: in_review > approved / changes / skipped, writes client_decision (Approve, Request change, Skip), client_note, answered_by, decided_at. Plan rows (status plan) only get client_decision; the monthly loop acts on it.
+- Extra column only the hub uses: review_note (Graham's own change note).
 
 ## Updating the code
 Paste the new `Code.gs`, then Deploy > Manage deployments > edit > Version: New version. The links stay the same.
