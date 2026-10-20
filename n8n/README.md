@@ -1,0 +1,24 @@
+# Health check (n8n workflows + Meta token)
+
+Runs every hour at :05 on Graham's Mac. Writes one row per check to the `Health` tab of "NGM social queue". The Hub (Apps Script) turns problems into check-in cards and emails, and warns when the rows stop updating (Mac off or n8n stopped).
+
+## What it checks
+| Check | Problem (email) | Heads up (card only) |
+|---|---|---|
+| Social poster, outreach scout, analytics puller | latest run failed, or switched off | hasn't run on schedule, or failed earlier today but recovered |
+| Photo submissions, DM replies, any other active workflow | latest run failed | failed earlier today but recovered |
+| Meta token "Open Frame Page" | stopped working, or 14 days or less left (urgent at 5) | can't reach Meta |
+| n8n itself | health check can't read n8n (API key) | |
+| Heartbeat | Hub emails if no update for 20 hours | Hub card after 3 hours |
+
+Token end date comes from `oauth/access_token_info`. If Meta gives no end date (Page tokens made by a Page admin often never expire), the hourly live test still catches a dead token.
+
+## Setup (once)
+1. Create an n8n API key: http://localhost:5678/settings/api > Create an API key > Expiration: No expiration > copy it
+2. Credentials > Create credential > Header Auth. Credential name `n8n API key`, Name `X-N8N-API-KEY`, Value = the key
+3. New workflow > ... menu > Import from URL: https://raw.githubusercontent.com/grahamivyco/social-assets/main/n8n/health-check.json
+4. Pick credentials: `n8n API key` in the 3 "n8n:" nodes, `Open Frame Page` in the 2 "Meta:" nodes, the Google service account in "Save to Health tab"
+5. Execute workflow once, check the Health tab, then Publish
+
+## Change what's watched
+"Settings" node: `watch` list (name match, mustBeOn, staleHours), `warnDays`, `urgentDays`.
