@@ -34,6 +34,10 @@ const LINK_HEAD = ['link', 'brand', 'email', 'created', 'expires', 'last_used'];
 // At each check-in, email clients who have posts waiting (client_approves = yes and a contact_email).
 const AUTO_SEND_CLIENTS = true;
 const FROM_NAME = 'Open Frame';
+// "Health" tab, written hourly by the n8n health-check workflow (thread "Workflow health check"):
+// check | label | status (ok/warn/fail) | detail | since | updated_at | link | email
+const HEALTH_MAC_CARD_HOURS = 3;
+const HEALTH_MAC_EMAIL_HOURS = 20;
 const REPLY_TO = 'hello@openframe.design';
 
 // ---------- setup ----------
@@ -60,10 +64,11 @@ function setup() {
   linksTable_();
 
   ScriptApp.getProjectTriggers()
-    .filter(t => ['morningDigest', 'checkIn', 'urgentCheck'].indexOf(t.getHandlerFunction()) >= 0)
+    .filter(t => ['morningDigest', 'checkIn', 'urgentCheck', 'healthCheck'].indexOf(t.getHandlerFunction()) >= 0)
     .forEach(t => ScriptApp.deleteTrigger(t));
   ScriptApp.newTrigger('checkIn').timeBased().onWeekDay(ScriptApp.WeekDay[CHECKIN_DAY]).atHour(CHECKIN_HOUR).inTimezone(TZ).create();
   ScriptApp.newTrigger('urgentCheck').timeBased().atHour(URGENT_HOUR).everyDays(1).inTimezone(TZ).create();
+  ScriptApp.newTrigger('healthCheck').timeBased().everyHours(1).create();
   Logger.log('Setup done. Now deploy as a web app, then run emailMeMyLinks.');
 }
 
@@ -166,6 +171,7 @@ function getDashboard(key) {
 
   clients.filter(c => c.client_approves && !c.contact_email)
     .forEach(c => out.fixes.push({ kind: 'setup', text: c.client + ' has no contact email in the Clients tab, so review emails can\'t go out.' }));
+  health_().cards.forEach(h => out.fixes.push({ kind: 'health', text: h.text, link: h.link }));
   const sortT = (a, b) => String(a.publish_at).localeCompare(String(b.publish_at));
   ['topics', 'approve', 'review', 'feedback', 'failed', 'upcoming'].forEach(k => out[k].sort(sortT));
   return out;
@@ -486,6 +492,40 @@ function urgentCheck() {
     fresh.map(x => '- ' + x[1]).join('\n') + '\n\nHandle it here:\n\n' + adminUrl_());
 }
 
+// Hourly. Emails health problems marked email = yes once per check + since + status, and a long Mac outage once.
+function healthCheck() {
+  const h = health_();
+  const items = h.cards.filter(c => c.email).map(c => [c.key, c.text + (c.link ? '\n  Fix it here: ' + c.link : '')]);
+  const props = PropertiesService.getScriptProperties();
+  const seen = JSON.parse(props.getProperty('HEALTH_SEEN') || '[]');
+  const fresh = items.filter(x => seen.indexOf(x[0]) < 0);
+  if (!fresh.length) return;
+  props.setProperty('HEALTH_SEEN', JSON.stringify(seen.concat(fresh.map(x => x[0])).slice(-200)));
+  MailApp.sendEmail(me_(), fresh.length === 1 ? 'Something stopped working' : fresh.length + ' things stopped working',
+    fresh.map(x => '- ' + x[1]).join('\n') + '\n\nYour check-in page:\n\n' + adminUrl_());
+}
+
+// Current non-ok rows from the latest run, plus a card when the run itself stopped (Mac off or asleep).
+function health_() {
+  const out = { cards: [] };
+  const t = table_(hubId_(), 'Health');
+  if (!t || !t.rows.length) return out;
+  const hb = t.rows.find(r => r.check === 'heartbeat');
+  if (!hb) return out;
+  const ran = new Date(hb.updated_at).getTime();
+  const yes = v => /^(y|yes|true)$/i.test(String(v || ''));
+  t.rows.filter(r => r.check && r.check !== 'heartbeat' && r.updated_at === hb.updated_at && /^(warn|fail)$/i.test(r.status))
+    .forEach(r => out.cards.push({
+      key: [r.check, r.since, r.status].join('|'), text: r.detail || (r.label || r.check) + ' needs a look.', link: r.link || '', email: yes(r.email),
+    }));
+  const hours = ran ? (Date.now() - ran) / 36e5 : 0;
+  if (ran && hours > HEALTH_MAC_CARD_HOURS) out.cards.push({
+    key: 'mac|' + hb.updated_at, link: '', email: hours > HEALTH_MAC_EMAIL_HOURS,
+    text: "n8n on your Mac hasn't checked in since " + fmtWhen_(hb.updated_at) + '. The Mac may be off or asleep, so nothing posts or gets pulled.',
+  });
+  return out;
+}
+
 // ---------- helpers ----------
 
 function table_(sheetId, tab) {
@@ -694,7 +734,8 @@ function build(d) {
   d.failed.forEach(g => q.push({ label: postLabel(g, 'post didn\\'t go out'), body: postBody(g), ask: 'Try posting it again?',
     yes: ['Try again', () => call('adminPost', K, g.sheetId, g.ids, 'retry', '')], change: null,
     skip: ['Drop this post', () => call('adminPost', K, g.sheetId, g.ids, 'skip', '')] }));
-  d.fixes.forEach(f => q.push({ label: ['Heads up'], body: [$('p', { class: 'text', text: f.text })], ask: '',
+  d.fixes.forEach(f => q.push({ label: ['Heads up'], body: [$('p', { class: 'text', text: f.text }),
+    f.link ? $('p', {}, $('a', { class: 'link', href: f.link, target: '_blank', rel: 'noopener', text: 'Fix it here' })) : ''], ask: '',
     yes: ['Got it', nothing], change: null, skip: null }));
   d.topics.forEach(g => q.push({ label: postLabel(g, 'topic idea'), body: postBody(g), ask: 'Make this post?',
     yes: ['Yes', () => call('adminTopic', K, g.sheetId, g.ids, 'approve', '')],
