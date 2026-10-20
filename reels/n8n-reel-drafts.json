@@ -1,0 +1,290 @@
+{
+ "name": "Reel drafts",
+ "nodes": [
+  {
+   "id": "r1",
+   "name": "Reel draft from Mac",
+   "type": "n8n-nodes-base.webhook",
+   "typeVersion": 2,
+   "position": [
+    0,
+    200
+   ],
+   "webhookId": "of-reel-draft",
+   "parameters": {
+    "httpMethod": "POST",
+    "path": "reel-draft",
+    "options": {}
+   }
+  },
+  {
+   "id": "r2",
+   "name": "Draft or problem?",
+   "type": "n8n-nodes-base.if",
+   "typeVersion": 2,
+   "position": [
+    220,
+    200
+   ],
+   "parameters": {
+    "conditions": {
+     "options": {
+      "caseSensitive": true,
+      "leftValue": "",
+      "typeValidation": "strict"
+     },
+     "conditions": [
+      {
+       "id": "c1",
+       "leftValue": "={{ $json.body.kind }}",
+       "rightValue": "draft",
+       "operator": {
+        "type": "string",
+        "operation": "equals"
+       }
+      }
+     ],
+     "combinator": "and"
+    },
+    "options": {}
+   }
+  },
+  {
+   "id": "r3",
+   "name": "Read queue",
+   "type": "n8n-nodes-base.googleSheets",
+   "typeVersion": 4.5,
+   "position": [
+    440,
+    100
+   ],
+   "parameters": {
+    "authentication": "serviceAccount",
+    "operation": "read",
+    "documentId": {
+     "__rl": true,
+     "mode": "url",
+     "value": "https://docs.google.com/spreadsheets/d/1nec5cD5RtjV6yDLzxeKX9vGhI0k123PIaFFDwXqFM6A/edit"
+    },
+    "sheetName": {
+     "__rl": true,
+     "mode": "name",
+     "value": "Queue"
+    },
+    "options": {}
+   },
+   "credentials": {
+    "googleApi": {
+     "id": "",
+     "name": "Google Service Account account"
+    }
+   },
+   "alwaysOutputData": true
+  },
+  {
+   "id": "r4",
+   "name": "Make Queue rows",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    660,
+    100
+   ],
+   "parameters": {
+    "jsCode": "// Two Queue rows per Reel draft (IG 9:16, FB square), shown as one Hub card each for a yes.\n// Slot: next weekday from tomorrow at 17:00 Chicago with no other Reel that day (11:00 is the daily post).\nconst d = $('Reel draft from Mac').first().json.body;\nconst taken = new Set($input.all().map(i => i.json)\n  .filter(r => String(r.type).toLowerCase() === 'reel' && r.brand === d.brand && r.status !== 'skipped' && r.publish_at)\n  .map(r => DateTime.fromISO(String(r.publish_at)).setZone('America/Chicago').toISODate()));\nlet day = DateTime.now().setZone('America/Chicago').plus({ days: 1 }).startOf('day');\nwhile (day.weekday > 5 || taken.has(day.toISODate())) day = day.plus({ days: 1 });\nconst at = day.set({ hour: 17 }).toISO({ suppressMilliseconds: true });\nconst base = {\n  brand: d.brand, type: 'reel', publish_at: at, caption: d.caption, status: 'in_review', month: day.toFormat('yyyy-MM'),\n  pillar: 'reel', hook: d.hook, preview_url: d.preview_url, sensitive: 'yes', revision: 0,\n};\nreturn [\n  { json: { id: `${d.id}-ig`, platform: 'instagram', media_url: d.ig_url, ...base } },\n  { json: { id: `${d.id}-fb`, platform: 'facebook', media_url: d.fb_url, ...base } },\n];"
+   }
+  },
+  {
+   "id": "r5",
+   "name": "Add to Queue",
+   "type": "n8n-nodes-base.googleSheets",
+   "typeVersion": 4.5,
+   "position": [
+    880,
+    100
+   ],
+   "parameters": {
+    "authentication": "serviceAccount",
+    "operation": "append",
+    "documentId": {
+     "__rl": true,
+     "mode": "url",
+     "value": "https://docs.google.com/spreadsheets/d/1nec5cD5RtjV6yDLzxeKX9vGhI0k123PIaFFDwXqFM6A/edit"
+    },
+    "sheetName": {
+     "__rl": true,
+     "mode": "name",
+     "value": "Queue"
+    },
+    "columns": {
+     "mappingMode": "autoMapInputData",
+     "value": {},
+     "matchingColumns": [],
+     "schema": []
+    },
+    "options": {}
+   },
+   "credentials": {
+    "googleApi": {
+     "id": "",
+     "name": "Google Service Account account"
+    }
+   }
+  },
+  {
+   "id": "r6",
+   "name": "Health ok",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    1100,
+    100
+   ],
+   "parameters": {
+    "jsCode": "// Clear the Reel drafts health row once a draft goes through.\nconst d = $('Reel draft from Mac').first().json.body;\nreturn [{ json: { check: 'reel-drafts', label: 'Reel drafts', status: 'ok', email: 'no', since: '',\n  detail: `Last draft: ${d.id} from ${d.source}.`, updated_at: DateTime.now().toISO(), link: '' } }];"
+   }
+  },
+  {
+   "id": "r7",
+   "name": "Health problem",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    440,
+    320
+   ],
+   "parameters": {
+    "jsCode": "// The Mac watcher hit a problem. The Hub turns this into a card and one email.\nconst d = $('Reel draft from Mac').first().json.body;\nreturn [{ json: { check: 'reel-drafts', label: 'Reel drafts', status: 'fail', email: 'yes', since: DateTime.now().toISO(),\n  detail: `Couldn't make a Reel from ${d.source}: ${String(d.detail || '').slice(0, 300)} (log: pm2 logs reel-watch)`,\n  updated_at: DateTime.now().toISO(), link: '' } }];"
+   }
+  },
+  {
+   "id": "r8",
+   "name": "Save to Health tab",
+   "type": "n8n-nodes-base.googleSheets",
+   "typeVersion": 4.5,
+   "position": [
+    1320,
+    200
+   ],
+   "parameters": {
+    "authentication": "serviceAccount",
+    "operation": "appendOrUpdate",
+    "documentId": {
+     "__rl": true,
+     "mode": "url",
+     "value": "https://docs.google.com/spreadsheets/d/1nec5cD5RtjV6yDLzxeKX9vGhI0k123PIaFFDwXqFM6A/edit"
+    },
+    "sheetName": {
+     "__rl": true,
+     "mode": "name",
+     "value": "Health"
+    },
+    "columns": {
+     "mappingMode": "autoMapInputData",
+     "value": {},
+     "matchingColumns": [
+      "check"
+     ],
+     "schema": []
+    },
+    "options": {}
+   },
+   "credentials": {
+    "googleApi": {
+     "id": "",
+     "name": "Google Service Account account"
+    }
+   }
+  }
+ ],
+ "connections": {
+  "Reel draft from Mac": {
+   "main": [
+    [
+     {
+      "node": "Draft or problem?",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Draft or problem?": {
+   "main": [
+    [
+     {
+      "node": "Read queue",
+      "type": "main",
+      "index": 0
+     }
+    ],
+    [
+     {
+      "node": "Health problem",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Read queue": {
+   "main": [
+    [
+     {
+      "node": "Make Queue rows",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Make Queue rows": {
+   "main": [
+    [
+     {
+      "node": "Add to Queue",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Add to Queue": {
+   "main": [
+    [
+     {
+      "node": "Health ok",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Health ok": {
+   "main": [
+    [
+     {
+      "node": "Save to Health tab",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Health problem": {
+   "main": [
+    [
+     {
+      "node": "Save to Health tab",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  }
+ },
+ "settings": {
+  "executionOrder": "v1",
+  "timezone": "America/Chicago"
+ }
+}
