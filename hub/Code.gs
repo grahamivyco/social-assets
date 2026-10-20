@@ -12,6 +12,10 @@
 const TZ = 'America/Chicago';
 // The queue Sheet. Lets the script run as its own project or from Extensions > Apps Script in the Sheet.
 const HUB_SHEET_ID = '1nec5cD5RtjV6yDLzxeKX9vGhI0k123PIaFFDwXqFM6A';
+// The branded review page on Graham's site. It talks to this script through the api= links below.
+const CLIENT_PAGE_URL = 'https://openframe.design/review/';
+// This script's live web app link (Deploy > Manage deployments > Web app URL, ends in /exec).
+const WEB_APP_URL = 'PASTE_WEB_APP_URL';
 // Check-in: one email with everything that needs you. 1 = every week, 2 = every 2 weeks.
 const CHECKIN_EVERY_WEEKS = 1;
 const CHECKIN_DAY = 'MONDAY';
@@ -62,23 +66,38 @@ function onOpen() {
 }
 
 function emailMeMyLinks() {
-  const base = baseUrl_();
-  if (!base) throw new Error('Deploy the web app first: Deploy > New deployment > Web app.');
-  const lines = ['Your dashboard (bookmark it, pin it in your life dashboard):', '', adminUrl_(), ''];
-  clients_().forEach(c => lines.push(c.client + ' review page (send this to the client):', '', c.link, ''));
-  MailApp.sendEmail(me_(), 'Your Hub links', lines.join('\n'));
+  if (!/\/exec$/.test(baseUrl_())) throw new Error('Paste the Web app URL (ends in /exec) into WEB_APP_URL at the top, save, then run this again.');
+  const lines = ['Your check-in page. Bookmark it:', '', adminUrl_(), '', 'Client review pages:', ''];
+  clients_().forEach(c => lines.push(c.client + ':', c.link, ''));
+  MailApp.sendEmail(me_(), 'Your Open Frame Check-in links', lines.join('\n'));
 }
 
 // ---------- web ----------
 
 function doGet(e) {
   const p = (e && e.parameter) || {};
+  const url = ScriptApp.getService().getUrl() || '';
+  if (/\/exec$/.test(url)) PropertiesService.getScriptProperties().setProperty('WEB_APP_URL', url);
+  if (p.api) return api_(p);
   if (p.k && p.k === adminKey_()) return page_('Hub', ADMIN_HTML, { key: p.k });
   if (p.c) {
     const c = clients_().find(x => x.token === p.c);
     if (c) return page_(c.client + ' posts to review', CLIENT_HTML, { token: p.c, client: c.client });
   }
   return HtmlService.createHtmlOutput('<p style="font-family:sans-serif;padding:24px">This link is not active. Ask Open Frame for a new one.</p>');
+}
+
+// JSON for the review page on openframe.design. GET only, so the browser needs no preflight.
+function api_(p) {
+  let out;
+  try {
+    if (p.api === 'client') out = getClientPosts(p.c);
+    else if (p.api === 'decide') out = { status: clientDecide(p.c, String(p.ids || '').split(',').filter(Boolean), p.d, p.note || '') };
+    else throw new Error('Unknown request');
+  } catch (e) {
+    out = { error: e.message || String(e) };
+  }
+  return ContentService.createTextOutput(JSON.stringify(out)).setMimeType(ContentService.MimeType.JSON);
 }
 
 function page_(title, html, boot) {
@@ -247,14 +266,22 @@ function adminNotifyClient(key, brand) {
   checkKey_(key);
   const c = clients_().find(x => x.brand === brand);
   if (!c || !c.contact_email) throw new Error('Add a contact email for this client in the Clients tab first.');
-  MailApp.sendEmail({
-    to: c.contact_email,
-    name: 'Open Frame',
-    replyTo: me_(),
-    subject: 'Your posts are ready to review',
-    body: 'Hi,\n\nYour next posts are ready. Tap Approve or Request change on each one. No login needed.\n\n' + c.link + '\n\nThanks,\nGraham\nOpen Frame',
-  });
+  sendReviewEmail_(c);
   return 'sent';
+}
+
+function sendReviewEmail_(c) {
+  const html = '<div style="background:#f3f1ea;padding:32px 16px;font-family:Inter,Helvetica,Arial,sans-serif;color:#111110">'
+    + '<div style="max-width:460px;margin:0 auto;background:#fff;border-radius:20px;padding:32px;text-align:center">'
+    + '<img src="https://openframe.design/icon-192.png" width="48" height="48" alt="Open Frame" style="display:block;margin:0 auto 16px">'
+    + '<h1 style="font-family:Georgia,serif;font-weight:500;font-size:26px;margin:0 0 10px">Your posts are ready</h1>'
+    + '<p style="color:#4b4a46;font-size:16px;line-height:1.5;margin:0 0 24px">Take a quick look and tap <b>Looks good</b> or <b>Change something</b> on each one. It takes about two minutes.</p>'
+    + '<a href="' + c.link + '" style="display:inline-block;background:#111110;color:#f3f1ea;text-decoration:none;font-weight:600;padding:14px 28px;border-radius:100px">Review your posts</a>'
+    + '<p style="color:#84827b;font-size:13px;margin:24px 0 0">Open Frame · openframe.design</p></div></div>';
+  MailApp.sendEmail({
+    to: c.contact_email, name: 'Open Frame', replyTo: me_(), subject: 'Your posts are ready to review',
+    body: 'Your posts are ready. Review them here:\n\n' + c.link + '\n\nOpen Frame', htmlBody: html,
+  });
 }
 
 // ---------- client page ----------
@@ -442,7 +469,7 @@ function clients_() {
   return t.rows.filter(r => r.brand && r.token).map(r => ({
     client: r.client || r.brand, brand: r.brand, sheet_id: r.sheet_id || hubId_(), token: r.token,
     contact_email: r.contact_email || '', report_url: r.report_url || '', client_approves: /^(y|yes|true)$/i.test(r.client_approves || ''),
-    link: baseUrl_() + '?c=' + r.token,
+    link: CLIENT_PAGE_URL + '#' + r.token,
   }));
 }
 
@@ -461,7 +488,13 @@ function withLock_(fn) {
 function checkKey_(key) { if (!key || key !== adminKey_()) throw new Error('Not allowed'); }
 function adminKey_() { return PropertiesService.getScriptProperties().getProperty('ADMIN_KEY'); }
 function hubId_() { return PropertiesService.getScriptProperties().getProperty('HUB_ID') || HUB_SHEET_ID; }
-function baseUrl_() { return ScriptApp.getService().getUrl() || ''; }
+// Run from the editor, getUrl() gives the /dev test link, which only works for the owner.
+// The live /exec link is saved the first time a page is opened through it.
+function baseUrl_() {
+  if (/\/exec$/.test(WEB_APP_URL)) return WEB_APP_URL;
+  const saved = PropertiesService.getScriptProperties().getProperty('WEB_APP_URL');
+  return saved || ScriptApp.getService().getUrl() || '';
+}
 function adminUrl_() { return baseUrl_() + '?k=' + adminKey_(); }
 function me_() { return Session.getEffectiveUser().getEmail(); }
 function uniq_(a) { return a.filter((x, i) => a.indexOf(x) === i); }
