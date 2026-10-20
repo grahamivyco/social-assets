@@ -13,7 +13,7 @@ const TZ = 'America/Chicago';
 const DIGEST_HOUR = 7;
 const OUTREACH_SHEET_ID = '1VgiiTBTpmFh5bqutvYvjvNZmSicc8Es2vLSmnPlpHaU';
 // Column names follow /mnt/project-files/automation/queue-schema.md. review_note is Graham's own note.
-const QUEUE_EXTRA = ['client_decision', 'client_note', 'answered_by', 'answered_at', 'revision', 'review_note'];
+const QUEUE_EXTRA = ['client_decision', 'client_note', 'answered_by', 'decided_at', 'revision', 'review_note'];
 const CLIENT_HEAD = ['client', 'brand', 'sheet_id', 'token', 'contact_email', 'client_approves'];
 const STUCK_HOURS = 2;
 
@@ -141,7 +141,7 @@ function groupPosts_(rows, sid, byBrand) {
       media: [], posts: [], client_note: '', review_note: '', preview: '', deadline: '', sensitive: false, revision: 0,
     });
     g.ids.push(r.id);
-    g.posts.push({ id: r.id, platform: r.platform, caption: r.caption });
+    g.posts.push({ id: r.id, platform: r.platform, caption: r.caption || r.hook || r.pillar || '' });
     String(r.media_url || '').split(/\s+/).filter(Boolean).forEach(u => { if (g.media.indexOf(u) < 0) g.media.push(u); });
     if (r.client_note) g.client_note = r.client_note;
     if (r.review_note) g.review_note = r.review_note;
@@ -238,30 +238,34 @@ function adminNotifyClient(key, brand) {
 function getClientPosts(token) {
   const c = clientByToken_(token);
   const q = table_(c.sheet_id, 'Queue');
-  const rows = q.rows.filter(r => r.brand === c.brand && (r.status === 'in_review' || (r.answered_at && within_(r.answered_at, 3))));
+  const rows = q.rows.filter(r => r.brand === c.brand && (r.status === 'in_review' || (r.status === 'plan' && !r.client_decision) || (r.decided_at && within_(r.decided_at, 3))));
   const groups = groupPosts_(rows, c.sheet_id, { [c.brand]: c }).map(g => ({
     ids: g.ids, when: g.when, type: g.type, media: g.media, preview: g.preview, status: g.status, client_note: g.client_note,
     deadline: g.deadline, sensitive: g.sensitive,
     posts: g.posts.map(p => ({ platform: p.platform, caption: p.caption })),
   }));
-  groups.sort((a, b) => (a.status === 'in_review' ? 0 : 1) - (b.status === 'in_review' ? 0 : 1));
+  const open = s => (s === 'in_review' || s === 'plan' ? 0 : 1);
+  groups.sort((a, b) => open(a.status) - open(b.status));
   return { client: c.client, posts: groups };
 }
 
 function clientDecide(token, ids, decision, note) {
   const c = clientByToken_(token);
-  const map = { approve: ['approved', 'approve'], change: ['changes', 'change'], skip: ['skipped', 'skip'] }[decision];
+  const map = { approve: ['approved', 'Approve'], change: ['changes', 'Request change'], skip: ['skipped', 'Skip'] }[decision];
   if (!map) throw new Error('Unknown choice');
   if (decision === 'change' && !String(note || '').trim()) throw new Error('Tell us what to change.');
   return withLock_(() => {
     const q = table_(c.sheet_id, 'Queue');
     ids.forEach(id => {
       const r = findRow_(q, 'id', id);
-      if (r.brand !== c.brand || r.status !== 'in_review') throw new Error('This post was already updated. Refresh the page.');
-      setCells_(q, r._row, {
-        status: map[0], client_decision: map[1], client_note: String(note || '').slice(0, 2000),
-        answered_by: 'client review page', answered_at: new Date().toISOString(),
-      });
+      const isPlan = r.status === 'plan' && !r.client_decision;
+      if (r.brand !== c.brand || (r.status !== 'in_review' && !isPlan)) throw new Error('This post was already updated. Refresh the page.');
+      const set = {
+        client_decision: map[1], client_note: String(note || '').slice(0, 2000),
+        answered_by: 'client review page', decided_at: new Date().toISOString(),
+      };
+      if (!isPlan) set.status = map[0]; // plan rows keep status plan; the monthly loop reads client_decision
+      setCells_(q, r._row, set);
     });
     if (decision === 'change') {
       MailApp.sendEmail(me_(), c.client + ' asked for a change', 'Note: ' + note + '\n\nOpen your dashboard:\n\n' + adminUrl_());
@@ -533,7 +537,7 @@ document.getElementById('h').textContent = BOOT.client + ': posts to review';
 function load() {
   call('getClientPosts', BOOT.token).then(d => {
     const out = document.getElementById('out'); out.innerHTML = '';
-    const open = d.posts.filter(p => p.status === 'in_review');
+    const open = d.posts.filter(p => p.status === 'in_review' || p.status === 'plan');
     if (!open.length) out.append($('p', { class: 'empty', text: 'All caught up. We will email you when new posts are ready.' }));
     d.posts.forEach(p => out.append(card(p)));
   });
@@ -546,7 +550,7 @@ function card(p) {
     el.classList.add('done'); acts.innerHTML = '<span class=sub>' + ({ approved: 'Approved. Thank you!', changes: 'Got it. We will update it and send it back.', skipped: 'Skipped.' }[s]) + '</span>';
   });
   const acts = $('div', { class: 'acts' });
-  if (p.status === 'in_review') {
+  if (p.status === 'in_review' || p.status === 'plan') {
     acts.append(
       $('button', { class: 'go', text: 'Approve', on: { click: () => decide('approve') } }),
       $('button', { text: 'Request change', on: { click: () => { if (ta.style.display === 'none') { ta.style.display = 'block'; ta.focus(); } else decide('change'); } } }),
@@ -555,8 +559,8 @@ function card(p) {
     el.classList.add('done');
     acts.append($('span', { class: 'sub', text: { approved: 'Approved', changes: 'Change requested', skipped: 'Skipped' }[p.status] || p.status }));
   }
-  el.append($('div', { class: 'meta' }, $('span', { class: 'pill', text: p.type || 'post' }), 'Posts ' + p.when,
-      p.status === 'in_review' && p.deadline ? ' · answer by ' + p.deadline : ''), mediaEl(p.media, p.preview), ...caps,
+  el.append($('div', { class: 'meta' }, $('span', { class: 'pill', text: p.status === 'plan' ? 'Topic idea' : (p.type || 'post') }), 'Posts ' + p.when,
+      (p.status === 'in_review' || p.status === 'plan') && p.deadline ? ' · answer by ' + p.deadline : ''), mediaEl(p.media, p.preview), ...caps,
     p.client_note ? $('div', { class: 'note', text: 'Your note: ' + p.client_note }) : '', ta, acts);
   return el;
 }
