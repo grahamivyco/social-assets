@@ -152,9 +152,11 @@ const STUDIO_URL = 'https://openframe.design/studio/';
 const STUDIO_ADMINS = [];   // extra admin emails, e.g. a VA. The script owner is always an admin.
 const STUDIO_DAYS = 30;
 const STUDIO_CODE_MIN = 15;
+// Sign in with Google on the Studio page: the OAuth Web client ID (public, not a secret). Or a GOOGLE_CLIENT_ID Script Property.
+const GOOGLE_CLIENT_ID = '444041586250-vmsnmvs3glhetpoidhb11r4g7ds4rfd8.apps.googleusercontent.com';
 const SESSION_HEAD = ['session', 'email', 'role', 'brand', 'created', 'expires', 'last_used'];
 // What a signed-in admin can run. Each takes the admin key first; the Studio never sees the key, the server adds it.
-const STUDIO_ADMIN_FNS = { getDashboard, adminPost, adminTopic, adminCaption, adminReply, adminEngage, adminLead, adminPhoto, adminNotifyClient, adminGraphic, adminLoop, studioResults };
+const STUDIO_ADMIN_FNS = { getDashboard, adminPost, adminTopic, adminCaption, adminReply, adminEngage, adminLead, adminPhoto, adminNotifyClient, adminGraphic, adminLoop, studioResults, studioReels, studioStatus, adminReelAsk };
 
 function studioApi_(b) {
   try {
@@ -162,6 +164,8 @@ function studioApi_(b) {
     if (b.op === 'ask') return studioAsk_(email);
     if (b.op === 'code') return studioCode_(email, String(b.code || '').replace(/\D/g, ''));
     if (b.op === 'link') return studioLink_(String(b.token || ''));
+    if (b.op === 'config') return { google: GOOGLE_CLIENT_ID || PropertiesService.getScriptProperties().getProperty('GOOGLE_CLIENT_ID') || '' };
+    if (b.op === 'google') return studioGoogle_(String(b.credential || ''));
     const s = studioSession_(String(b.s || ''));
     if (b.op === 'me') return { who: s.who };
     if (b.op === 'out') { withLock_(() => setCells_(s.t, s.r._row, { expires: new Date().toISOString() })); return { ok: true }; }
@@ -232,6 +236,18 @@ function studioLink_(token) {
   return studioStart_(email);
 }
 
+// Google's button hands the page a signed ID token. Google checks the signature for us (tokeninfo); we check it was made
+// for this site's client ID and the email is verified, then it's the same as a code sign-in.
+function studioGoogle_(credential) {
+  const id = GOOGLE_CLIENT_ID || PropertiesService.getScriptProperties().getProperty('GOOGLE_CLIENT_ID');
+  if (!id || !credential) return { error: 'Google sign-in isn\'t set up yet. Use the email code.' };
+  const r = UrlFetchApp.fetch('https://oauth2.googleapis.com/tokeninfo?id_token=' + encodeURIComponent(credential), { muteHttpExceptions: true });
+  if (r.getResponseCode() !== 200) return { error: 'Google sign-in didn\'t go through. Try again.' };
+  const t = JSON.parse(r.getContentText());
+  if (t.aud !== id || String(t.email_verified) !== 'true' || !/accounts\.google\.com$/.test(t.iss || '')) return { error: 'Google sign-in didn\'t go through. Try again.' };
+  return studioStart_(String(t.email || '').toLowerCase());
+}
+
 function studioStart_(email) {
   const who = studioWho_(email);
   if (!who) return { error: 'This email doesn\'t have access.' };
@@ -300,6 +316,85 @@ function studioResults(key) {
     .sort((a, b) => String(b.updated).localeCompare(String(a.updated))).slice(0, 12)
     .map(r => ({ title: r.title, loop: r.loop, client: r.client, status: r.status, link: r.link, when: fmtWhen_(r.updated) })) : [];
   return { clients, runs: Object.keys(runs).map(k => runs[k]).sort((a, b) => b.last.localeCompare(a.last)).map(x => Object.assign(x, { last: fmtWhen_(x.last) })), yes };
+}
+
+// ---------- Reels: the Reels tab in the Studio ----------
+// Script cards by type (Loops rows with loop 'scripts': kind of | personal | viral), a "new scripts" button per type
+// (adds a 'reel-ask' row the Mac's loops/asks.js answers with the local AI), the Reel drafts waiting for a yes,
+// and the Mac's own status (the 'Mac status' tab, written every 2 minutes by mac/keeper.js).
+const REEL_TYPES = { of: 'Open Frame', personal: 'Personal', viral: 'Viral in my niche' };
+const MAC_HEAD = ['check', 'label', 'status', 'detail', 'since', 'updated_at', 'fix'];
+const MAC_STALE_MIN = 15;     // no word from the Mac helper for this long = the Mac is off, asleep or the helper stopped
+const MAC_FAIL_MIN = 10;      // something down this long (the helper couldn't fix it) = Heads up card + one email
+
+function studioReels(key) {
+  checkKey_(key);
+  const ss = SpreadsheetApp.openById(hubId_());
+  const lp = ss.getSheetByName('Loops') ? table_(hubId_(), 'Loops').rows : [];
+  const scripts = lp.filter(r => r.id && r.loop === 'scripts' && ['ready', 'todo', 'change'].indexOf(r.status) >= 0)
+    .sort((a, b) => String(b.created).localeCompare(String(a.created)))
+    .map(r => ({ id: r.id, type: REEL_TYPES[r.kind] ? r.kind : 'of', title: String(r.title || '').replace(/^Film this: /, ''),
+      body: r.body, why: r.why, status: r.status, note: r.note, when: fmtWhen_(r.created) }));
+  const asks = uniq_(lp.filter(r => r.loop === 'reel-ask' && r.status === 'new').map(r => r.kind));
+  const drafts = [];
+  uniq_(clients_().map(c => c.sheet_id)).forEach(sid => {
+    const q = table_(sid, 'Queue');
+    if (!q) return;
+    const byBrand = {};
+    clients_().forEach(c => { byBrand[c.brand] = c; });
+    groupPosts_(q.rows.filter(r => r.id && r.type === 'reel' && ['draft', 'in_review', 'changes'].indexOf(r.status) >= 0), sid, byBrand)
+      .forEach(g => drafts.push(Object.assign(g, { media: g.media.filter(u => /\.mp4($|\?)/i.test(u)) })));
+  });
+  drafts.sort((a, b) => String(a.publish_at).localeCompare(String(b.publish_at)));
+  return { types: REEL_TYPES, scripts, asks, drafts, mac: macStatus_() };
+}
+
+// "New scripts" button. One waiting ask per type is enough; the Mac answers it within a few minutes.
+function adminReelAsk(key, type, note) {
+  checkKey_(key);
+  if (!REEL_TYPES[type]) throw new Error('Unknown script type');
+  return withLock_(() => {
+    const t = hubTab_('Loops', LOOP_HEAD), now = new Date().toISOString();
+    if (t.rows.some(r => r.loop === 'reel-ask' && r.kind === type && r.status === 'new')) return 'waiting';
+    const row = { id: 'reel-ask-' + type + '-' + Date.now(), loop: 'reel-ask', client: 'open-frame', kind: type,
+      title: 'New ' + REEL_TYPES[type] + ' scripts', body: String(note || '').slice(0, 500), status: 'new', created: now, updated: now };
+    t.sh.appendRow(t.head.map(h => safeCell_(row[h])));
+    return 'asked';
+  });
+}
+
+// Status tab: what the Mac keeper sees right now, plus the n8n health check's rows (workflows, Meta token).
+function studioStatus(key) {
+  checkKey_(key);
+  const t = table_(hubId_(), 'Health');
+  const hb = t && t.rows.find(r => r.check === 'heartbeat');
+  const n8n = t ? t.rows.filter(r => r.check && r.check !== 'heartbeat').map(r => ({ label: r.label || r.check, status: String(r.status).toLowerCase(),
+    detail: r.detail, link: /^https:/.test(r.link || '') ? r.link : '', when: fmtWhen_(r.updated_at) })) : [];
+  return { mac: macStatus_(), n8n, n8nLast: hb ? fmtWhen_(hb.updated_at) : '', n8nStale: !hb || !within_(hb.updated_at, 2 / 24) };
+}
+
+function macStatus_() {
+  const ss = SpreadsheetApp.openById(hubId_());
+  if (!ss.getSheetByName('Mac status')) return { rows: [], updated: '', stale: true, never: true };
+  const rows = table_(hubId_(), 'Mac status').rows.filter(r => r.check);
+  const last = rows.map(r => String(r.updated_at)).sort().pop() || '';
+  const t = last ? new Date(last).getTime() : 0;
+  return { rows: rows.map(r => ({ check: r.check, label: r.label, status: r.status, detail: r.detail, fix: r.fix, since: fmtWhen_(r.since) })),
+    updated: fmtWhen_(last), stale: !t || Date.now() - t > MAC_STALE_MIN * 6e4, never: !t };
+}
+
+// The Mac helper reports here: rows of { check, label, status: ok | fixing | fail, detail, fix }. 'since' moves only when the status changes.
+function macReport_(rows) {
+  const t = hubTab_('Mac status', MAC_HEAD), now = new Date().toISOString();
+  (rows || []).forEach(x => {
+    if (!x || !x.check) return;
+    const r = t.rows.find(y => y.check === x.check);
+    const row = { check: x.check, label: x.label || x.check, status: x.status || 'ok', detail: x.detail || '', fix: x.fix || '', updated_at: now };
+    if (!r) { row.since = now; t.sh.appendRow(t.head.map(h => safeCell_(row[h]))); t.rows.push(row); return; }
+    if (r.status !== row.status) row.since = now;
+    setCells_(t, r._row, row);
+  });
+  return { ok: true };
 }
 
 function graphicsTable_() {
@@ -486,6 +581,7 @@ function loopsApi_(b) {
       .map(r => ({ handle: h(r.username || r.sender), kind: r.kind || 'dm', text: String(r.text || '').slice(0, 200), at: String(r.received_at || r.timestamp) }));
     return { accounts, touches };
   }
+  if (b.action === 'mac') return macReport_(b.rows);
   if (b.action === 'results') { const c = clients_().find(x => x.brand === b.client); return c ? results_(c) : { empty: true }; }
   if (b.action === 'funnel') {
     // Last 7 days of the pipeline (Engage + Leads tabs) and where every lead sits now.
@@ -1108,14 +1204,16 @@ function healthCheck() {
 
 // Current non-ok rows from the latest run, plus a card when the run itself stopped (Mac off or asleep).
 function health_() {
-  const out = { cards: [] };
+  const out = { cards: macCards_() };
   const t = table_(hubId_(), 'Health');
   if (!t || !t.rows.length) return out;
   const hb = t.rows.find(r => r.check === 'heartbeat');
   if (!hb) return out;
   const ran = new Date(hb.updated_at).getTime();
   const yes = v => /^(y|yes|true)$/i.test(String(v || ''));
-  t.rows.filter(r => r.check && r.check !== 'heartbeat' && r.updated_at === hb.updated_at && /^(warn|fail)$/i.test(r.status))
+  // Rows from the hourly run, plus problems other tools write on their own (e.g. reel-drafts from the Mac) in the last 2 days.
+  t.rows.filter(r => r.check && r.check !== 'heartbeat' && /^(warn|fail)$/i.test(r.status)
+      && (r.updated_at === hb.updated_at || (r.updated_at > hb.updated_at && within_(r.updated_at, 2))))
     .forEach(r => out.cards.push({
       key: [r.check, r.since, r.status].join('|'), text: r.detail || (r.label || r.check) + ' needs a look.', link: r.link || '', email: yes(r.email),
     }));
@@ -1125,6 +1223,17 @@ function health_() {
     text: "n8n on your Mac hasn't checked in since " + fmtWhen_(hb.updated_at) + '. The Mac may be off or asleep, so nothing posts or gets pulled.',
   });
   return out;
+}
+
+// Things the Mac helper couldn't fix on its own for MAC_FAIL_MIN minutes: one card and one email each.
+function macCards_() {
+  const ss = SpreadsheetApp.openById(hubId_());
+  if (!ss.getSheetByName('Mac status')) return [];
+  const m = macStatus_();
+  if (m.stale) return [];   // Mac off or asleep: the n8n heartbeat card covers that
+  return table_(hubId_(), 'Mac status').rows.filter(r => r.check && r.status === 'fail' && !within_(r.since, MAC_FAIL_MIN / 1440))
+    .map(r => ({ key: ['mac', r.check, r.since].join('|'), text: (r.label || r.check) + ': ' + (r.detail || 'stopped') + (r.fix ? ' ' + r.fix : ''),
+      link: STUDIO_URL + '?tab=status', email: true }));
 }
 
 function leadLine_(l) {

@@ -35,6 +35,7 @@ Sunday: weekly review -> lessons + prompt fixes -> next run
 | `runner.js` | `daemon` (pm2), or run one loop now. |
 | `lib.js` | Local AI, Hub API, self-check rules, run log, git sync of `state/`. |
 | `ideas.js`, `scripts.js`, `audio.js` | Weekly ideas, scripts from each Yes, trending sounds picked for each script. |
+| `asks.js` | Scripts on demand: the "Write 3 new scripts" button on the Studio Reels tab (Open Frame, Personal, Viral in my niche) and rewrites after Change. Every 2 min. Scripts show as cards on the Reels tab, not in Needs you. |
 | `engage.js`, `leads.js` | Daily comment drafts (learns from your edits), weekly pipeline that tunes how many. |
 | `site.js`, `magnet.js` | Monthly site + ChatGPT check; the free check form (`../check/`) runs a check, emails it, adds a lead. |
 | `proposal.js`, `onboard.js` | Proposal page + email after a consult (rate card prices only); day 0-90 onboarding cards after a yes. |

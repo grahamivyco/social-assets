@@ -73,4 +73,4 @@ async function run(only) {
   L.pushState('Loops: ideas run');
 }
 
-module.exports = { run };
+module.exports = { run, patterns };

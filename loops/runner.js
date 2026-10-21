@@ -11,7 +11,7 @@ const MODS = {
   ideas: () => require('./ideas').run, scripts: () => require('./scripts').tick,
   engage: () => require('./engage').run, leads: () => require('./leads').run,
   site: () => require('./site').run, 'site-collect': () => require('./site').collect,
-  audio: () => require('./audio').run,
+  audio: () => require('./audio').run, 'reel-ask': () => require('./asks').tick,
   magnet: () => require('./magnet').tick, proposal: () => require('./proposal').tick, onboard: () => require('./onboard').run,
   directories: () => require('./grow').directories, events: () => require('./grow').events, gbp: () => require('./grow').gbp, templates: () => require('./grow').templates,
   proof: () => require('./later').proof, warmup: () => require('./later').warmup, retention: () => require('./later').retention, trends: () => require('./later').trends,

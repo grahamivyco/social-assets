@@ -33,6 +33,12 @@ The n8n health-check workflow (/mnt/project-files/automation/health/) writes a `
 - The card code is served by the Hub (`?api=studio_js`), so new card types show up in the Studio after you deploy a new version. Nothing to change on the site.
 - Selling the system: a new owner deploys their own copy and changes `STUDIO_URL` and the site page's `API`. The owner becomes the admin automatically.
 
+## Studio: Reels and Status tabs
+- **Reels** (`studioReels`): Reel drafts waiting for a yes (Queue rows, type `reel`, status draft / in_review / changes) with the video, Post it / Change / Don't post. Below, scripts to film by type: Open Frame, Personal, Viral in my niche (`Loops` rows, loop `scripts`, kind `of` | `personal` | `viral`, status `ready`). Filmed it = done, Change = the Mac rewrites it with your note (`loops/asks.js`), Pass. "Write 3 new scripts" adds a `reel-ask` row (`adminReelAsk`); the Mac's local AI answers in a few minutes and the page refreshes itself.
+- **Status** (`studioStatus`): the Mac keeper's checks (`Mac status` tab, written every 2 minutes by `mac/keeper.js` through `fn: 'loops', action: 'mac'`) and the n8n health rows. Something still failing after `MAC_FAIL_MIN` (10) minutes = Heads up card + one email. No word from the Mac for `MAC_STALE_MIN` (15) = shown as off or asleep.
+- **Sign in with Google**: `GOOGLE_CLIENT_ID` (OAuth Web client, origin https://openframe.design). The page asks the Hub for it (`op: 'config'`) and shows Google's button; the Hub checks the token with Google (`tokeninfo`) and starts the same 30-day session as a code. While the Google app is in Testing, only its test users can use the button; everyone else uses the code.
+- Health also now shows problems tools write on their own between hourly runs (e.g. `reel-drafts` from the Mac) for 2 days.
+
 ## Clients tab
 `client | brand | sheet_id | contact_email | client_approves | report_url` (an old `token` column is ignored)
 - `brand` matches the brand column in Queue
@@ -50,7 +56,7 @@ Follows the shared schema: /mnt/project-files/automation/queue-schema.md
 - Extra column only the hub uses: review_note (Graham's own change note).
 
 ## Updating the code
-Paste the new `Code.gs`, then Deploy > Manage deployments > edit > Version: New version. The links stay the same.
+Once the Mac keeper is signed in to clasp (`mac/install.sh`), a merged change to `hub/Code.gs` deploys itself within 10 minutes. Without it: paste the new `Code.gs`, then Deploy > Manage deployments > edit > Version: New version. The links stay the same.
 Before pasting, `node hub/check-pages.js hub/Code.gs` checks the page scripts (a broken one leaves the check-in page stuck on "Loading...").
 
 ## Check-in timing
