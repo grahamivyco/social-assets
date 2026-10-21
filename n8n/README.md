@@ -33,6 +33,6 @@ Import from URL: https://raw.githubusercontent.com/grahamivyco/social-assets/mai
 
 # Comment replies
 
-`comment-replies.json`: every 15 minutes reads comments on Open Frame's own IG + FB posts, hides spam, auto-replies to praise after a random 5 to 40 minute delay, and sends questions/leads to the Hub as cards. Max 10 replies an hour, never the same wording twice. Setup and modes: /mnt/project-files/comment-replies/README.md (source: build-workflow.py + code/).
+`comment-replies.json`: every 2 minutes reads comments on Open Frame's own IG + FB posts, hides spam, auto-replies to praise after a random 1 to 3 minute delay, and sends questions/leads to the Hub as cards. Max 10 replies an hour, never the same wording twice. Setup and modes: /mnt/project-files/comment-replies/README.md (source: build-workflow.py + code/).
 
 Import from URL: https://raw.githubusercontent.com/grahamivyco/social-assets/main/n8n/comment-replies.json
