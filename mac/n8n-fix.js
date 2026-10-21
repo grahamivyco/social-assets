@@ -56,10 +56,12 @@ if (!mine) {
   }
   wf.id = 'ofViralScout0001';
   wf.active = false;
-  const f = path.join(os.tmpdir(), 'of-viral-scout.json');
+  // own temp folder per run: the keeper's hourly check and install.sh can run this at the same moment
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'of-scout-'));
+  const f = path.join(dir, 'of-viral-scout.json');
   fs.writeFileSync(f, JSON.stringify(wf));
   const im = n8n('import:workflow', `--input=${f}`);
-  fs.unlinkSync(f);
+  fs.rmSync(dir, { recursive: true, force: true });
   mine = flows(n8n('list:workflow').out).find(w => w.name === NAME);
   if (!mine) done('fail', "Import didn't work: " + im.out.slice(-200), 'Import it by hand: n8n > Import from URL.');
 }
