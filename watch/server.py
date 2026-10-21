@@ -2,9 +2,11 @@
 """Phone intake for the watch tool. Runs on the Mac under pm2 ("video-watch"), local only.
 
   POST http://127.0.0.1:5680/watch   {"url": "...", "note": "...", "token": "..."}
+  POST http://127.0.0.1:5680/scout   {"url": "...", "note": "..."}   (n8n "viral scout", no token)
 
-n8n's "Video watch" workflow forwards links shared from the iPhone here. Jobs run one at a time,
-in order. The token must match WATCH_TOKEN (env) or ~/.config/video-watch/token.
+n8n's "Video watch" workflow forwards links shared from the iPhone to /watch. That route is public through
+ngrok, so it needs the token. /scout is only reachable on this Mac (the public webhook can't pick the path).
+Jobs run one at a time, in order. The token must match WATCH_TOKEN (env) or ~/.config/video-watch/token.
 Log: ~/Downloads/Open Frame LLC & Clients/Watched/server.log
 """
 import json, os, queue, subprocess, sys, threading, time
@@ -47,13 +49,13 @@ class H(BaseHTTPRequestHandler):
         self.wfile.write(b)
 
     def do_POST(self):
-        if self.path != "/watch":
+        if self.path not in ("/watch", "/scout"):
             return self.reply(404, {"error": "not found"})
         try:
             d = json.loads(self.rfile.read(int(self.headers.get("Content-Length", 0))) or b"{}")
         except ValueError:
             return self.reply(400, {"error": "bad json"})
-        if not TOKEN or d.get("token") != TOKEN:
+        if self.path == "/watch" and (not TOKEN or d.get("token") != TOKEN):
             return self.reply(403, {"error": "bad token"})
         url = str(d.get("url", "")).strip()
         if not url.startswith(("http://", "https://")):

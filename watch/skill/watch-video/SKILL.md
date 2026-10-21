@@ -33,3 +33,7 @@ Replace the `## Analysis` section of `report.md` with these headings, short bull
 - **Steal for Open Frame:** 3 concrete ideas for Graham's Reels or a client's. Check each against `REEL-RULES.md` (one-word captions in a brand color, original footage color, brand fonts, Bauhaus graphics for Open Frame only) and say where an idea breaks a rule.
 
 Then give Graham the 3 steal ideas and one line on the hook. Keep the rest in the file.
+
+## Patterns across many videos
+- Weekly report: `~/Downloads/Open Frame LLC & Clients/Watched/_patterns/<date>.md`, hooks in `_patterns/hook-bank.md`.
+- Make one now: `python3.13 ~/social-assets/watch/patterns.py --days 30`. If its "What repeats" section says the local AI wasn't reachable, write that section yourself from the tables and the reports it links.

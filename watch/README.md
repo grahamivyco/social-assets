@@ -34,8 +34,12 @@ One folder per video in `~/Downloads/Open Frame LLC & Clients/Watched/<date>-<cr
    - n8n: Import from URL `https://raw.githubusercontent.com/grahamivyco/social-assets/main/watch/n8n-video-watch.json`, then Publish.
    - iPhone Shortcut "Watch with Claude": Show in Share Sheet, accepts URLs and Text. Actions: **Get Contents of URL** `https://overthrow-spoken-verbalize.ngrok-free.dev/webhook/watch`, Method POST, Request Body JSON: `url` = Shortcut Input, `token` = the token, `note` = Ask for Input (optional). Then **Show Notification** with the result's `message`.
 
+## Viral scout
+Weekly outlier finder + pattern report across top creators: see `scout/README.md`.
+
 ## Files
 - `watch.py`: the tool. `ocr.swift`: on-screen text. `server.py`: phone intake (127.0.0.1:5680, needs the token).
 - `build-workflow.py` builds `n8n-video-watch.json`.
+- `patterns.py`: pattern report and hook bank across everything watched (`scout/` runs it weekly).
 - `skill/watch-video/SKILL.md`: how Claude reads the folder and writes the breakdown.
 - Speech uses `../reels/editor/thedit.py` (set `WATCH_EDITOR` to point elsewhere). Output folder: `WATCH_OUT`.
