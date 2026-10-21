@@ -64,6 +64,36 @@ async function run() {
     made++;
   }
   await L.logRun({ loop: 'deals', client: 'open-frame', status: 'ok', made: fresh.length, kept: made, cards: made, note: fresh.map(b => b.handle).join(', ') });
+  await offers(have);
+}
+
+// 4. Offers a brand sent (Hub triageMail writes a brand_deal row in Approvals). Yes -> a reply card to say yes and set up a call,
+// Not for us -> a polite no, Ask a question -> a Got it card with the question. Graham sends from the Gmail thread.
+const REPLY = { type: 'object', additionalProperties: false, required: ['body'], properties: { body: { type: 'string' } } };
+async function offers(have) {
+  const rows = await L.approvals({ made_by: 'deals', status: ['approved', 'skipped', 'changes'] });
+  for (const r of rows.filter(r => !have.has(`${r.id}-reply`))) {
+    const card = { id: `${r.id}-reply`, loop: 'deals', client: 'open-frame', kind: 'deal reply', status: 'todo', link: r.preview };
+    if (r.status === 'changes') {
+      Object.assign(card, { title: `${r.client} has a question about ${r.title.replace(/^Offer from /, '')}`, body: r.comment || '(no note)', ask: 'Answer it, then Got it.' });
+    } else {
+      const yes = r.status === 'approved';
+      let body = '';
+      for (let i = 0, why = ''; i < 2 && !body; i++) {
+        const o = await L.ask(`Write a short email reply from Graham at Open Frame to a brand that sent this offer: "${r.detail}".
+${yes ? 'Say yes, thank them, and ask for a 15 minute call to agree the brief, dates and usage rights.' : 'Say no kindly: it is not the right fit right now. Thank them and leave the door open.'}
+Under 80 words. Sign off "Graham". No prices, no em dashes, no hype words.${why ? `\nLast try failed the check: ${why}` : ''}`, REPLY, 0.4);
+        const broke = L.rules(o.body, { maxWords: 100 }).filter(x => x !== 'opens with a question');
+        if (/\$\s?\d/.test(o.body)) broke.push('wrote a price');
+        if (broke.length) why = broke.join(', '); else body = o.body;
+      }
+      if (!body) { await L.logRun({ loop: 'deals', client: 'open-frame', status: 'check', made: 2, kept: 0, cards: 0, note: `${r.id} reply failed the check` }); continue; }
+      Object.assign(card, { title: `${yes ? 'Say yes to' : 'Say no to'} ${r.title.replace(/^Offer from /, '')}`, body,
+        ask: 'Open the email thread, paste this reply, send. Got it when done.' });
+    }
+    await L.hub('add', { rows: [card] });
+    have.add(card.id);
+  }
 }
 
 module.exports = { run };

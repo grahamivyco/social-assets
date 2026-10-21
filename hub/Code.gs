@@ -960,8 +960,25 @@ function triageMail() {
         if (type === 'lead') leadFromMail_(r, {});
       } else set.status = 'done';
       setCells_(t, r._row, set);
+      try { dealOffer_(r, th, clients_()); } catch (e) { console.error('dealOffer_: ' + e.message); }
     });
   });
+}
+
+// A brand offering a deal (a reply from a brand we pitched, or an email that talks sponsorship, collab or UGC)
+// = one brand_deal row for Studio. Always the client's call. deals.js picks up the answer and drafts the reply.
+const DEAL_WORDS = /\b(sponsor\w*|collab\w*|partnership|paid (post|partnership)|ugc|ambassador|gifted|brand deal|campaign brief|rate card|creator program)\b/i;
+function dealOffer_(r, th, clients) {
+  const from = String(r.from_email || '').toLowerCase(), text = [r.subject, r.snippet].join(' ');
+  const br = table_(OUTREACH_SHEET_ID, 'Brands'), brand = br && br.rows.find(x => from && String(x.contact_email || '').toLowerCase() === from);
+  if (!brand && (!DEAL_WORDS.test(text) || r.type === 'noise')) return;
+  // A client forwarding an offer = their deal. Anything else = the studio's own brand (first row of the Clients tab).
+  const c = clients.find(x => emails_(x.contact_email).indexOf(from) >= 0) || clients[0];
+  if (!c) return;
+  approvalAdd_([{ id: 'deal-offer-' + hex_(String(r.message_id)).slice(0, 12), client: c.brand, kind: 'brand_deal',
+    title: 'Offer from ' + ((brand && brand.name) || r.from_name || from), detail: String(r.subject || '').slice(0, 120) + '. ' + String(r.snippet || '').slice(0, 220),
+    preview: 'https://mail.google.com/mail/u/0/#all/' + th.getId(), made_by: 'deals', status: 'draft' }]);
+  if (brand) setCells_(br, brand._row, { status: 'replied' });
 }
 
 function mailMessage_(th, mid) {
@@ -1345,8 +1362,37 @@ function syncApprovals_() {
       remember_(seenT, seen, d.id, stamp(cur), now);
   });
   loopCardAnswers_(t, out);
+  reportRows_(t, byId, out);
   if (approvedAny) phoneReels_();
   return out;
+}
+
+// Monthly reports: a new report_url in the Clients tab (the report run on the 2nd sets it) = one report row for that month.
+// Mark read closes it. Ask a question (changes + comment) = a Got it card for Graham with their question.
+function reportRows_(t, byId, out) {
+  clients_().forEach(c => {
+    if (!/^https:\/\//.test(c.report_url)) return;
+    const m = c.report_url.match(/(20\d\d)-(\d\d)/), month = m ? m[0] : Utilities.formatDate(new Date(), TZ, 'yyyy-MM');
+    const id = 'report-' + c.brand + '-' + month;
+    if (byId[id]) return;
+    const label = Utilities.formatDate(new Date(Number(month.slice(0, 4)), Number(month.slice(5)) - 1, 15), TZ, 'MMMM yyyy');
+    const row = Object.assign(approvalRow_({ id, client: c.client, kind: 'report', title: 'Your ' + label + ' report',
+      detail: 'How ' + label.split(' ')[0] + ' went, on one page, with what comes next.', preview: c.report_url,
+      client_ok: c.client_approves ? 'yes' : 'no', made_by: 'report' }, [c]), { answer: '', comment: '', updated: '' });
+    t.sh.appendRow(t.head.map(h => safeCell_(row[h])));
+    byId[id] = row; out.added++;
+  });
+  const asks = t.rows.filter(r => /^report-/.test(r.id) && r.status === 'changes' && r.comment);
+  if (!asks.length) return;
+  const lt = hubTab_('Loops', LOOP_HEAD), now = new Date().toISOString();
+  asks.forEach(r => {
+    const id = r.id + '-question';
+    if (lt.rows.some(x => x.id === id)) return;
+    const card = { id, loop: 'report', client: r.client, kind: 'report question', status: 'todo', title: r.client + ' asked about their report',
+      body: r.comment, link: r.preview, created: now, updated: now };
+    lt.sh.appendRow(lt.head.map(h => safeCell_(card[h])));
+    lt.rows.push(card); out.added++;
+  });
 }
 
 // A loop that also makes an old Loops card (same id) gets Graham's answer there copied in while the row still waits on him:
