@@ -104,6 +104,20 @@ async function llmFetch(init) {
   }
 }
 
+// The model sometimes invents track-record claims ("We helped many nonprofits..."). Drop any caption
+// sentence with a number or a claim word that isn't in the transcript. Graham, 2026-10-21: only what he said.
+const CLAIM = /\b(helped|help(?:ing)? (?:many|hundreds|dozens)|clients?|customers?|worked with|years|decades|track record|proven|award|countless|many)\b/gi;
+function grounded(caption, transcript) {
+  const said = transcript.toLowerCase();
+  const [body, ...rest] = caption.split(/\n\s*\n/);
+  const keep = (body.match(/[^.!?]+[.!?]*/g) || []).filter(sen => {
+    const nums = sen.match(/\d+/g) || [];
+    const claims = sen.match(CLAIM) || [];
+    return nums.every(n => said.includes(n)) && claims.every(w => said.includes(w.toLowerCase()));
+  }).map(x => x.trim()).join(' ');
+  return [keep || body, ...rest].join('\n\n');
+}
+
 // Local AI writes the words. Graham still approves every Reel on a Hub card before it posts.
 async function writeCopy(transcript) {
   const prompt = `You help Open Frame, a design and marketing agency for mission-driven organizations (Minneapolis and Barcelona), turn a talking head video into an Instagram Reel.
@@ -113,14 +127,14 @@ ${transcript}
 Write:
 - hook: the on-screen title for the first 2.5 seconds. 3 to 7 words, sentence case, taken from the video's main point. Wrap exactly one word in *asterisks* as the accent.
 - headline: the cover headline, 2 to 5 words, may use \\n for a line break, exactly one *accent* word.
-- caption: the Instagram and Facebook caption. 2 to 4 short sentences in plain, friendly first person ("I" or "we"), about what the video says. No hashtags, no emoji, no em dashes, no hype words, no rhetorical question to open. End with this call to action on its own paragraph: "Book a free 30-min consult:" followed by a new line with exactly ${C.link}
+- caption: the Instagram and Facebook caption. 2 to 4 short sentences in plain, friendly first person, retelling only what is said in the video. Every claim must be something he actually says in the transcript. Never invent clients, numbers, results, past work or experience (no "we've helped many nonprofits"). No hashtags, no emoji, no em dashes, no hype words, no rhetorical question to open. End with this call to action on its own paragraph: "Book a free 30-min consult:" followed by a new line with exactly ${C.link}
 - keywords: 15 search phrases (1 to 3 words each, lowercase, no repeats) that someone would type into Instagram search to find this video, e.g. "nonprofit marketing". The first one is the main keyword.
 - The hook and the first sentence of the caption both use the main keyword in a natural way. Work 1 or 2 of the other keywords into the caption naturally. No keyword lists in the caption.
 - alt_text: one plain sentence describing what is on screen and what it is about, for screen readers, using the main keyword (e.g. "Graham from Open Frame talking to the camera about nonprofit marketing.").
 - topic: 2 to 4 words naming the video, for a file name.
 - scenes: 2 to 4 small animated graphics, one per idea in the video, each fired on a word that is actually spoken (copy it exactly from the transcript, one word, no ~~struck~~ words). kind is one of: marketing (a screen going off), design (an artboard), brand (a swatch fan), website (a browser window), social (a phone with likes), send (a paper airplane landing on "Done", for a call to talk). Use each kind once. label: 1 or 2 words shown with it.`;
   // config "copyRules": private house rules for the words (e.g. topics never to mention). Kept in config.json, not in git.
-  const rules = `\n\nHouse rules for everything you write: don't lead with AI, say "systems". Only use facts that are in the transcript.${C.copyRules ? '\n' + C.copyRules : ''}`;
+  const rules = `\n\nHouse rules for everything you write: don't lead with AI, say "systems". Only use facts that are in the transcript. Never make up claims, client counts or results.${C.copyRules ? '\n' + C.copyRules : ''}`;
   const res = await llmFetch({
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -150,7 +164,7 @@ Write:
   let head = oneAccent(tidy(out.headline).replace(/\\n/g, '\n').replace(/—/g, ',').trim());
   if (!head || head.replace(/\*/g, '').split(/\s+/).length > 5) head = out.hook.replace(/\*/g, '').split(/\s+/).length <= 5 ? out.hook : head;
   out.headline = accent(head || out.hook);
-  out.caption = tidy(out.caption);
+  out.caption = grounded(tidy(out.caption), transcript);
   out.keywords = [...new Set((out.keywords || []).map(k => tidy(k).toLowerCase().replace(/^#/, '').replace(/[^a-z0-9' -]/g, '').trim()).filter(Boolean))].slice(0, 15);
   out.alt_text = tidy(out.alt_text || '').replace(/—/g, ',').trim();
   let cap = out.caption.replace(/\s*—\s*/g, ', ').replace(/https?:\/\/\S+/g, '').replace(/\n{3,}/g, '\n\n').trim();
