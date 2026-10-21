@@ -576,6 +576,12 @@ function loopsApi_(b) {
     }
     return { ok: true };
   }
+  if (b.action === 'lead-set') {
+    // A loop moves a lead on (e.g. the client signed the quote in Studio -> stage won, which starts onboarding).
+    const l = table_(OUTREACH_SHEET_ID, 'Leads'), r = findRow_(l, 'id', b.id);
+    setCells_(l, r._row, Object.assign({}, b.fields || {}, { updated_at: new Date().toISOString() }));
+    return { ok: true };
+  }
   if (b.action === 'leads-list') {
     const l = table_(OUTREACH_SHEET_ID, 'Leads');
     return { rows: (l ? l.rows : []).filter(r => r.id && (!b.stages || b.stages.indexOf(r.stage) >= 0))
@@ -1222,7 +1228,7 @@ function approvalRow_(r, clients) {
   const due = /^\d{4}-\d{2}-\d{2}$/.test(raw) ? raw : dd && !isNaN(dd) ? Utilities.formatDate(dd, TZ, 'yyyy-MM-dd') : '';
   return {
     id: String(r.id), client: c ? c.client : String(r.client || ''), kind, title: String(r.title).slice(0, 120), detail: String(r.detail || '').slice(0, 400),
-    job: r.job || 'none', preview: r.preview || '', options: kind === 'pick_one' ? [].concat(r.options || []).join(' | ') : '',
+    job: r.job || approvalJob_(c ? c.brand : '', approvalProjects_()), preview: r.preview || '', options: kind === 'pick_one' ? [].concat(r.options || []).join(' | ') : '',
     due, client_ok: ok, made_by: r.made_by || 'graham', status,
   };
 }
@@ -1245,6 +1251,8 @@ function approvalList_(b) {
     && (!ids || ids.indexOf(r.id) >= 0) && (!b.client || r.client === b.client)).map(r => { const o = Object.assign({}, r); delete o._row; return o; }) };
 }
 
+let approvalProjectsCache_;
+function approvalProjects_() { return approvalProjectsCache_ || (approvalProjectsCache_ = table_(hubId_(), 'Projects')); }
 // The client's monthly plan from the Projects tab, for the job column.
 function approvalJob_(brand, projects) {
   const p = (projects ? projects.rows : []).find(r => r.brand === brand && MONTHLY_PLANS.indexOf(String(r.project).trim()) >= 0 && !/^(hid|done|finished)/i.test(r.status || ''));
@@ -1336,8 +1344,26 @@ function syncApprovals_() {
       if (Object.keys(diff).length) { setCells_(t, cur._row, diff); Object.assign(cur, diff); out.mirrored++; }
       remember_(seenT, seen, d.id, stamp(cur), now);
   });
+  loopCardAnswers_(t, out);
   if (approvedAny) phoneReels_();
   return out;
+}
+
+// A loop that also makes an old Loops card (same id) gets Graham's answer there copied in while the row still waits on him:
+// Yes / Send -> client (or approved when the client doesn't sign off), Change -> changes, Pass -> skipped.
+function loopCardAnswers_(t, out) {
+  const ss = SpreadsheetApp.openById(hubId_());
+  if (!ss.getSheetByName('Loops')) return;
+  const cards = {};
+  table_(hubId_(), 'Loops').rows.forEach(r => { if (r.id) cards[r.id] = r; });
+  t.rows.filter(r => r.id && r.status === 'draft' && cards[r.id]).forEach(r => {
+    const k = cards[r.id], ok = r.client_ok === 'yes';
+    const set = { yes: ok ? { status: 'client' } : { status: 'approved', answer: 'Looks good' }, sent: { status: ok ? 'client' : 'approved' }, done: { status: ok ? 'client' : 'approved' },
+      change: { status: 'changes', answer: 'Change', comment: k.note || '' }, pass: { status: 'skipped', answer: 'Skip' } }[k.status];
+    if (!set) return;
+    set.updated = k.updated || new Date().toISOString();
+    setCells_(t, r._row, set); Object.assign(r, set); out.mirrored++;
+  });
 }
 
 function remember_(t, seen, id, value, now) {

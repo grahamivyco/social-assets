@@ -16,6 +16,13 @@ const STEPS = [
   { day: 60, id: 'results', email: true, brief: 'Share 2 results so far in plain words (leave [result] slots for Graham to fill), then ask for a 2 sentence testimonial they are happy to have shared.' },
   { day: 90, id: 'quarter', email: true, brief: 'Three months in. Offer a 20 minute review call: what is working, what to change, what next quarter looks like.' },
 ];
+// Day 0 asks the client for what the first month needs, as Approvals rows (kind request: Upload / Not yet) on their Studio page.
+// Upload -> a Got it card to look in the Content Inbox. Not yet -> asked once more a week later.
+const ASKS = [
+  { id: 'logo', title: 'Your logo files', detail: 'The original logo files (SVG, AI, EPS or a large PNG) so every post and page uses the real thing.' },
+  { id: 'photos', title: 'A few photos', detail: 'Ten or so photos of your people, space or work. Phone photos are fine.' },
+  { id: 'access', title: 'Access to your accounts', detail: 'Add hello@openframe.design to your Instagram, Facebook and website so I can post and fix things for you.' },
+];
 const FILE = path.join(L.STATE, 'onboarding.json');
 const MAIL = { type: 'object', additionalProperties: false, required: ['subject', 'body'], properties: { subject: { type: 'string' }, body: { type: 'string' } } };
 
@@ -49,6 +56,9 @@ async function run() {
         fs.writeFileSync(cf, JSON.stringify(clients, null, 2) + '\n');
       }
       if (lead.email) await L.hub('client-add', { client: lead.org || lead.name, brand: slug, contact_email: lead.email });
+      const due = new Date(Date.now() + 7 * 864e5).toISOString().slice(0, 10);
+      await L.approval(ASKS.map(a => ({ id: `onboard-${slug}-${a.id}`, client: slug, kind: 'request', title: a.title, detail: a.detail,
+        due, client_ok: 'yes', made_by: 'onboard', status: 'client' })));
     }
     const age = Math.floor((Date.now() - new Date(s.start)) / 864e5);
     for (const step of STEPS.filter(x => x.day <= age && !s.done.includes(x.id))) {
@@ -64,8 +74,35 @@ async function run() {
       await L.logRun({ loop: 'onboard', client: s.slug, status: 'ok', made: 1, kept: 1, cards: 1, note: step.id });
     }
   }
+  await followAsks(state);
   fs.writeFileSync(FILE, JSON.stringify(state, null, 2) + '\n');
   L.pushState('Loops: onboarding', ['loops/clients.json']);
+}
+
+// The answers to the day 0 asks. Upload -> Got it card for Graham. Not yet -> one more ask after 7 days, then a Got it card for Graham.
+async function followAsks(state) {
+  const rows = await L.approvals({ made_by: 'onboard', status: ['approved', 'skipped', 'changes'] });
+  for (const r of rows) {
+    const s = Object.values(state).find(x => r.id.startsWith(`onboard-${x.slug}-`));
+    if (!s) continue;
+    s.asks = s.asks || {};
+    if (s.asks[r.id]) continue;
+    if (r.status === 'approved') {
+      await L.hub('add', { rows: [{ id: `${r.id}-in`, loop: 'onboard', client: s.slug, kind: 'onboarding', status: 'todo',
+        title: `${r.client}: ${r.title.toLowerCase()} sent`, body: 'They said they uploaded it. Check the Content Inbox and file it in brands/' + s.slug + '/.' + (r.comment ? ' Their note: ' + r.comment : '') }] });
+      s.asks[r.id] = 'in';
+    } else if (/-again$/.test(r.id)) {
+      await L.hub('add', { rows: [{ id: `${r.id}-you`, loop: 'onboard', client: s.slug, kind: 'onboarding', status: 'todo',
+        title: `${r.client}: still waiting on ${r.title.toLowerCase()}`, body: 'Asked twice. Worth a quick call or a text.' + (r.comment ? ' Their note: ' + r.comment : '') }] });
+      s.asks[r.id] = 'graham';
+    } else if (Date.now() - new Date(r.updated || Date.now()) >= 7 * 864e5) {
+      const base = ASKS.find(a => r.id.endsWith('-' + a.id));
+      if (!base) continue;
+      await L.approval({ id: `${r.id}-again`, client: s.slug, kind: 'request', title: base.title, detail: base.detail + ' Whenever you have a minute.',
+        due: new Date(Date.now() + 7 * 864e5).toISOString().slice(0, 10), client_ok: 'yes', made_by: 'onboard', status: 'client' });
+      s.asks[r.id] = 'asked again';
+    }
+  }
 }
 
 module.exports = { run };

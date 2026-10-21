@@ -7,6 +7,7 @@ How to write a row:
 - **Loops on the Mac**: `L.approval({...})` in `lib.js`. It checks the kind, sets `client_ok` by the rules, never writes `answer` / `comment` / `updated`, and skips an `id` that's already there.
 - **n8n or anything else**: POST `{ key, fn: 'loops', action: 'approval-add', rows: [...] }` to the Hub.
 - **Read the answer back**: `L.approvals({ made_by, status })` or `action: 'approval-list'`.
+- **Old Loops card with the same `id`**: Graham's answer there (Yes / Send / Got it, Change, Pass) is copied into the row while it waits on him, so both places agree.
 
 `client_ok` rules (enforced in the Hub, so every writer gets them):
 
@@ -42,8 +43,8 @@ Graham-only planning cards have no kind in the list: weekly ideas, scripts, tren
 
 1. Queue sync (posts, reels, newsletters). **Built first.**
 2. Sensitive replies (Inbox sync in the Hub, same hourly run). **Built.**
-3. Requests for photos or info.
-4. Quotes (proposal loop).
+3. Requests for photos or info (`onboard.js` day 0: logo files, photos, account access). **Built.** Content plan asks: monthly content loop.
+4. Quotes (`proposal.js`). **Built.**
 5. Reports.
 6. Brand deals.
 7. Reposts.

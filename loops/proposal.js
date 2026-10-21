@@ -57,10 +57,35 @@ async function tick() {
     await L.hub('add', { rows: [{ id: `proposal-${L.slug(lead.id)}`, loop: 'proposal', client: 'open-frame', kind: 'proposal email', title: `Proposal for ${lead.org || lead.name}`,
       to: lead.email || '', subject: `Your plan from Open Frame`, body, why: `${p.plan} plan, ${money(monthly)}/mo. Page: ${url}`, link: url,
       status: lead.email ? 'card' : 'todo', ask: lead.email ? 'Send the proposal? Open the page first if you want to check it.' : 'No email on file. Send this link yourself.' }] });
+    // The quote for Studio (kind quote, always signed by the client). Same id as the email card, so Send there moves it to the client.
+    await L.approval({ id: `proposal-${L.slug(lead.id)}`, client: lead.org || lead.name, kind: 'quote', title: `Your ${p.plan} plan from Open Frame`,
+      detail: `${money(monthly)} a month${np ? ' (10% nonprofit rate)' : ''}, plus ${money(setup)} one-time setup. 3-month minimum, then 30 days' notice.`,
+      job: p.plan, preview: url, due: new Date(Date.now() + 7 * 864e5).toISOString().slice(0, 10), made_by: 'proposal', status: 'draft' });
     done[lead.id] = url;
     await L.logRun({ loop: 'proposal', client: 'open-frame', status: 'ok', made: 1, kept: 1, cards: 1, note: `${lead.id} ${p.plan}` });
   }
+  await signed(done);
   fs.writeFileSync(FILE, JSON.stringify(done, null, 2));
+}
+
+// Signed in Studio -> the lead is won (onboarding starts on its next run). Still unsigned 7 days after it reached them -> one Got it card.
+async function signed(done) {
+  const rows = await L.approvals({ made_by: 'proposal', status: ['approved', 'client'] });
+  const seen = done._quotes = done._quotes || {};
+  for (const r of rows) {
+    const leadId = Object.keys(done).find(k => k !== '_quotes' && `proposal-${L.slug(k)}` === r.id);
+    if (!leadId || seen[r.id] === 'won') continue;
+    if (r.status === 'approved') {
+      await L.hub('lead-set', { id: leadId, fields: { stage: 'won' } });
+      seen[r.id] = 'won';
+      await L.logRun({ loop: 'proposal', client: 'open-frame', status: 'ok', made: 0, kept: 0, cards: 0, note: `${leadId} signed in Studio` });
+    } else if (!seen[r.id]) seen[r.id] = new Date().toISOString();
+    else if (seen[r.id] !== 'nudged' && Date.now() - new Date(seen[r.id]) >= 7 * 864e5) {
+      await L.hub('add', { rows: [{ id: `${r.id}-nudge`, loop: 'proposal', client: 'open-frame', kind: 'proposal', status: 'todo',
+        title: `${r.client} hasn't signed yet`, body: `The quote went to them a week ago: ${r.preview}. A short note or a call usually does it.` }] });
+      seen[r.id] = 'nudged';
+    }
+  }
 }
 
 module.exports = { tick, PLANS };
