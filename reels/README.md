@@ -3,7 +3,7 @@
 Film a talking head on the iPhone, AirDrop it to the Mac, and a finished Reel draft shows up as a Hub card. Tap yes and the poster puts it on Instagram and Facebook. Free tools only.
 
 ## How it works
-1. AirDrop lands the video in `~/Downloads`.
+1. AirDrop lands the video in `~/Downloads`. The watcher also checks `~/Downloads/Video`, where the Downloads sorter moves videos, and edits from its own copy so a move mid-edit is fine.
 2. `reel-watch.js` (pm2 process `reel-watch`) sees a new `.mov`/`.mp4` once it stops growing. It skips clips under 8 s or over 3 min, and clips with fewer than 12 spoken words.
 3. `editor/thedit.py transcribe` cuts ums, dead air, stutters and restarted lines.
 4. LM Studio on the Mac (`google/gemma-4-e4b`) writes the hook (one *accent* word), the cover headline and a caption that ends with the CTA and the full https:// link on its own line. It also plans 2 to 4 graphics, one per idea, each on its spoken word (pass 4).
