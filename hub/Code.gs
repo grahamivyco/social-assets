@@ -158,7 +158,7 @@ const STUDIO_CODE_MIN = 15;
 const GOOGLE_CLIENT_ID = '444041586250-vmsnmvs3glhetpoidhb11r4g7ds4rfd8.apps.googleusercontent.com';
 const SESSION_HEAD = ['session', 'email', 'role', 'brand', 'created', 'expires', 'last_used'];
 // What a signed-in admin can run. Each takes the admin key first; the Studio never sees the key, the server adds it.
-const STUDIO_ADMIN_FNS = { getDashboard, adminPost, adminTopic, adminCaption, adminReply, adminEngage, adminLead, adminPhoto, adminNotifyClient, adminGraphic, adminLoop, studioResults, studioReels, studioStatus, adminReelAsk, studioApprovals, adminApproval };
+const STUDIO_ADMIN_FNS = { getDashboard, adminPost, adminTopic, adminCaption, adminReply, adminEngage, adminLead, adminPhoto, adminNotifyClient, adminGraphic, adminLoop, studioResults, studioReels, studioStatus, adminReelAsk, studioApprovals, adminApproval, adminNudge };
 
 function studioApi_(b) {
   try {
@@ -168,6 +168,7 @@ function studioApi_(b) {
     if (b.op === 'link') return studioLink_(String(b.token || ''));
     if (b.op === 'config') return { google: GOOGLE_CLIENT_ID || PropertiesService.getScriptProperties().getProperty('GOOGLE_CLIENT_ID') || '' };
     if (b.op === 'google') return studioGoogle_(String(b.credential || ''));
+    if (b.op === 'review') return studioReview_(String(b.r || ''));
     const s = studioSession_(String(b.s || ''));
     if (b.op === 'me') return { who: s.who };
     if (b.op === 'out') { withLock_(() => setCells_(s.t, s.r._row, { expires: new Date().toISOString() })); return { ok: true }; }
@@ -1380,6 +1381,86 @@ function answerApproval_(t, r, label, comment, byGraham) {
   return approvalView_(r);
 }
 
+// ---------- Studio v1: emails for what's waiting on a client ----------
+// Only for clients with studio = yes in the Clients tab (the trial). Everyone else keeps the old review email.
+// Each item in the email has its buttons. A button opens the client's Studio page through their private review link
+// (signs them in), with that item open and the button picked, so it's one more tap to send. Nothing is answered by
+// just opening the email link, so mail scanners that open links can't approve anything.
+const APPROVAL_MAILED = 'APPROVAL_MAILED';
+
+// The review link (14 days, one per address) also signs that address into Studio.
+function studioReview_(code) {
+  try { return studioStart_(clientByLink_(code, true).email); }
+  catch (e) { return { error: e.expired ? 'That link expired. Sign in with your email instead.' : 'That link is not active. Sign in with your email instead.' }; }
+}
+
+// daily (urgentCheck, 8:00): email clients only about items they haven't been emailed about yet.
+// weekly (checkIn): a reminder about everything still waiting, unless they got an email in the last 6 days.
+function approvalEmails_(weekly) {
+  const props = PropertiesService.getScriptProperties(), mailed = JSON.parse(props.getProperty(APPROVAL_MAILED) || '[]');
+  const rows = approvalsTable_().rows.filter(r => r.id && r.status === 'client'), links = linksTable_().rows;
+  clients_().filter(c => c.studio && c.contact_email).forEach(c => {
+    const mine = rows.filter(r => r.client === c.client);
+    if (!mine.length) return;
+    if (weekly ? links.some(x => x.brand === c.brand && within_(x.created, 6)) : mine.every(r => mailed.indexOf(r.id) >= 0)) return;
+    try { sendApprovalEmail_(c, mine, !weekly); mine.forEach(r => mailed.push(r.id)); } catch (e) { Logger.log(c.client + ': ' + e.message); }
+  });
+  props.setProperty(APPROVAL_MAILED, JSON.stringify(uniq_(mailed).slice(-500)));
+}
+
+// Graham's Nudge on Home: the email again, now. At most once an hour per client.
+function adminNudge(key, client) {
+  checkKey_(key);
+  const c = clients_().find(x => x.client === client || x.brand === client);
+  if (!c || !c.contact_email) throw new Error('Add a contact email for this client in the Clients tab first.');
+  if (linksTable_().rows.some(x => x.brand === c.brand && within_(x.created, 1 / 24))) throw new Error(c.client + ' got an email in the last hour. Give it a bit.');
+  const mine = approvalsTable_().rows.filter(r => r.id && r.status === 'client' && r.client === c.client);
+  if (!mine.length) throw new Error('Nothing is waiting on ' + c.client + ' right now.');
+  sendApprovalEmail_(c, mine, false);
+  return 'sent';
+}
+
+function sendApprovalEmail_(c, rows, fresh) {
+  const emails = emails_(c.contact_email);
+  if (!emails.length) throw new Error('No contact email on file.');
+  rows = rows.slice().sort(byDue_);
+  const esc = v => String(v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  const n = rows.length, what = n === 1 ? '1 thing' : n + ' things';
+  const due = rows.map(r => r.due).filter(Boolean)[0];
+  // A plain date is read at noon so it stays the same day in Chicago.
+  const ask = due ? 'The first one is due ' + Utilities.formatDate(new Date(/^\d{4}-\d{2}-\d{2}$/.test(due) ? due + 'T12:00:00' : due), TZ, 'EEEE, MMMM d') + '.' : 'Each one takes a minute.';
+  const subject = c.client + ': ' + what + (fresh ? ' ready for you' : ' still waiting on you');
+  emails.forEach(email => {
+    const code = withLock_(() => newLink_(c.brand, email)).split('#')[1];
+    const go = (r, label) => STUDIO_URL + '#r=' + code + (r ? '&i=' + encodeURIComponent(r.id) + '&b=' + encodeURIComponent(label) : '');
+    const items = rows.slice(0, 6).map(r => {
+      const bs = approvalButtons_(r), yes = bs.find(b => b[1] === 'ok' || b[1] === 'open'), change = bs.find(b => b[1] === 'change');
+      const img = /\.(jpe?g|png|webp|gif)(\?|$)/i.test(r.preview) ? '<img src="' + esc(r.preview) + '" alt="" style="display:block;width:100%;border-radius:14px;margin:0 0 14px">' : '';
+      const btn = (b, dark) => '<a href="' + esc(go(r, b[0])) + '" style="display:inline-block;margin:0 6px 6px 0;text-decoration:none;font-weight:600;font-size:14px;padding:10px 18px;border-radius:100px;'
+        + (dark ? 'background:#111110;color:#f3f1ea;border:1px solid #111110' : 'background:#fff;color:#111110;border:1px solid #d9d5c9') + '">' + esc(b[0]) + '</a>';
+      return '<div style="text-align:left;border:1px solid #e2ded2;border-radius:20px;padding:18px;margin:0 0 12px">' + img
+        + '<p style="font-weight:600;font-size:16px;margin:0 0 4px">' + esc(r.title) + '</p>'
+        + (r.detail ? '<p style="color:#4b4a46;font-size:14px;line-height:1.5;margin:0 0 12px">' + esc(r.detail) + '</p>' : '')
+        + (yes ? btn(yes, true) : '') + (change ? btn(change, false) : '') + '</div>';
+    }).join('');
+    const more = n > 6 ? '<p style="color:#4b4a46;font-size:14px;margin:4px 0 0">And ' + (n - 6) + ' more on your page.</p>' : '';
+    const html = '<div style="background:#f3f1ea;padding:32px 16px;font-family:Inter,Helvetica,Arial,sans-serif;color:#111110">'
+      + '<div style="max-width:520px;margin:0 auto;background:#fff;border:1px solid #e2ded2;border-radius:20px;padding:32px 24px;text-align:center">'
+      + '<img src="https://openframe.design/icon-192.png" width="44" height="44" alt="Open Frame" style="display:block;margin:0 auto 20px">'
+      + '<p style="font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:#4b4a46;margin:0 0 8px">' + esc(c.client) + '</p>'
+      + '<h1 style="font-family:Georgia,serif;font-weight:500;font-size:26px;line-height:1.25;margin:0 0 12px">' + esc(what) + (fresh ? ' ready for you' : ' still waiting on you') + '</h1>'
+      + '<p style="color:#4b4a46;font-size:16px;line-height:1.55;margin:0 0 24px">Tap a button and your page opens on that item. ' + esc(ask) + '</p>'
+      + items + more
+      + '<a href="' + esc(go()) + '" style="display:inline-block;margin-top:18px;color:#111110;font-weight:600;font-size:15px">Open your page</a>'
+      + '<p style="color:#84827b;font-size:13px;line-height:1.5;margin:22px 0 0">These links are just for ' + esc(email) + ' and work for ' + LINK_DAYS + ' days. No password needed.</p>'
+      + '</div>'
+      + '<p style="max-width:520px;margin:18px auto 0;text-align:center;color:#84827b;font-size:12px;line-height:1.5">Open Frame · <a href="https://openframe.design" style="color:#84827b">openframe.design</a><br>Questions? Just reply to this email.</p></div>';
+    const text = what + (fresh ? ' ready for you. ' : ' still waiting on you. ') + ask + '\n\n' + rows.slice(0, 6).map(r => '- ' + r.title).join('\n')
+      + '\n\nOpen your page:\n\n' + go() + '\n\nThis link is just for ' + email + ' and works for ' + LINK_DAYS + ' days.\n\nOpen Frame\nhttps://openframe.design';
+    MailApp.sendEmail({ to: email, name: FROM_NAME, replyTo: REPLY_TO, subject, body: text, htmlBody: html });
+  });
+}
+
 let approvalProjectsCache_;
 function approvalProjects_() { return approvalProjectsCache_ || (approvalProjectsCache_ = table_(hubId_(), 'Projects')); }
 // The client's monthly plan from the Projects tab, for the job column.
@@ -1718,13 +1799,13 @@ function checkIn() {
   if (CHECKIN_EVERY_WEEKS > 1 && Date.now() - last < (CHECKIN_EVERY_WEEKS * 7 - 1) * 864e5) return;
   checkInNow();
   props.setProperty('LAST_CHECKIN', String(Date.now()));
-  if (AUTO_SEND_CLIENTS) sendClientEmails_();
+  if (AUTO_SEND_CLIENTS) { sendClientEmails_(); try { approvalEmails_(true); } catch (e) { Logger.log('Approval emails: ' + e.message); } }
 }
 
 // Clients with posts waiting get a fresh link, at most once every 6 days.
 function sendClientEmails_() {
   const sent = linksTable_().rows;
-  clients_().filter(c => c.client_approves && c.contact_email).forEach(c => {
+  clients_().filter(c => c.client_approves && c.contact_email && !c.studio).forEach(c => {
     if (sent.some(x => x.brand === c.brand && within_(x.created, 6))) return;
     const q = table_(c.sheet_id, 'Queue');
     const waiting = q && q.rows.some(r => r.brand === c.brand && (r.status === 'in_review' || (r.status === 'plan' && !r.client_decision)));
@@ -1755,6 +1836,7 @@ function checkInNow() {
 
 // Daily, but only emails when something new can't wait for the check-in.
 function urgentCheck() {
+  try { approvalEmails_(false); } catch (e) { Logger.log('Approval emails: ' + e.message); }
   const d = getDashboard(adminKey_());
   const items = d.failed.map(g => ['f' + g.ids[0], g.clientName + ': the post for ' + g.when + " didn't go out."])
     .concat(d.fixes.filter(f => f.kind === 'stuck').map(f => ['s' + f.text, f.text]))
@@ -1871,7 +1953,7 @@ function clients_() {
   if (!t) return [];
   return t.rows.filter(r => r.brand).map(r => ({
     client: r.client || r.brand, brand: r.brand, sheet_id: r.sheet_id || hubId_(),
-    contact_email: r.contact_email || '', report_url: r.report_url || '', client_approves: /^(y|yes|true)$/i.test(r.client_approves || ''),
+    contact_email: r.contact_email || '', report_url: r.report_url || '', client_approves: /^(y|yes|true)$/i.test(r.client_approves || ''), studio: /^(y|yes|true)$/i.test(r.studio || ''),
     reel_music: String(r.reel_music || (r.brand === 'open-frame' ? 'app' : 'auto')).toLowerCase(),
   }));
 }
