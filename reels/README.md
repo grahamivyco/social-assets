@@ -44,3 +44,4 @@ Set `"preset": "one-take"` in `config.json` for the plain one-take look (no cuts
 
 ## Trial Reels (2026-10-21)
 Every Reel draft's Queue rows get `trial` = `yes`, so the poster sends the Instagram Reel as a Trial Reel (shown to non-followers first, `trial_params.graduation_strategy` = `SS_PERFORMANCE`, so it graduates to followers on its own if it does well). Set `"trial": false` in `config.json` to post normal Reels. Facebook ignores it.
+Reels posted from the phone (Hub `phone` status, PR #59, the default for Open Frame) skip the poster, so the "Post from your phone" card tells Graham to turn on Trial on the share screen instead.
