@@ -1172,7 +1172,15 @@ function results_(c) {
   const top = postsIn_(posts, month).filter(p => score_(p) != null).sort((a, b) => score_(b) - score_(a)).slice(0, 3)
     .map(p => ({ platform: p.platform, type: p.type, caption: String(p.caption || '').slice(0, 140), url: p.permalink,
       reach: num_(p.reach), likes: num_(p.likes), comments: num_(p.comments), saves: num_(p.saves), shares: num_(p.shares) }));
-  return { empty: false, month: label(month), prevMonth: label(prev), tiles, top, report_url: c.report_url, newsletter };
+  // Reach of the posts published each day, last 30 days (for the Analytics chart). Post stats keep growing after a post
+  // goes out, so this is "reach of that day's posts so far", not reach seen that day.
+  const since = Utilities.formatDate(new Date(Date.now() - 29 * 864e5), TZ, 'yyyy-MM-dd'), byDay = {};
+  posts.filter(p => String(p.published_at).slice(0, 10) >= since).forEach(p => {
+    const d = String(p.published_at).slice(0, 10), x = byDay[d] || (byDay[d] = { d, reach: 0, posts: 0 });
+    x.reach += num_(p.reach) || 0; x.posts++;
+  });
+  const daily = Object.keys(byDay).sort().map(k => byDay[k]);
+  return { empty: false, month: label(month), prevMonth: label(prev), tiles, top, daily, since, report_url: c.report_url, newsletter };
 }
 
 // One plain sentence from the "Newsletter stats" tab (Brevo, written by n8n). Same math as the PDF report (build-report.js).
