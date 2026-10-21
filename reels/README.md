@@ -41,3 +41,6 @@ Set `"preset": "one-take"` in `config.json` for the plain one-take look (no cuts
 - `reel-watch.js`: the watcher. `state.json` remembers which files it has seen (delete a line to redo one).
 - `editor/`: copy of the talking head editor from the project files, with env overrides for Mac paths. Fonts here are OFL (Fraunces, Inter, Manrope).
 - `build-workflow.py`: builds `n8n-reel-drafts.json`.
+
+## Trial Reels (2026-10-21)
+Every Reel draft's Queue rows get `trial` = `yes`, so the poster sends the Instagram Reel as a Trial Reel (shown to non-followers first, `trial_params.graduation_strategy` = `SS_PERFORMANCE`, so it graduates to followers on its own if it does well). Set `"trial": false` in `config.json` to post normal Reels. Facebook ignores it.

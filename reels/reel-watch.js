@@ -216,7 +216,7 @@ async function makeReel(file) {
   const base = `${C.pages}/${rel}/${id}`;
   await waitLive(`${base}-ig-reel.mp4`);
 
-  await tell({ kind: 'draft', id, brand: C.brand, hook: copy.hook.replace(/\*/g, ''), caption: copy.caption, alt_text: copy.alt_text, keywords: copy.keywords.join(', '),
+  await tell({ kind: 'draft', id, brand: C.brand, hook: copy.hook.replace(/\*/g, ''), caption: copy.caption, trial: C.trial !== false, alt_text: copy.alt_text, keywords: copy.keywords.join(', '),
     ig_url: `${base}-ig-reel.mp4`, fb_url: `${base}-fb-square.mp4`, preview_url: cover ? `${base}-cover.jpg` : '',
     source: path.basename(file), folder: dest });
   spawnSync('osascript', ['-e', `display notification "Reel draft ready for a yes in the Hub" with title "${id}"`]);

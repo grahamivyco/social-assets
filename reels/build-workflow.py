@@ -15,6 +15,8 @@ const at = day.set({ hour: 17 }).toISO({ suppressMilliseconds: true });
 const base = {
   brand: d.brand, type: 'reel', publish_at: at, caption: d.caption, status: 'in_review', month: day.toFormat('yyyy-MM'),
   pillar: 'reel', hook: d.hook, preview_url: d.preview_url, sensitive: 'yes', revision: 0,
+  // Trial Reel (Graham, 2026-10-21): shown to non-followers first; graduates to followers if it does well.
+  trial: d.trial === false ? 'no' : 'yes',
 };
 return [
   { json: { id: `${d.id}-ig`, platform: 'instagram', media_url: d.ig_url, ...base } },
