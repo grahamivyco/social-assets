@@ -11,6 +11,8 @@ Writes one folder per video:
   contact-sheet.jpg  one frame per shot with its time and on-screen text (read this, not the frames)
   frames/            the frames on their own
   words.json         every spoken word with its time
+  edit.md            how it's cut: transitions, camera moves, zooms, text timing, layout, color, beat sync (edit.py)
+  transitions.jpg    each transition frame by frame; timeline.jpg: frames over cut/motion/text/sound bars
   info.json          what the platform says (caption, likes, views, audio track)
   video.mp4          the download (kept so it can be re-cut or re-watched)
 """
@@ -253,6 +255,7 @@ def main():
     ap.add_argument("--note", default="", help="why this video was saved")
     ap.add_argument("--cookies", help="browser to borrow a login from: chrome, safari, firefox")
     ap.add_argument("--max-frames", type=int, default=24)
+    ap.add_argument("--no-edit", action="store_true", help="skip the edit breakdown (edit.md)")
     a = ap.parse_args()
 
     is_url = re.match(r"https?://", a.src)
@@ -292,6 +295,16 @@ def main():
         s["text"] = text.get(s["frame"], "")
     contact_sheet(work / "frames", shot_list, work / "contact-sheet.jpg")
     report(work, a.src, info, meta, words, lufs, shot_list, a.note)
+    if not a.no_edit:
+        try:
+            import edit
+            edit.run(work, video)
+            with open(work / "report.md") as f:
+                r = f.read()
+            (work / "report.md").write_text(r.replace("## Shot list", "Edit breakdown (transitions, motion, text timing, layout, color, beat): "
+                                                      "`edit.md`, `transitions.jpg`, `timeline.jpg`.\n\n## Shot list", 1))
+        except Exception as e:  # the report is still useful without it
+            print("edit breakdown skipped:", e, file=sys.stderr)
     with open(a.out / "index.md", "a") as f:
         f.write(f"- {datetime.date.today().isoformat()} [{info.get('title') or name}]({name}/report.md)"
                 f"{' · ' + a.note if a.note else ''}\n")
