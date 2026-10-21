@@ -38,6 +38,8 @@ function log(...a) { console.log(new Date().toISOString(), ...a); }
 const slug = s => String(s).toLowerCase().replace(/\*/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40) || 'reel';
 
 const state = readJSON(STATE, null) || { seen: {}, started: false };
+// A restart mid-edit leaves a clip 'working' forever: give it a fresh retry instead.
+for (const [k, v] of Object.entries(state.seen)) if (v === 'working') state.seen[k] = 'failed:1:0';
 function save() { fs.writeFileSync(STATE, JSON.stringify(state, null, 1)); }
 
 const DIRS = [C.downloads, ...(C.also || [])];
