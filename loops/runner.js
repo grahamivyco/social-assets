@@ -15,7 +15,7 @@ const MODS = {
   magnet: () => require('./magnet').tick, proposal: () => require('./proposal').tick, onboard: () => require('./onboard').run,
   directories: () => require('./grow').directories, events: () => require('./grow').events, gbp: () => require('./grow').gbp, templates: () => require('./grow').templates,
   proof: () => require('./later').proof, warmup: () => require('./later').warmup, retention: () => require('./later').retention, trends: () => require('./later').trends,
-  'key-radar': () => require('./key').radar, spotlight: () => require('./key').spotlight, deals: () => require('./deals').run,
+  'key-radar': () => require('./key').radar, spotlight: () => require('./key').spotlight, deals: () => require('./deals').run, boost: () => require('./boost').run,
 };
 const LAST = path.join(L.STATE, 'last-run.json');
 const DAYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];

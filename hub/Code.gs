@@ -536,7 +536,8 @@ function loopsApi_(b) {
       .sort((x, y) => score_(y) - score_(x))
       .map(p => ({ id: String(p.post_id || ''), url: p.permalink || '', platform: p.platform, type: p.type, published: String(p.published_at).slice(0, 10), caption: String(p.caption || '').slice(0, 200),
         reach: num_(p.reach), likes: num_(p.likes), comments: num_(p.comments), saves: num_(p.saves), shares: num_(p.shares), score: Math.round(score_(p)) }));
-    return { posts: rows.length, top: rows.slice(0, 5), weakest: rows.length > 5 ? rows.slice(-3) : [] };
+    const mid = rows.length ? rows[Math.floor(rows.length / 2)].score : null;   // sorted high to low, so this is the median
+    return { posts: rows.length, median: mid, top: rows.slice(0, 5), weakest: rows.length > 5 ? rows.slice(-3) : [] };
   }
   if (b.action === 'engage-list') {
     // New posts the scout found (Engage tab, outreach Sheet) + comments sent per handle in the last 14 days + Targets stage.
@@ -1339,6 +1340,8 @@ function syncApprovals_() {
   uniq_(all.map(c => c.sheet_id)).forEach(sid => {
     const ib = table_(sid, 'Inbox');
     if (ib) inboxDecisions_(all.filter(c => c.sheet_id === sid), ib, sid).forEach(x => ds.push(x));
+    const ph = table_(sid, 'Photo submissions');
+    if (ph) photoDecisions_(all.filter(c => c.sheet_id === sid), ph, sid).forEach(x => ds.push(x));
   });
   ds.forEach(([c, d]) => {
       const cur = byId[d.id];
@@ -1352,8 +1355,12 @@ function syncApprovals_() {
       // Studio changed the row since the last run: move the Queue or Inbox row to match, if it's still waiting.
       // Only Studio edits these rows after they're made, so any change since the last run is Studio's.
       const studio = seen[d.id] && seen[d.id].seen !== stamp(cur);
-      if (studio && (d.inbox ? applyStudioReply_ : applyStudioAnswer_)(d, cur)) { out.applied++; if (cur.status === 'approved' && d.queue) approvedAny = true; return remember_(seenT, seen, d.id, stamp(cur), now); }
+      if (studio && (d.inbox ? applyStudioReply_ : d.photo ? applyStudioPhoto_ : applyStudioAnswer_)(d, cur)) { out.applied++; if (cur.status === 'approved' && d.queue) approvedAny = true; return remember_(seenT, seen, d.id, stamp(cur), now); }
       const want = { status: d.status, title: d.title, detail: d.detail, preview: d.preview, due: approvalRow_(d, [c]).due };
+      // Inbox and photo rows have no "waiting on the client" state of their own, so a row Studio sent to the client stays there.
+      if (!d.queue && cur.status === 'client' && d.status === 'draft') want.status = 'client';
+      // A photo's to_post means Graham's yes or the client's; once the client approved it, it stays approved.
+      if (d.photo && cur.status === 'approved' && d.status === 'client') want.status = 'approved';
       const answerMoved = cur.status !== d.status || String(cur.answer || '') !== d.answer || String(cur.comment || '') !== String(d.comment || '');
       if (d.answer && answerMoved) Object.assign(want, { answer: d.answer, comment: d.comment, updated: d.updated || now });
       const diff = {};
@@ -1445,6 +1452,37 @@ function inboxDecisions_(cs, ib, sid) {
     }
     return [c, d];
   });
+}
+
+// Photos members send in (Photo submissions tab, n8n content submissions) are someone else's photos, so each needs a repost yes
+// from the client (client_ok always yes). Graham's Use on the old card = his yes, so it moves to the client.
+// Rows without a brand belong to the first client on that Sheet who signs off on their own posts.
+function photoDecisions_(cs, ph, sid) {
+  const owner = cs.find(c => c.client_approves) || cs[0];
+  return ph.rows.filter(r => r.file && ['new', 'to_post', 'skip', 'posted'].indexOf(r.status) >= 0).map(r => {
+    const c = cs.find(x => x.brand === r.brand) || owner, from = r.from_name || r.from_email || 'a member';
+    const status = { new: 'draft', to_post: 'client', posted: 'approved', skip: 'skipped' }[r.status];
+    const d = {
+      id: 'repost-' + hex_(String(r.received) + '|' + r.file).slice(0, 12), client: c.client, kind: 'repost',
+      title: 'Share a photo from ' + from, detail: [r.what || r.topic, r.caption ? 'Caption idea: ' + r.caption : ''].filter(Boolean).join('. ').slice(0, 300),
+      job: approvalJob_(c.brand, approvalProjects_()), preview: /^https:\/\//.test(r.file) ? r.file : '', client_ok: 'yes', made_by: 'content-submissions',
+      status, open: r.status === 'new', photo: { sheetId: sid, row: r._row, received: r.received, status: r.status },
+    };
+    if (status === 'approved' || status === 'skipped') { d.answer = status === 'approved' ? 'Approve' : 'Skip'; d.comment = ''; d.updated = ''; }
+    return [c, d];
+  });
+}
+
+// Studio's answer on a photo: Approve -> to_post, Skip -> skip. Sent to the client -> nothing to change yet.
+function applyStudioPhoto_(d, a) {
+  if (['new', 'to_post'].indexOf(d.photo.status) < 0) return false;
+  if (a.status === 'client') return true;
+  const set = { approved: 'to_post', skipped: 'skip' }[a.status];
+  if (!set) return false;
+  const t = table_(d.photo.sheetId, 'Photo submissions'), r = t.rows.find(x => x._row === d.photo.row && x.received === d.photo.received);
+  if (!r) return false;
+  setCells_(t, r._row, { status: set });
+  return true;
 }
 
 // Studio's answer on a reply: Send as is -> approved (n8n sends it), I'll handle it -> handled,

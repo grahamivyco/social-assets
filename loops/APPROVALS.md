@@ -27,8 +27,8 @@ How to write a row:
 | 6 | Website launches | `launch` | yes | Projects tab row for a website job reaches "staging ready" | Staging link ready | Approve to launch: Got it card for Graham to go live. Not yet: their note goes on a Graham card. |
 | 7 | Brand deals | `brand_deal` | yes, always | `triageMail` in the Hub: a reply from a brand in the Brands tab, or an email about sponsorship, collabs or UGC (a client forwarding one = their deal) | Offer arrives | Yes: acceptance email card for Graham. Not for us: polite no draft. Ask: Graham card. |
 | 8 | Sensitive replies | `reply` | yes for touchy (upset, press, donor, sponsor, refund) when the client approves their own posts, no for everyday | **Inbox sync** in the Hub (rows the n8n comment replies + DM inbox write with `needs_reply`) | A comment or DM gets flagged | Send as is: n8n sends it. Change: edited, then sent. I'll handle it: closed, nothing sent. |
-| 9 | Reposts | `repost` | yes, always | Content submissions (n8n) and photo posts when the photo isn't the client's own; `spotlight` in `key.js` | Submission flagged as someone else's | Approve: becomes a Queue post with credit. Skip: archived. |
-| 10 | Ad spend | `ad_spend` | yes, always | Boost check on report day (post beat 3x the median), Ad Grants builder | Monthly | Approve spend: Got it card for Graham to set it up. No: not suggested again for that post. |
+| 9 | Reposts | `repost` | yes, always | **Photo submissions sync** in the Hub (members' photos from the n8n content submissions workflow) | A photo comes in | Graham's Use = his yes, then the client's. Approve: `to_post`, it goes into a post (with credit). Skip: `skip`. |
+| 10 | Ad spend | `ad_spend` | yes, always | `boost.js` on the 2nd: a post that did 3x the client's median, only for clients with `boost_budget` in `clients.json` | Monthly | Approve spend: Got it card for Graham to set it up. No: not suggested again for that post. |
 | 11 | Photos or info from the client | `request` | yes | Monthly content plan (a slot with no real material), `onboard.js` (logins, logo files) | Plan day, onboarding day 0 | Upload: content intake fills the slot and closes the row. Not yet: one reminder at the next check-in. |
 | 12 | Hours | `hours` | yes | Money loop (n8n, business ops) on the 1st | Month end | Approve hours: invoice row. Question: Graham card. |
 | 13 | Quotes and agreements | `quote` | yes, always | `proposal.js` after a consult | Proposal page made | Sign: lead `won`, onboarding starts. No answer in 7 days: follow-up card. |
@@ -47,7 +47,7 @@ Graham-only planning cards have no kind in the list: weekly ideas, scripts, tren
 4. Quotes (`proposal.js`). **Built.**
 5. Reports (Hub: a new Clients `report_url` = one `report` row a month). **Built.**
 6. Brand deals (Hub `triageMail` writes the row, `deals.js` drafts the yes or no reply). **Built.**
-7. Reposts.
-8. Ad spend.
+7. Reposts (Hub sync of the Photo submissions tab). **Built.**
+8. Ad spend (`boost.js`, 2nd at 10:00, clients with `boost_budget` only). **Built.**
 9. Brand kit rounds, launches, kits.
 10. Hours and invoices (with the business ops money loop).
