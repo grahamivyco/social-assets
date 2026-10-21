@@ -44,3 +44,9 @@ At the top of `Code.gs`:
 - `CHECKIN_EVERY_WEEKS = 1` for weekly, `2` for every 2 weeks
 - `CHECKIN_DAY = 'MONDAY'`, `CHECKIN_HOUR = 9`
 After changing them, run `setup` again. A weekly check-in needs posts queued at least a week ahead (two weeks for every 2 weeks).
+
+## Loops (thread "Self-running agent loops")
+
+- `doPost` fn `loops`: `list` / `add` / `set` cards in the `Loops` tab, `log` a row in `Loop runs`, `stats` = a client's best and weakest posts from `Post stats` (same score as the report).
+- Cards: status `card` = Yes / Change / Pass, `todo` = Got it. Answers set `yes` / `change` / `pass` / `done`; the loop then marks it used (`scripted`).
+- Callers: social-assets `loops/` (runner.js on the Mac).

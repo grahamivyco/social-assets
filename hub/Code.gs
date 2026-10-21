@@ -44,6 +44,14 @@ const REPLY_TO = 'hello@openframe.design';
 // true = a lead card waiting is one of the things that can't wait (daily 8:00 email, only on days one is waiting).
 const LEADS_URGENT = true;
 const META_INBOX = 'https://business.facebook.com/latest/inbox/all';
+// "Graphics" tab, written by the graphics idea loop on Graham's Mac (social-assets reels/graphics/loop.js, thread "Instagram profile like Gustavus").
+// pitched -> Yes (approved) or Pass (passed) -> loop renders 3 stills (stills) -> pick A, B or C (picked) -> loop animates it (built, or check).
+// "Loops" tab: cards from any loop in social-assets loops/ (thread "Self-running agent loops"). One contract for every loop:
+// status card (Yes / Change / Pass) or todo (Got it) -> yes | change | pass | done -> the loop reads the answer and marks it used.
+// "Loop runs" tab: one row per loop run (what it made, what passed its own check), read by the weekly improvement review.
+const LOOP_HEAD = ['id', 'loop', 'client', 'kind', 'title', 'body', 'why', 'ask', 'link', 'status', 'note', 'created', 'updated'];
+const RUN_HEAD = ['at', 'loop', 'client', 'status', 'made', 'kept', 'cards', 'note'];
+const GFX_HEAD = ['id', 'client', 'video', 'at', 'line', 'kind', 'params', 'idea', 'why_new', 'status', 'note', 'looks', 'pick', 'accent', 'checks', 'built', 'created', 'updated'];
 
 // ---------- setup ----------
 
@@ -108,6 +116,128 @@ function doGet(e) {
   return HtmlService.createHtmlOutput('<p style="font-family:sans-serif;padding:24px">This link is not active. Ask Open Frame for a new one.</p>');
 }
 
+// The graphics loop on Graham's Mac talks to the Hub here. Body: JSON { key, fn: 'graphics', action, ... }.
+function doPost(e) {
+  let out;
+  try {
+    const b = JSON.parse((e && e.postData && e.postData.contents) || '{}');
+    checkKey_(b.key);
+    if (b.fn === 'graphics') out = withLock_(() => graphicsApi_(b));
+    else if (b.fn === 'loops') out = withLock_(() => loopsApi_(b));
+    else throw new Error('Unknown request');
+  } catch (x) { out = { error: x.message || String(x) }; }
+  return ContentService.createTextOutput(JSON.stringify(out)).setMimeType(ContentService.MimeType.JSON);
+}
+
+function graphicsTable_() {
+  const ss = SpreadsheetApp.openById(hubId_());
+  if (!ss.getSheetByName('Graphics')) {
+    const sh = ss.insertSheet('Graphics');
+    sh.getRange(1, 1, 1, GFX_HEAD.length).setValues([GFX_HEAD]).setFontWeight('bold');
+    sh.setFrozenRows(1);
+  }
+  return table_(hubId_(), 'Graphics');
+}
+
+function graphicsApi_(b) {
+  const t = graphicsTable_(), now = new Date().toISOString();
+  if (b.action === 'list') return { rows: t.rows.filter(r => r.id) };
+  if (b.action === 'add') {
+    let added = 0;
+    (b.rows || []).forEach(r => {
+      if (!r.id || t.rows.some(x => x.id === r.id)) return;
+      const row = Object.assign({}, r, { created: now, updated: now });
+      t.sh.appendRow(t.head.map(h => { const v = row[h] == null ? '' : row[h]; return typeof v === 'string' && /^[=+\-@]/.test(v) ? "'" + v : v; }));
+      t.rows.push(row); added++;
+    });
+    return { added };
+  }
+  if (b.action === 'set') {
+    const r = findRow_(t, 'id', b.id);
+    setCells_(t, r._row, Object.assign({}, b.fields || {}, { updated: now }));
+    return { ok: true };
+  }
+  throw new Error('Unknown graphics action');
+}
+
+function hubTab_(name, head) {
+  const ss = SpreadsheetApp.openById(hubId_());
+  if (!ss.getSheetByName(name)) {
+    const sh = ss.insertSheet(name);
+    sh.getRange(1, 1, 1, head.length).setValues([head]).setFontWeight('bold');
+    sh.setFrozenRows(1);
+  }
+  return table_(hubId_(), name);
+}
+const safeCell_ = v => (v == null ? '' : typeof v === 'string' && /^[=+\-@]/.test(v) ? "'" + v : v);
+
+// Loops API. list: cards (optionally by loop and status). add: new cards, skips ids already there. set: change fields.
+// log: one "Loop runs" row. stats: a client's best and weakest posts from the last `days` days (same score as the report).
+function loopsApi_(b) {
+  const now = new Date().toISOString();
+  if (b.action === 'log') {
+    const t = hubTab_('Loop runs', RUN_HEAD);
+    t.sh.appendRow(t.head.map(h => safeCell_(h === 'at' ? now : b.run && b.run[h])));
+    return { ok: true };
+  }
+  if (b.action === 'stats') {
+    const c = clients_().find(x => x.brand === b.client);
+    const pt = c && c.sheet_id ? table_(c.sheet_id, 'Post stats') : null;
+    const since = new Date(Date.now() - (Number(b.days) || 30) * 864e5).toISOString().slice(0, 10);
+    const rows = (pt ? pt.rows : []).filter(p => p.client === b.client && String(p.published_at).slice(0, 10) >= since && score_(p) != null)
+      .sort((x, y) => score_(y) - score_(x))
+      .map(p => ({ platform: p.platform, type: p.type, published: String(p.published_at).slice(0, 10), caption: String(p.caption || '').slice(0, 200),
+        reach: num_(p.reach), likes: num_(p.likes), comments: num_(p.comments), saves: num_(p.saves), shares: num_(p.shares), score: Math.round(score_(p)) }));
+    return { posts: rows.length, top: rows.slice(0, 5), weakest: rows.length > 5 ? rows.slice(-3) : [] };
+  }
+  const t = hubTab_('Loops', LOOP_HEAD);
+  if (b.action === 'list') return { rows: t.rows.filter(r => r.id && (!b.loop || r.loop === b.loop) && (!b.status || [].concat(b.status).indexOf(r.status) >= 0)) };
+  if (b.action === 'add') {
+    let added = 0;
+    (b.rows || []).forEach(r => {
+      if (!r.id || t.rows.some(x => x.id === r.id)) return;
+      const row = Object.assign({ status: 'card' }, r, { created: now, updated: now });
+      t.sh.appendRow(t.head.map(h => safeCell_(row[h])));
+      t.rows.push(row); added++;
+    });
+    return { added };
+  }
+  if (b.action === 'set') {
+    const r = findRow_(t, 'id', b.id);
+    setCells_(t, r._row, Object.assign({}, b.fields || {}, { updated: now }));
+    return { ok: true };
+  }
+  throw new Error('Unknown loops action');
+}
+
+// Yes / Change / Pass on a loop card, Got it on a todo card.
+function adminLoop(key, id, action, note) {
+  checkKey_(key);
+  const status = { yes: 'yes', change: 'change', pass: 'pass', done: 'done' }[action];
+  if (!status) throw new Error('Unknown answer');
+  return withLock_(() => {
+    const t = hubTab_('Loops', LOOP_HEAD), r = findRow_(t, 'id', id);
+    setCells_(t, r._row, { status, note: note || '', updated: new Date().toISOString() });
+    return 'ok';
+  });
+}
+
+// Yes / Pass on a pitched idea, A / B / C on the stills, Got it on a built one that needs a look.
+function adminGraphic(key, id, action, note) {
+  checkKey_(key);
+  return withLock_(() => {
+    const t = graphicsTable_(), r = findRow_(t, 'id', id);
+    const set = f => setCells_(t, r._row, Object.assign(f, { updated: new Date().toISOString() }));
+    if (action === 'yes') set({ status: 'approved', note: '' });
+    else if (action === 'change') set({ status: 'approved', note: note || '' });
+    else if (action === 'pass') set({ status: 'passed' });
+    else if (/^[abc]$/.test(action)) set({ status: 'picked', pick: action });
+    else if (action === 'ok') set({ status: 'built' });
+    else throw new Error('Unknown answer');
+    return 'ok';
+  });
+}
+
 // JSON for the review page on openframe.design. GET only, so the browser needs no preflight.
 function api_(p) {
   let out;
@@ -137,7 +267,7 @@ function getDashboard(key) {
   const clients = clients_();
   const byBrand = {};
   clients.forEach(c => { byBrand[c.brand] = c; });
-  const out = { clients: clients.map(c => ({ client: c.client, brand: c.brand, contact_email: c.contact_email, client_approves: c.client_approves })), topics: [], approve: [], review: [], feedback: [], failed: [], upcoming: [], inbox: [], engage: [], photos: [], fixes: [], leads: [], pipeline: {} };
+  const out = { clients: clients.map(c => ({ client: c.client, brand: c.brand, contact_email: c.contact_email, client_approves: c.client_approves })), topics: [], approve: [], review: [], feedback: [], failed: [], upcoming: [], inbox: [], engage: [], photos: [], fixes: [], leads: [], graphics: [], loops: [], pipeline: {} };
   const now = Date.now(), week = now + 7 * 864e5;
 
   uniq_(clients.map(c => c.sheet_id)).forEach(sid => {
@@ -182,6 +312,15 @@ function getDashboard(key) {
     id: r.post_id, handle: r.handle, url: r.post_url, caption: (r.caption || '').slice(0, 220), comment: r.draft_comment,
   }));
 
+  const gfx = SpreadsheetApp.openById(hubId_()).getSheetByName('Graphics') ? table_(hubId_(), 'Graphics') : null;
+  if (gfx) gfx.rows.filter(r => r.id && ['pitched', 'stills', 'check'].indexOf(r.status) >= 0).forEach(r => out.graphics.push({
+    id: r.id, status: r.status, video: r.video, line: r.line, idea: r.idea, why: r.why_new, kind: r.kind,
+    looks: String(r.looks || '').split(/\n/).filter(Boolean), checks: r.checks, at: r.at,
+  }));
+  const lp = SpreadsheetApp.openById(hubId_()).getSheetByName('Loops') ? table_(hubId_(), 'Loops') : null;
+  if (lp) lp.rows.filter(r => r.id && (r.status === 'card' || r.status === 'todo')).forEach(r => out.loops.push({
+    id: r.id, loop: r.loop, client: r.client, kind: r.kind, title: r.title, body: r.body, why: r.why, ask: r.ask, link: r.link, status: r.status,
+  }));
   clients.filter(c => c.client_approves && !c.contact_email)
     .forEach(c => out.fixes.push({ kind: 'setup', text: c.client + ' has no contact email in the Clients tab, so review emails can\'t go out.' }));
   health_().cards.forEach(h => out.fixes.push({ kind: 'health', text: h.text, link: h.link }));
@@ -526,10 +665,10 @@ function checkInNow() {
   const parts = [
     [d.topics.length, 'topic idea', 'topic ideas'], [d.approve.length, 'post', 'posts'], [d.inbox.length, 'message', 'messages'],
     [d.engage.length, 'comment to leave', 'comments to leave'], [d.photos.length, 'photo sent in', 'photos sent in'],
-    [d.leads.length, 'lead follow-up', 'lead follow-ups'],
+    [d.leads.length, 'lead follow-up', 'lead follow-ups'], [d.graphics.length, 'graphic idea', 'graphic ideas'],
     [d.failed.length + d.fixes.length, 'thing to fix', 'things to fix'],
   ].filter(p => p[0]).map(p => p[0] + ' ' + (p[0] === 1 ? p[1] : p[2]));
-  const total = d.topics.length + d.approve.length + d.inbox.length + d.engage.length + d.photos.length + d.leads.length + d.failed.length + d.fixes.length;
+  const total = d.topics.length + d.approve.length + d.inbox.length + d.engage.length + d.photos.length + d.leads.length + d.graphics.length + d.failed.length + d.fixes.length;
   const lines = total
     ? ['You have ' + total + ' to go through: ' + parts.join(', ') + '.', '', 'Tap Yes or Change on each one:', '', adminUrl_()]
     : ['Nothing needs you this time.'];
@@ -768,7 +907,7 @@ function mediaEl(urls, poster) {
     ? $('video', Object.assign({ src: u, controls: '', preload: 'metadata', playsinline: '' }, poster ? { poster } : {}))
     : $('img', { src: u, loading: 'lazy', alt: '' })));
 }
-// One card at a time. Each item: { label, body: [nodes], ask, yes: [text, fn], change: [text, placeholder, fn, prefill] | null, alt: [text, fn] (second button when there's no change), skip: [text, fn] | null }
+// One card at a time. Each item: { label, body: [nodes], ask, yes: [text, fn] (or picks: [[text, fn], ...] for a row of choices), change: [text, placeholder, fn, prefill] | null, alt: [text, fn] (second button when there's no change), skip: [text, fn] | null }
 function runQueue(items, box, countEl, onDone) {
   let i = 0;
   const show = () => {
@@ -779,8 +918,12 @@ function runQueue(items, box, countEl, onDone) {
     const busy = (b, fn) => { b.querySelectorAll('button').forEach(x => x.disabled = true); return fn().then(next, () => b.querySelectorAll('button').forEach(x => x.disabled = false)); };
     const card = $('div', { class: 'card' }, $('div', { class: 'label' }, it.label), ...it.body, $('div', { class: 'ask', text: it.ask }));
     const btns = $('div', { class: 'btns' });
-    btns.append($('button', { class: 'yes', text: it.yes[0], on: { click: () => busy(card, it.yes[1]) } }));
-    if (it.change) btns.append($('button', { text: it.change[0], on: { click: () => {
+    if (it.picks) {
+      it.picks.forEach(p => btns.append($('button', { class: 'yes', text: p[0], on: { click: () => busy(card, p[1]) } })));
+      btns.style.gridTemplateColumns = 'repeat(' + it.picks.length + ',1fr)';
+    } else btns.append($('button', { class: 'yes', text: it.yes[0], on: { click: () => busy(card, it.yes[1]) } }));
+    if (it.picks) { /* the picks are the buttons */ }
+    else if (it.change) btns.append($('button', { text: it.change[0], on: { click: () => {
       const ta = $('textarea', { placeholder: it.change[1] }); ta.value = it.change[3] || '';
       const send = $('button', { class: 'yes', text: 'Send', on: { click: () => { if (!ta.value.trim()) return ta.focus(); busy(card, () => it.change[2](ta.value.trim())); } } });
       const back = $('button', { text: 'Back', on: { click: show } });
@@ -855,6 +998,28 @@ function build(d) {
     else if (l.kind === 'ask_met') q.push({ label, body: [textEl(l.card)], ask: '', yes: ['We met', go('met')], change: null, alt: ['They didn\\'t show', go('noshow')], skip: null });
     else if (l.kind === 'ask_signed') q.push({ label, body: [textEl(l.card)], ask: '', yes: ['Yes, they signed', go('won')], change: null, alt: ['Not yet', go('notyet')], skip: ['No, close their file', go('lost')] });
     else q.push({ label, body: [textEl(l.card)], ask: '', yes: ['Got it', go('done')], change: null, skip: null });
+  });
+  d.graphics.forEach(g => {
+    const label = [$('b', { text: 'Graphic idea' }), g.video ? ' · ' + g.video : ''];
+    const go = a => () => call('adminGraphic', K, g.id, a, '');
+    if (g.status === 'pitched') q.push({ label, body: [$('div', { class: 'quote', text: '"' + g.line + '"' }), textEl(g.idea), g.why ? $('p', { class: 'mute', text: 'Why new: ' + g.why }) : ''],
+      ask: 'Make this graphic? You pick from 3 looks before anything animates.', yes: ['Yes', go('yes')],
+      change: ['Change', 'What should it show instead?', n => call('adminGraphic', K, g.id, 'change', n)], skip: ['Pass', go('pass')] });
+    else if (g.status === 'stills') q.push({ label, body: [$('div', { class: 'media many' }, g.looks.map((u, i) => $('figure', { style: 'margin:0' },
+      $('img', { src: u, loading: 'lazy', alt: '', style: 'background:#6b6b6b' }), $('figcaption', { class: 'mute', text: 'ABC'[i] })))), textEl(g.idea),
+      g.checks ? $('p', { class: 'note', text: 'Check: ' + g.checks }) : ''],
+      ask: 'Which look?', picks: [['A', go('a')], ['B', go('b')], ['C', go('c')]],
+      skip: ['Redo with a note', () => { const n = prompt('What should change?'); return n ? call('adminGraphic', K, g.id, 'change', n) : Promise.reject(new Error('')); }] });
+    else q.push({ label, body: [textEl(g.idea), $('p', { class: 'note', text: 'It built, but check this: ' + g.checks })], ask: '', yes: ['Got it', go('ok')], change: null, skip: null });
+  });
+  d.loops.forEach(l => {
+    const label = [$('b', { text: l.title || 'Loop' }), ' · ' + [l.client, l.kind].filter(Boolean).join(' · ')];
+    const go = a => () => call('adminLoop', K, l.id, a, '');
+    const body = [textEl(l.body), l.why ? $('p', { class: 'mute', text: 'Why: ' + l.why }) : '',
+      l.link ? $('p', {}, $('a', { class: 'link', href: l.link, target: '_blank', text: 'Open' })) : ''];
+    if (l.status === 'todo') q.push({ label, body, ask: l.ask || '', yes: ['Got it', go('done')], change: null, skip: null });
+    else q.push({ label, body, ask: l.ask || 'Go ahead?', yes: ['Yes', go('yes')],
+      change: ['Change', 'What should change?', n => call('adminLoop', K, l.id, 'change', n)], skip: ['Pass', go('pass')] });
   });
   d.photos.forEach(p => q.push({ label: [$('b', { text: p.from || 'Someone' }), ' · sent a photo'],
     body: [p.file ? $('img', { src: p.file, alt: '', style: 'width:100%;border-radius:10px;margin-bottom:10px' }) : '', $('p', { class: 'text', text: [p.what, p.issues ? 'Note: ' + p.issues : ''].filter(Boolean).join('\\n') })],
