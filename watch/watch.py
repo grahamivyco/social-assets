@@ -19,7 +19,8 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 EDITOR = Path(os.environ.get("WATCH_EDITOR", HERE.parent / "reels" / "editor"))
-OUT = Path(os.environ.get("WATCH_OUT", Path.home() / "Downloads" / "Open Frame" / "Watched"))
+# Inside "Open Frame LLC & Clients" because the Downloads sorter sweeps a loose "Open Frame" folder away.
+OUT = Path(os.environ.get("WATCH_OUT", Path.home() / "Downloads" / "Open Frame LLC & Clients" / "Watched"))
 FONT = EDITOR / "fonts" / "Inter-SemiBold.otf"
 SCENE = 0.27        # ffmpeg scene score that counts as a cut
 MIN_SHOT = 0.35     # shorter flashes are merged into the shot before
@@ -31,6 +32,12 @@ def run(cmd, **kw):
 
 def slug(s, n=40):
     return re.sub(r"[^a-z0-9]+", "-", str(s).lower()).strip("-")[:n] or "video"
+
+
+def handle(info):
+    """@handle without the @. Instagram gives a numeric id there, so fall back to the channel name."""
+    h = str(info.get("uploader_id") or "").lstrip("@")
+    return info.get("channel") or h if (not h or h.isdigit()) else h
 
 
 def clock(t):
@@ -204,7 +211,7 @@ def report(work, src, info, meta, words, lufs, shot_list, note):
         L += [f"> Why it was saved: {note}", ""]
     L += ["| | |", "|---|---|", f"| Source | {info.get('webpage_url') or src} |"]
     if info.get("uploader") or info.get("channel"):
-        L.append(f"| Creator | {info.get('uploader') or info.get('channel')} (@{info.get('uploader_id') or ''}) |")
+        L.append(f"| Creator | {info.get('uploader') or info.get('channel')} (@{handle(info)}) |")
     if info.get("upload_date"):
         u = info["upload_date"]; L.append(f"| Posted | {u[:4]}-{u[4:6]}-{u[6:]} |")
     for k, lbl in (("view_count", "Views"), ("like_count", "Likes"), ("comment_count", "Comments")):
@@ -261,7 +268,7 @@ def main():
     else:
         video = Path(a.src).expanduser().resolve()
         info = {"title": video.stem}
-    name = f"{datetime.date.today().isoformat()}-{slug(info.get('uploader_id') or info.get('uploader') or 'file', 20)}-" \
+    name = f"{datetime.date.today().isoformat()}-{slug(handle(info) or info.get('uploader') or 'file', 20)}-" \
            f"{slug(info.get('id') or video.stem, 24)}"
     work = a.out / name
     if work.exists():

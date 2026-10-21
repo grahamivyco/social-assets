@@ -10,8 +10,8 @@ Free tools on Graham's Mac: yt-dlp, ffmpeg, Parakeet speech model, Apple Vision 
 ## 1. Get the watch folder
 - Link or file: run `python3 ~/social-assets/watch/watch.py "<link or path>" --note "<why he saved it>"`.
   - If it says the download needs a login, run it again with `--cookies chrome`.
-- Already watched (shared from his phone): look in `~/Downloads/Open Frame/Watched/` (newest folder, or `index.md`).
-- From a cloud thread: request folder access to `~/Downloads/Open Frame/Watched` on his Mac and stage `report.md` + `contact-sheet.jpg`.
+- Already watched (shared from his phone): look in `~/Downloads/Open Frame LLC & Clients/Watched/` (newest folder, or `index.md`).
+- From a cloud thread: request folder access to `~/Downloads/Open Frame LLC & Clients/Watched` on his Mac and stage `report.md` + `contact-sheet.jpg`.
 
 ## 2. Read only what you need
 1. `report.md` first: numbers, hook, shot list with on-screen text and words, transcript.
