@@ -29,3 +29,10 @@ Token end date comes from `oauth/access_token_info`. If Meta gives no end date (
 `lead-followup.json`: Calendly booking emails and Targets replies become rows on the `Leads` tab of "Open Frame outreach"; an hourly planner drafts each lead's next follow-up as a Hub card; approved emails go out every 15 minutes over Gmail SMTP. Setup, sequence and columns: /mnt/project-files/business-ops/lead-followup/README.md (source: build-workflow.py + code/).
 
 Import from URL: https://raw.githubusercontent.com/grahamivyco/social-assets/main/n8n/lead-followup.json
+
+
+# Comment replies
+
+`comment-replies.json`: every 15 minutes reads comments on Open Frame's own IG + FB posts, hides spam, auto-replies to praise after a random 5 to 40 minute delay, and sends questions/leads to the Hub as cards. Max 10 replies an hour, never the same wording twice. Setup and modes: /mnt/project-files/comment-replies/README.md (source: build-workflow.py + code/).
+
+Import from URL: https://raw.githubusercontent.com/grahamivyco/social-assets/main/n8n/comment-replies.json
