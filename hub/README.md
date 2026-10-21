@@ -50,3 +50,4 @@ After changing them, run `setup` again. A weekly check-in needs posts queued at 
 - `doPost` fn `loops`: `list` / `add` / `set` cards in the `Loops` tab, `log` a row in `Loop runs`, `stats` = a client's best and weakest posts from `Post stats` (same score as the report).
 - Cards: status `card` = Yes / Change / Pass, `todo` = Got it. Answers set `yes` / `change` / `pass` / `done`; the loop then marks it used (`scripted`).
 - Callers: social-assets `loops/` (runner.js on the Mac).
+- Key accounts + deals (2026-10-21): `engage-list` puts Targets handles first and flags them `key`. `key-accounts` returns Targets with their last 3 Engage captions plus Inbox touches from the last 8 days. `brands-list` / `brand-set` read and update the Brands tab (outreach Sheet; columns like `pitched_at`, `pitch_kind`, `followed_up` are added on first write).

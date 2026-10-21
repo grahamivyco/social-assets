@@ -228,7 +228,11 @@ function loopsApi_(b) {
     const stage = {};
     (tg ? tg.rows : []).forEach(r => { if (r.handle) stage[String(r.handle).replace(/^@/, '')] = r.stage || ''; });
     const pick = r => ({ post_id: String(r.post_id), handle: r.handle, post_url: r.post_url, caption: String(r.caption || '').slice(0, 400) });
-    return { fresh: (e ? e.rows : []).filter(r => r.post_id && r.status === 'new').slice(0, Number(b.limit) || 15).map(pick),
+    // Key accounts first (Targets handles, not hashtag finds), then the freshest posts: a comment in the first hours gets seen.
+    const key = r => (stage[String(r.handle).replace(/^@/, '')] !== undefined ? 0 : 1);
+    const fresh = (e ? e.rows : []).filter(r => r.post_id && r.status === 'new')
+      .sort((x, y) => key(x) - key(y) || String(y.posted_at).localeCompare(String(x.posted_at)));
+    return { fresh: fresh.slice(0, Number(b.limit) || 15).map(r => Object.assign(pick(r), { key: !key(r) })),
       edits: (e ? e.rows : []).filter(r => r.status === 'sent' && r.ai_comment && String(r.sent_at) >= since && r.ai_comment !== r.draft_comment)
         .slice(-10).map(r => ({ ai: r.ai_comment, sent: r.draft_comment })),
       sent, stage, sentToday: (e ? e.rows : []).filter(r => r.status === 'sent' && String(r.sent_at).slice(0, 10) === new Date().toISOString().slice(0, 10)).length };
@@ -286,6 +290,32 @@ function loopsApi_(b) {
       const last = rows.map(r => r.decided_at).filter(Boolean).map(d => new Date(d).getTime()).sort().pop();
       return { client: c.client, brand: c.brand, results: results_(c), overdue: waiting, daysSinceAnswer: last ? Math.round((Date.now() - last) / 864e5) : null };
     }) };
+  }
+  if (b.action === 'brands-list') {
+    // Brand deals: the brand scout + contact finder rows (Brands tab, outreach Sheet).
+    const t = table_(OUTREACH_SHEET_ID, 'Brands');
+    return { rows: (t ? t.rows : []).filter(r => r.handle && (!b.statuses || b.statuses.indexOf(String(r.status).toLowerCase()) >= 0)).map(r => ({
+      handle: r.handle, name: r.name || r.handle, website: r.website, bio: String(r.bio || '').slice(0, 300), fit: String(r.fit || '').toLowerCase(), why: r.fit_why || r.why || '',
+      status: String(r.status || '').toLowerCase(), contact_email: r.contact_email, program_url: r.program_url, creators_seen: r.creators_seen,
+      pitched_at: String(r.pitched_at || ''), followed_up: r.followed_up || '' })) };
+  }
+  if (b.action === 'brand-set') {
+    const t = table_(OUTREACH_SHEET_ID, 'Brands'), r = findRow_(t, 'handle', b.handle);
+    setCells_(t, r._row, b.fields || {});
+    return { ok: true };
+  }
+  if (b.action === 'key-accounts') {
+    // Key accounts = Targets (ideal clients, partners). With what they posted lately and who reached out (Inbox).
+    const tg = table_(OUTREACH_SHEET_ID, 'Targets'), e = table_(OUTREACH_SHEET_ID, 'Engage');
+    const c = clients_().find(x => x.brand === (b.client || 'open-frame')), ib = c ? table_(c.sheet_id, 'Inbox') : null;
+    const h = s => String(s || '').replace(/^@/, '').trim().toLowerCase();
+    const accounts = (tg ? tg.rows : []).filter(r => r.handle && r.stage !== 'pass' && !/^TEMPLATE/.test(r.handle)).map(r => ({
+      handle: h(r.handle), name: r.name || r.org || '', stage: r.stage || '', notes: String(r.notes || '').slice(0, 200),
+      posts: (e ? e.rows : []).filter(x => h(x.handle) === h(r.handle)).slice(-3).map(x => String(x.caption || '').slice(0, 300)) }));
+    const keys = accounts.map(a => a.handle);
+    const touches = (ib ? ib.rows : []).filter(r => within_(r.received_at || r.timestamp, 8) && keys.indexOf(h(r.username || r.sender)) >= 0)
+      .map(r => ({ handle: h(r.username || r.sender), kind: r.kind || 'dm', text: String(r.text || '').slice(0, 200), at: String(r.received_at || r.timestamp) }));
+    return { accounts, touches };
   }
   if (b.action === 'results') { const c = clients_().find(x => x.brand === b.client); return c ? results_(c) : { empty: true }; }
   if (b.action === 'funnel') {

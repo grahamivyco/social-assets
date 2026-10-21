@@ -39,6 +39,8 @@ Sunday: weekly review -> lessons + prompt fixes -> next run
 | `site.js`, `magnet.js` | Monthly site + ChatGPT check; the free check form (`../check/`) runs a check, emails it, adds a lead. |
 | `proposal.js`, `onboard.js` | Proposal page + email after a consult (rate card prices only); day 0-90 onboarding cards after a yes. |
 | `grow.js` | Directories (3rd), local events (Mon, Yes adds to calendar), Google Business post (Thu), template saver (Fri). |
+| `key.js` | Key accounts: `key-radar` (weekdays 12:00, DM draft when a Targets account engages) and `spotlight` (Wed 10:00, one mission-driven org a week, asks their OK first). Measures key accounts reached, not followers. |
+| `deals.js` | Brand + UGC deals (weekdays 10:30): Brands tab rows -> pitch with 3 video ideas linking the UGC page (social-assets `ugc/`), email or Apply card, one follow-up after 7 days. No prices in writing. |
 | `later.js` | Built but `off` until there's data: proof posts, warm-up DMs, client health, trend Reels. |
 | `data/directories.json`, `tools/audit.js` | Free listings list; copy of the SEO thread's site check. |
 | `prompts/*.md` | What the local AI is told. The weekly review edits these. |
