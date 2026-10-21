@@ -363,6 +363,13 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
     if edit.get("hook") and not edit.get("pop") and not edit.get("title_box"):  # pop.js / title_png draw it otherwise
         ev.append(f"Dialogue: 1,{ts(0)},{ts(edit['hook_seconds'])},Hook,,0,0,0,,{{\\fad(0,200)}}{ass_text(edit['hook'].replace('*', ''))}")
     pos = f"{{\\an5\\pos({W // 2},{round(H * cap_y)})}}"
+    # edit.json "topic_line" (Graham, 2026-10-21): search keywords in small plain letters where the captions go,
+    # while the hook is up. Readable on purpose: Instagram reads on-screen text, and hidden text is a spam pattern.
+    if edit.get("topic_line"):
+        ts_end = edit["hook_seconds"] if edit.get("hook") else 2.5
+        tl = hlg_hex("ffffff") if edit.get("hdr") else "ffffff"
+        ev.append(f"Dialogue: 0,{ts(0)},{ts(ts_end)},Cap,,0,0,0,,{pos}{{\\fs{round(H * 0.026)}\\c{ass_color(tl)}}}"
+                  f"{ass_text(edit['topic_line'])}")
     seam = f"{{\\an5\\pos({W // 2},{H // 2})}}"
     on_split = lambda t: any(a <= t < b for a, b in edit.get("_split", []))
     # Graham, 2026-10-20: one word at a time, just the word being said, plain letters in the brand accent

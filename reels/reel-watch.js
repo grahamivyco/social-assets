@@ -82,6 +82,9 @@ Write:
 - hook: the on-screen title for the first 2.5 seconds. 3 to 7 words, sentence case, taken from the video's main point. Wrap exactly one word in *asterisks* as the accent.
 - headline: the cover headline, 2 to 5 words, may use \\n for a line break, exactly one *accent* word.
 - caption: the Instagram and Facebook caption. 2 to 4 short sentences in plain, friendly first person ("I" or "we"), about what the video says. No hashtags, no emoji, no em dashes, no hype words, no rhetorical question to open. End with this call to action on its own paragraph: "Book a free 30-min consult:" followed by a new line with exactly ${C.link}
+- keywords: 15 search phrases (1 to 3 words each, lowercase, no repeats) that someone would type into Instagram search to find this video, e.g. "nonprofit marketing". The first one is the main keyword.
+- The hook and the first sentence of the caption both use the main keyword in a natural way. Work 1 or 2 of the other keywords into the caption naturally. No keyword lists in the caption.
+- alt_text: one plain sentence describing what is on screen and what it is about, for screen readers, using the main keyword (e.g. "Graham from Open Frame talking to the camera about nonprofit marketing.").
 - topic: 2 to 4 words naming the video, for a file name.
 - scenes: 2 to 4 small animated graphics, one per idea in the video, each fired on a word that is actually spoken (copy it exactly from the transcript, one word, no ~~struck~~ words). kind is one of: marketing (a screen going off), design (an artboard), brand (a swatch fan), website (a browser window), social (a phone with likes), send (a paper airplane landing on "Done", for a call to talk). Use each kind once. label: 1 or 2 words shown with it.`;
   const res = await fetch(C.llm, {
@@ -89,8 +92,9 @@ Write:
     body: JSON.stringify({
       model: C.model, temperature: 0.4, messages: [{ role: 'user', content: prompt }],
       response_format: { type: 'json_schema', json_schema: { name: 'reel', strict: true, schema: {
-        type: 'object', additionalProperties: false, required: ['hook', 'headline', 'caption', 'topic', 'scenes'],
+        type: 'object', additionalProperties: false, required: ['hook', 'headline', 'caption', 'keywords', 'alt_text', 'topic', 'scenes'],
         properties: { hook: { type: 'string' }, headline: { type: 'string' }, caption: { type: 'string' }, topic: { type: 'string' },
+          keywords: { type: 'array', items: { type: 'string' } }, alt_text: { type: 'string' },
           scenes: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['word', 'kind', 'label'], properties: {
             word: { type: 'string' }, kind: { type: 'string', enum: ['marketing', 'design', 'brand', 'website', 'social', 'send'] },
             label: { type: 'string' } } } } } } } },
@@ -114,7 +118,14 @@ Write:
   if (!head || head.replace(/\*/g, '').split(/\s+/).length > 5) head = out.hook.replace(/\*/g, '').split(/\s+/).length <= 5 ? out.hook : head;
   out.headline = accent(head || out.hook);
   out.caption = tidy(out.caption);
+  out.keywords = [...new Set((out.keywords || []).map(k => tidy(k).toLowerCase().replace(/^#/, '').replace(/[^a-z0-9' -]/g, '').trim()).filter(Boolean))].slice(0, 15);
+  out.alt_text = tidy(out.alt_text || '').replace(/—/g, ',').trim();
   let cap = out.caption.replace(/\s*—\s*/g, ', ').replace(/https?:\/\/\S+/g, '').replace(/\n{3,}/g, '\n\n').trim();
+  // Graham, 2026-10-21: 15 keywords posted with every Reel, as one plain line above the call to action.
+  if (out.keywords.length) {
+    const kw = out.keywords.join(' · ');
+    cap = /book a free/i.test(cap) ? cap.replace(/\n*(book a free[^\n]*)$/i, `\n\n${kw}\n\n$1`) : `${cap}\n\n${kw}`;
+  }
   if (!/consult/i.test(cap)) cap += '\n\nBook a free 30-min consult:';
   out.caption = cap.replace(/:?\s*$/, ':') + `\n\n${C.link}`;
   return out;
@@ -171,7 +182,8 @@ async function makeReel(file) {
   }
   // config "preset" (e.g. "one-take") picks an editor preset; the preset turns graphics, cut-out and sound off itself.
   const look = C.preset ? { preset: C.preset } : { pop: true, cutout: true, sfx: true, keywords };
-  Object.assign(edit, { brand: C.brand, name: id, hook: copy.hook, ...look,
+  // Keywords (Graham, 2026-10-21): a small but readable line in the first seconds, so Instagram's text reading picks them up.
+  Object.assign(edit, { brand: C.brand, name: id, hook: copy.hook, ...look, topic_line: copy.keywords.slice(0, 3).join(' · '),
     cover: { ...(edit.cover || {}), headline: copy.headline } });
   fs.writeFileSync(path.join(work, 'edit.json'), JSON.stringify(edit, null, 2));
   run(C.python, [thedit, 'render', work], { env: editorEnv() });
@@ -187,7 +199,7 @@ async function makeReel(file) {
   encodeCopy(path.join(out, reel), path.join(dest, `${id}-ig-reel.mp4`), hdr);
   encodeCopy(path.join(out, square), path.join(dest, `${id}-fb-square.mp4`), hdr);
   for (const f of fs.readdirSync(out).filter(f => /-cover-(reel|square)\.jpg$/.test(f))) fs.copyFileSync(path.join(out, f), path.join(dest, f));
-  fs.writeFileSync(path.join(dest, 'caption.md'), `# ${copy.hook.replace(/\*/g, '')}\n\n${copy.caption}\n`);
+  fs.writeFileSync(path.join(dest, 'caption.md'), `# ${copy.hook.replace(/\*/g, '')}\n\n${copy.caption}\n\n## Keywords\n${copy.keywords.join(', ')}\n\n## Alt text\n${copy.alt_text}\n`);
 
   // Host the voice-only copies on GitHub Pages so the poster can send them to Meta.
   const rel = `reels/media/${id}`;
@@ -202,7 +214,7 @@ async function makeReel(file) {
   const base = `${C.pages}/${rel}/${id}`;
   await waitLive(`${base}-ig-reel.mp4`);
 
-  await tell({ kind: 'draft', id, brand: C.brand, hook: copy.hook.replace(/\*/g, ''), caption: copy.caption,
+  await tell({ kind: 'draft', id, brand: C.brand, hook: copy.hook.replace(/\*/g, ''), caption: copy.caption, alt_text: copy.alt_text, keywords: copy.keywords.join(', '),
     ig_url: `${base}-ig-reel.mp4`, fb_url: `${base}-fb-square.mp4`, preview_url: cover ? `${base}-cover.jpg` : '',
     source: path.basename(file), folder: dest });
   spawnSync('osascript', ['-e', `display notification "Reel draft ready for a yes in the Hub" with title "${id}"`]);
