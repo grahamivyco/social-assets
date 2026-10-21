@@ -27,7 +27,7 @@ mkdir -p "$REPO/mac/logs"
 if [ -n "${HUB_KEY:-}" ]; then
   node -e 'const fs=require("fs"),f=process.argv[1];let c={};try{c=JSON.parse(fs.readFileSync(f,"utf8"))}catch{};c.hub=process.argv[2];c.hubKey=process.argv[3];fs.writeFileSync(f,JSON.stringify(c,null,2)+"\n")' \
     "$REPO/reels/config.json" "$HUB_URL" "$HUB_KEY"
-  if curl -fsSL -X POST -H 'Content-Type: text/plain' -d "{\"key\":\"$HUB_KEY\",\"fn\":\"loops\",\"action\":\"list\",\"loop\":\"none\"}" "$HUB_URL" | grep -q '"rows"'; then
+  if curl -fsSL -H 'Content-Type: text/plain' -d "{\"key\":\"$HUB_KEY\",\"fn\":\"loops\",\"action\":\"list\",\"loop\":\"none\"}" "$HUB_URL" | grep -q '"rows"'; then
     echo "  Hub key works."
   else
     echo "  The Hub didn't accept that key (or the Hub needs its new version deployed). Status will show once it does."
