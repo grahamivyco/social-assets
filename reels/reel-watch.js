@@ -82,14 +82,18 @@ Write:
 - hook: the on-screen title for the first 2.5 seconds. 3 to 7 words, sentence case, taken from the video's main point. Wrap exactly one word in *asterisks* as the accent.
 - headline: the cover headline, 2 to 5 words, may use \\n for a line break, exactly one *accent* word.
 - caption: the Instagram and Facebook caption. 2 to 4 short sentences in plain, friendly first person ("I" or "we"), about what the video says. No hashtags, no emoji, no em dashes, no hype words, no rhetorical question to open. End with this call to action on its own paragraph: "Book a free 30-min consult:" followed by a new line with exactly ${C.link}
-- topic: 2 to 4 words naming the video, for a file name.`;
+- topic: 2 to 4 words naming the video, for a file name.
+- scenes: 2 to 4 small animated graphics, one per idea in the video, each fired on a word that is actually spoken (copy it exactly from the transcript, one word, no ~~struck~~ words). kind is one of: marketing (a screen going off), design (an artboard), brand (a swatch fan), website (a browser window), social (a phone with likes), send (a paper airplane landing on "Done", for a call to talk). Use each kind once. label: 1 or 2 words shown with it.`;
   const res = await fetch(C.llm, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       model: C.model, temperature: 0.4, messages: [{ role: 'user', content: prompt }],
       response_format: { type: 'json_schema', json_schema: { name: 'reel', strict: true, schema: {
-        type: 'object', additionalProperties: false, required: ['hook', 'headline', 'caption', 'topic'],
-        properties: { hook: { type: 'string' }, headline: { type: 'string' }, caption: { type: 'string' }, topic: { type: 'string' } } } } },
+        type: 'object', additionalProperties: false, required: ['hook', 'headline', 'caption', 'topic', 'scenes'],
+        properties: { hook: { type: 'string' }, headline: { type: 'string' }, caption: { type: 'string' }, topic: { type: 'string' },
+          scenes: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['word', 'kind', 'label'], properties: {
+            word: { type: 'string' }, kind: { type: 'string', enum: ['marketing', 'design', 'brand', 'website', 'social', 'send'] },
+            label: { type: 'string' } } } } } } } },
     }),
     signal: AbortSignal.timeout(180000),
   });
@@ -144,7 +148,14 @@ async function makeReel(file) {
   const day = new Date().toISOString().slice(0, 10);
   const id = `${C.brand === 'open-frame' ? 'of' : C.brand}-${day}-${slug(copy.topic)}`;
   const edit = readJSON(path.join(work, 'edit.json'), {});
-  Object.assign(edit, { brand: C.brand, name: id, hook: copy.hook, pop: true,
+  // Pass 4 (motion): one scene per idea, fired on its spoken word. Words the model made up are dropped.
+  const spoken = new Set(words.map(w => String(w.w).toLowerCase().replace(/[^a-z]/g, '')));
+  const keywords = {};
+  for (const sc of copy.scenes || []) {
+    const w = String(sc.word).toLowerCase().replace(/[^a-z]/g, '');
+    if (w && spoken.has(w)) keywords[w] = [sc.kind, String(sc.label).slice(0, 18)];
+  }
+  Object.assign(edit, { brand: C.brand, name: id, hook: copy.hook, pop: true, cutout: true, sfx: true, keywords,
     cover: { ...(edit.cover || {}), headline: copy.headline } });
   fs.writeFileSync(path.join(work, 'edit.json'), JSON.stringify(edit, null, 2));
   run(C.python, [thedit, 'render', work], { env: editorEnv() });

@@ -6,8 +6,8 @@ Film a talking head on the iPhone, AirDrop it to the Mac, and a finished Reel dr
 1. AirDrop lands the video in `~/Downloads`.
 2. `reel-watch.js` (pm2 process `reel-watch`) sees a new `.mov`/`.mp4` once it stops growing. It skips clips under 8 s or over 3 min, and clips with fewer than 12 spoken words.
 3. `editor/thedit.py transcribe` cuts ums, dead air, stutters and restarted lines.
-4. LM Studio on the Mac (`google/gemma-4-e4b`) writes the hook (one *accent* word), the cover headline and a caption that ends with the CTA and the full https:// link on its own line.
-5. `editor/thedit.py render` makes the IG Reel (1080x1920) and the FB square (2160x2160) with brand captions, title, graphics, cover and end card, following `editor/REEL-RULES.md`. Voice only, so trending audio can be added in the IG app.
+4. LM Studio on the Mac (`google/gemma-4-e4b`) writes the hook (one *accent* word), the cover headline and a caption that ends with the CTA and the full https:// link on its own line. It also plans 2 to 4 graphics, one per idea, each on its spoken word (pass 4).
+5. `editor/thedit.py render` makes the IG Reel (1080x1920) and the FB square (2160x2160) with brand captions, title, graphics, cover and end card, following `editor/REEL-RULES.md`. It cuts you out of the background so graphics sit behind your head (pass 2) and adds sound effects made in code under the voice (pass 5). Voice only, so trending audio can be added in the IG app.
 6. Voice-only copies at about 7 Mbps (under 25 MB) go to `~/Downloads/Open Frame/Reels/<id>/` with the covers and `caption.md`.
 7. The same copies are pushed to `reels/media/<id>/` in this repo, so GitHub Pages hosts them for the poster.
 8. The n8n workflow "Reel drafts" (`n8n-reel-drafts.json`, webhook `/webhook/reel-draft`) adds two Queue rows (IG and FB), status `in_review`, `sensitive` = yes so they never post without a yes. Slot: the next weekday from tomorrow at 17:00 Chicago without another Reel.
@@ -19,7 +19,7 @@ The footage color is never changed. HDR stays 10-bit HLG.
 
 ## Setup on the Mac (once)
 1. `git clone https://github.com/grahamivyco/social-assets ~/social-assets` (needs push access).
-2. `python3 -m pip install sherpa-onnx numpy pillow`, and `brew install ffmpeg` if it's missing. The speech model (about 640 MB) downloads on the first run.
+2. `python3 -m pip install sherpa-onnx onnxruntime numpy pillow`. ffmpeg and ffprobe must be on the PATH (on Graham's Mac: static builds from https://ffmpeg.martin-riedl.de in ~/.local/bin). The speech model (about 640 MB) downloads on the first run.
 3. `cd ~/social-assets/reels && npm i playwright-core@1.56.1 && npx playwright-core install chromium-headless-shell`.
 4. Copy `config.example.json` to `config.json` and set `chromium` and `pwCore`.
 5. `pm2 start reel-watch.js --name reel-watch && pm2 save`.
