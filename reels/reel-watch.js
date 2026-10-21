@@ -89,6 +89,21 @@ const editorEnv = () => ({
   ...(C.pwCore ? { PW_CORE: C.pwCore } : {}),
 });
 
+// LM Studio isn't running after a restart: start its server and load the model with its own CLI (lms), then retry once.
+const LMS = C.lms || `${HOME}/.lmstudio/bin/lms`;
+async function llmFetch(init) {
+  const go = () => fetch(C.llm, { method: 'POST', headers: { 'Content-Type': 'application/json' }, ...init, signal: AbortSignal.timeout(180000) });
+  try { return await go(); }
+  catch (e) {
+    if (!fs.existsSync(LMS)) throw new Error(`LM Studio isn't running (${e.message}). Open LM Studio and load ${C.model}.`);
+    log('LM Studio not answering, starting it:', e.message);
+    spawnSync(LMS, ['server', 'start'], { stdio: 'inherit', timeout: 60000 });
+    spawnSync(LMS, ['load', C.model, '--yes'], { stdio: 'inherit', timeout: 180000 });
+    try { return await go(); }
+    catch (e2) { throw new Error(`LM Studio isn't running and wouldn't start (${e2.message}). Open LM Studio and load ${C.model}.`); }
+  }
+}
+
 // Local AI writes the words. Graham still approves every Reel on a Hub card before it posts.
 async function writeCopy(transcript) {
   const prompt = `You help Open Frame, a design and marketing agency for mission-driven organizations (Minneapolis and Barcelona), turn a talking head video into an Instagram Reel.
@@ -106,7 +121,7 @@ Write:
 - scenes: 2 to 4 small animated graphics, one per idea in the video, each fired on a word that is actually spoken (copy it exactly from the transcript, one word, no ~~struck~~ words). kind is one of: marketing (a screen going off), design (an artboard), brand (a swatch fan), website (a browser window), social (a phone with likes), send (a paper airplane landing on "Done", for a call to talk). Use each kind once. label: 1 or 2 words shown with it.`;
   // config "copyRules": private house rules for the words (e.g. topics never to mention). Kept in config.json, not in git.
   const rules = `\n\nHouse rules for everything you write: don't lead with AI, say "systems". Only use facts that are in the transcript.${C.copyRules ? '\n' + C.copyRules : ''}`;
-  const res = await fetch(C.llm, {
+  const res = await llmFetch({
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       model: C.model, temperature: 0.4, messages: [{ role: 'user', content: prompt + rules }],
@@ -118,7 +133,6 @@ Write:
             word: { type: 'string' }, kind: { type: 'string', enum: ['marketing', 'design', 'brand', 'website', 'social', 'send'] },
             label: { type: 'string' } } } } } } } },
     }),
-    signal: AbortSignal.timeout(180000),
   });
   if (!res.ok) throw new Error(`LM Studio said ${res.status}. Is it running with ${C.model} loaded?`);
   const out = JSON.parse((await res.json()).choices[0].message.content);
@@ -251,7 +265,12 @@ async function tick() {
       let st;
       try { st = fs.statSync(file); } catch { continue; }  // moved away mid-scan
       const k = key(file, st.size);
-      if (state.seen[k] || (state.seen[file] && state.seen[file] !== 'failed')) continue;
+      const prev = state.seen[k];
+      // A failed clip gets 2 more tries, 10 minutes apart (e.g. LM Studio was closed).
+      const failed = typeof prev === 'string' && prev.startsWith('failed');
+      const [, tries = '1', at = '0'] = failed ? prev.split(':') : [];
+      if (prev && !(failed && Number(tries) < 3 && Date.now() - Number(at) > 10 * 60e3)) continue;
+      if (!prev && state.seen[file] && state.seen[file] !== 'failed') continue;
       // AirDrop writes the file over a few seconds: wait until its size holds still for one poll.
       if (sizes[file] !== st.size || Date.now() - st.mtimeMs < 20000) { sizes[file] = st.size; continue; }
       state.seen[k] = 'working'; save();
@@ -264,7 +283,7 @@ async function tick() {
         fs.rmSync(copy, { force: true });
       }
       catch (e) {
-        state.seen[k] = 'failed';
+        state.seen[k] = `failed:${failed ? Number(tries) + 1 : 1}:${Date.now()}`;
         log('FAILED', file, e.message);
         await tell({ kind: 'error', source: path.basename(file), detail: e.message }).catch(err => log('could not tell n8n:', err.message));
       }
