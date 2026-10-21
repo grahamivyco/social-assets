@@ -44,6 +44,11 @@ const REPLY_TO = 'hello@openframe.design';
 // true = a lead card waiting is one of the things that can't wait (daily 8:00 email, only on days one is waiting).
 const LEADS_URGENT = true;
 const META_INBOX = 'https://business.facebook.com/latest/inbox/all';
+// "Mail" tab, written by the n8n "Open Frame inbox sorter" (local AI on the Mac). triageMail (every 10 minutes) files each
+// email under a Gmail label, closes leads who ask not to be contacted, and puts AI replies in Gmail drafts.
+// Lead and client emails that need a reply become cards here. Nothing is sent without your Send.
+const MAIL_HEAD = ['message_id', 'received_at', 'from_email', 'from_name', 'subject', 'snippet', 'type', 'needs_reply', 'draft', 'optout', 'status', 'draft_id', 'thread_id', 'note', 'updated_at'];
+const MAIL_LABELS = { lead: 'Open Frame/Leads', client: 'Open Frame/Clients', money: 'Open Frame/Money', admin: 'Open Frame/Admin', noise: 'Open Frame/Noise', check: 'Open Frame/Check' };
 // "Graphics" tab, written by the graphics idea loop on Graham's Mac (social-assets reels/graphics/loop.js, thread "Instagram profile like Gustavus").
 // pitched -> Yes (approved) or Pass (passed) -> loop renders 3 stills (stills) -> pick A, B or C (picked) -> loop animates it (built, or check).
 // "Loops" tab: cards from any loop in social-assets loops/ (thread "Self-running agent loops"). One contract for every loop:
@@ -80,11 +85,13 @@ function setup() {
   linksTable_();
 
   ScriptApp.getProjectTriggers()
-    .filter(t => ['morningDigest', 'checkIn', 'urgentCheck', 'healthCheck'].indexOf(t.getHandlerFunction()) >= 0)
+    .filter(t => ['morningDigest', 'checkIn', 'urgentCheck', 'healthCheck', 'triageMail'].indexOf(t.getHandlerFunction()) >= 0)
     .forEach(t => ScriptApp.deleteTrigger(t));
   ScriptApp.newTrigger('checkIn').timeBased().onWeekDay(ScriptApp.WeekDay[CHECKIN_DAY]).atHour(CHECKIN_HOUR).inTimezone(TZ).create();
   ScriptApp.newTrigger('urgentCheck').timeBased().atHour(URGENT_HOUR).everyDays(1).inTimezone(TZ).create();
   ScriptApp.newTrigger('healthCheck').timeBased().everyHours(1).create();
+  ScriptApp.newTrigger('triageMail').timeBased().everyMinutes(10).create();
+  hubTab_('Mail', MAIL_HEAD);
   Logger.log('Setup done. Now deploy as a web app, then run emailMeMyLinks.');
 }
 
@@ -416,7 +423,7 @@ function getDashboard(key) {
   const clients = clients_();
   const byBrand = {};
   clients.forEach(c => { byBrand[c.brand] = c; });
-  const out = { clients: clients.map(c => ({ client: c.client, brand: c.brand, contact_email: c.contact_email, client_approves: c.client_approves })), topics: [], approve: [], review: [], feedback: [], failed: [], upcoming: [], inbox: [], engage: [], photos: [], fixes: [], leads: [], graphics: [], loops: [], pipeline: {} };
+  const out = { clients: clients.map(c => ({ client: c.client, brand: c.brand, contact_email: c.contact_email, client_approves: c.client_approves })), topics: [], approve: [], review: [], feedback: [], failed: [], upcoming: [], inbox: [], engage: [], photos: [], fixes: [], leads: [], graphics: [], loops: [], mail: [], pipeline: {} };
   const now = Date.now(), week = now + 7 * 864e5;
 
   uniq_(clients.map(c => c.sheet_id)).forEach(sid => {
@@ -456,6 +463,11 @@ function getDashboard(key) {
     }));
     leads.rows.filter(r => r.id).forEach(r => { const st = r.stage || 'talking'; out.pipeline[st] = (out.pipeline[st] || 0) + 1; });
   }
+  const mail = SpreadsheetApp.openById(hubId_()).getSheetByName('Mail') ? table_(hubId_(), 'Mail') : null;
+  if (mail) mail.rows.filter(r => r.message_id && r.status === 'drafted').forEach(r => out.mail.push({
+    id: r.message_id, who: r.from_name || r.from_email, email: r.from_email, type: r.type, subject: r.subject, snippet: r.snippet,
+    draft: r.draft_id ? r.draft : '', link: r.thread_id ? 'https://mail.google.com/mail/u/0/#all/' + r.thread_id : 'https://mail.google.com/',
+  }));
   const eng = table_(OUTREACH_SHEET_ID, 'Engage');
   if (eng) eng.rows.filter(r => r.status === 'drafted' && r.draft_comment).forEach(r => out.engage.push({
     id: r.post_id, handle: r.handle, url: r.post_url, caption: (r.caption || '').slice(0, 220), comment: r.draft_comment,
@@ -592,6 +604,75 @@ function adminLead(key, id, action, text) {
     if (text && action === 'send') set.body = text;
     set.updated_at = now;
     setCells_(t, r._row, set);
+    return 'ok';
+  });
+}
+
+// ---------- email (Mail tab) ----------
+
+function triageMail() {
+  withLock_(() => {
+    const t = hubTab_('Mail', MAIL_HEAD), now = new Date().toISOString();
+    const clientEmails = [].concat.apply([], clients_().map(c => emails_(c.contact_email)));
+    const done = {};
+    t.rows.forEach(r => { if (r.status && r.status !== 'new') done[r.message_id] = true; });
+    t.rows.filter(r => r.message_id && r.status === 'new').slice(0, 20).forEach(r => {
+      if (done[r.message_id]) return setCells_(t, r._row, { status: 'dup', updated_at: now });
+      done[r.message_id] = true;
+      const mid = String(r.message_id).replace(/^<|>$/g, '');
+      const th = GmailApp.search('rfc822msgid:' + mid, 0, 1)[0];
+      if (!th) { if (!within_(r.received_at, 2)) setCells_(t, r._row, { status: 'missing', updated_at: now }); return; }
+      const type = clientEmails.indexOf(String(r.from_email).toLowerCase()) >= 0 ? 'client' : (r.type || 'check');
+      if (MAIL_LABELS[type]) th.addLabel(GmailApp.getUserLabelByName(MAIL_LABELS[type]) || GmailApp.createLabel(MAIL_LABELS[type]));
+      const set = { type, thread_id: th.getId(), updated_at: now };
+      if (r.optout === 'yes') {
+        leadFromMail_(r, { stage: 'lost', status: '', notes: 'Asked not to be contacted (' + now.slice(0, 10) + ')' });
+        Object.assign(set, { status: 'done', note: 'Asked not to be contacted. Lead closed, no reply.' });
+      } else if ((type === 'lead' || type === 'client') && r.needs_reply === 'yes') {
+        if (r.draft) set.draft_id = mailMessage_(th, mid).createDraftReply(r.draft).getId();
+        set.status = 'drafted';
+        if (type === 'lead') leadFromMail_(r, {});
+      } else set.status = 'done';
+      setCells_(t, r._row, set);
+    });
+  });
+}
+
+function mailMessage_(th, mid) {
+  const msgs = th.getMessages();
+  return msgs.filter(m => String(m.getHeader('Message-ID') || '').indexOf(mid) >= 0)[0] || msgs[msgs.length - 1];
+}
+
+// A lead who emails joins the Leads tab once (the lead follow-up workflow then plans nudges). Later emails refresh last_contact.
+function leadFromMail_(r, extra) {
+  const t = table_(OUTREACH_SHEET_ID, 'Leads');
+  if (!t) return;
+  const email = String(r.from_email || '').toLowerCase(), now = new Date().toISOString();
+  const row = t.rows.find(x => String(x.email).toLowerCase() === email);
+  if (row) return setCells_(t, row._row, Object.assign({ last_contact: now, updated_at: now }, extra));
+  const v = Object.assign({ id: 'em:' + email, added: now, source: 'email', name: r.from_name || '', email, stage: 'talking', last_contact: now,
+    step: 'synced', notes: 'First email: ' + (r.subject || ''), updated_at: now }, extra);
+  t.sh.appendRow(t.head.map(h => safeCell_(v[h])));
+}
+
+function adminMail(key, id, action, text) {
+  checkKey_(key);
+  return withLock_(() => {
+    const t = hubTab_('Mail', MAIL_HEAD), r = findRow_(t, 'message_id', id), now = new Date().toISOString();
+    const drop = () => { if (r.draft_id) try { GmailApp.getDraft(r.draft_id).deleteDraft(); } catch (e) { /* already sent or deleted in Gmail */ } };
+    if (action === 'send') {
+      if (text || !r.draft_id) {
+        drop();
+        const th = GmailApp.getThreadById(r.thread_id);
+        mailMessage_(th, String(r.message_id).replace(/^<|>$/g, '')).createDraftReply(text || r.draft).send();
+      } else GmailApp.getDraft(r.draft_id).send();
+      setCells_(t, r._row, { status: 'sent', note: text ? 'edited before sending' : '', updated_at: now });
+      if (r.type === 'lead') leadFromMail_(r, {});
+    } else if (action === 'skip') {
+      drop();
+      setCells_(t, r._row, { status: 'skipped', updated_at: now });
+    } else if (action === 'done') setCells_(t, r._row, { status: 'done', updated_at: now });
+    else throw new Error('Unknown action');
     return 'ok';
   });
 }
@@ -815,10 +896,10 @@ function checkInNow() {
   const parts = [
     [d.topics.length, 'topic idea', 'topic ideas'], [d.approve.length, 'post', 'posts'], [d.inbox.length, 'message', 'messages'],
     [d.engage.length, 'comment to leave', 'comments to leave'], [d.photos.length, 'photo sent in', 'photos sent in'],
-    [d.leads.length, 'lead follow-up', 'lead follow-ups'], [d.graphics.length, 'graphic idea', 'graphic ideas'],
+    [d.mail.length, 'email to answer', 'emails to answer'], [d.leads.length, 'lead follow-up', 'lead follow-ups'], [d.graphics.length, 'graphic idea', 'graphic ideas'],
     [d.failed.length + d.fixes.length, 'thing to fix', 'things to fix'],
   ].filter(p => p[0]).map(p => p[0] + ' ' + (p[0] === 1 ? p[1] : p[2]));
-  const total = d.topics.length + d.approve.length + d.inbox.length + d.engage.length + d.photos.length + d.leads.length + d.graphics.length + d.failed.length + d.fixes.length;
+  const total = d.topics.length + d.approve.length + d.inbox.length + d.engage.length + d.photos.length + d.mail.length + d.leads.length + d.graphics.length + d.failed.length + d.fixes.length;
   const lines = total
     ? ['You have ' + total + ' to go through: ' + parts.join(', ') + '.', '', 'Tap Yes or Change on each one:', '', adminUrl_()]
     : ['Nothing needs you this time.'];
@@ -837,6 +918,7 @@ function urgentCheck() {
   const items = d.failed.map(g => ['f' + g.ids[0], g.clientName + ': the post for ' + g.when + " didn't go out."])
     .concat(d.fixes.filter(f => f.kind === 'stuck').map(f => ['s' + f.text, f.text]))
     .concat(d.inbox.map(m => ['m' + m.id, (m.who || 'Someone') + ' sent a message: ' + m.text.slice(0, 80)]))
+    .concat(d.mail.map(m => ['e' + m.id, (m.who || 'Someone') + ' emailed: ' + (m.subject || m.snippet).slice(0, 80)]))
     .concat(LEADS_URGENT ? d.leads.map(l => ['l' + l.id + '|' + l.step, (l.who || 'A lead') + ': ' + leadLine_(l)]) : []);
   const props = PropertiesService.getScriptProperties();
   const seen = JSON.parse(props.getProperty('URGENT_SEEN') || '[]');
@@ -1135,6 +1217,18 @@ function build(d) {
     yes: ['Copy and open', () => openPost(x, x.comment)],
     change: ['Change', 'Your comment', n => openPost(x, n), x.comment],
     skip: ['Skip this one', () => call('adminEngage', K, x.id, 'skip', '')] }));
+  d.mail.forEach(m => {
+    const label = [$('b', { text: m.who || 'Someone' }), ' · ' + (m.type === 'client' ? 'client' : 'lead') + ' email'];
+    const body = [$('p', { class: 'text', text: 'Subject: ' + m.subject }), $('div', { class: 'quote', text: m.snippet })];
+    const openGmail = () => { window.open(m.link, '_blank'); return call('adminMail', K, m.id, 'done', ''); };
+    if (m.draft) q.push({ label, body: body.concat([$('p', { class: 'text', text: 'Reply: ' + m.draft })]), ask: 'Send this reply?',
+      yes: ['Send', () => call('adminMail', K, m.id, 'send', '')],
+      change: ['Change', 'Your reply', n => call('adminMail', K, m.id, 'send', n), m.draft],
+      skip: ['Don\\'t reply', () => call('adminMail', K, m.id, 'skip', '')] });
+    else q.push({ label, body, ask: 'This one needs your own words.', yes: ['Open in Gmail', openGmail],
+      change: ['Write it here', 'Your reply', n => call('adminMail', K, m.id, 'send', n), ''],
+      skip: ['No reply needed', () => call('adminMail', K, m.id, 'skip', '')] });
+  });
   d.leads.forEach(l => {
     const label = [$('b', { text: l.who || 'A lead' }), l.org ? ' · ' + l.org : '', ' · lead'];
     const go = a => () => call('adminLead', K, l.id, a, '');
@@ -1167,7 +1261,7 @@ function build(d) {
     const go = a => () => call('adminLoop', K, l.id, a, '');
     const body = [textEl(l.body), l.why ? $('p', { class: 'mute', text: 'Why: ' + l.why }) : '',
       l.link ? $('p', {}, $('a', { class: 'link', href: l.link, target: '_blank', text: 'Open' })) : ''];
-    if (l.to) q.push({ label, body: [$('p', { class: 'text', text: 'To: ' + l.to + '\nSubject: ' + (l.subject || l.title) }), $('div', { class: 'quote', text: l.body }), l.why ? $('p', { class: 'mute', text: 'Why: ' + l.why }) : ''],
+    if (l.to) q.push({ label, body: [$('p', { class: 'text', text: 'To: ' + l.to + '\\nSubject: ' + (l.subject || l.title) }), $('div', { class: 'quote', text: l.body }), l.why ? $('p', { class: 'mute', text: 'Why: ' + l.why }) : ''],
       ask: l.ask || 'Send this email?', yes: ['Send', go('yes')], change: ['Edit', 'Your email', n => call('adminLoop', K, l.id, 'send', n), l.body], skip: ['Don\\'t send', go('pass')] });
     else if (l.status === 'todo') q.push({ label, body, ask: l.ask || '', yes: ['Got it', go('done')], change: null, skip: null });
     else q.push({ label, body, ask: l.ask || 'Go ahead?', yes: ['Yes', go('yes')],

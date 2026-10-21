@@ -1,0 +1,391 @@
+{
+ "name": "Open Frame inbox sorter",
+ "nodes": [
+  {
+   "id": "is1",
+   "name": "New email",
+   "type": "n8n-nodes-base.emailReadImap",
+   "typeVersion": 2.1,
+   "position": [
+    0,
+    300
+   ],
+   "parameters": {
+    "mailbox": "INBOX",
+    "postProcessAction": "nothing",
+    "downloadAttachments": false,
+    "format": "resolved",
+    "options": {
+     "customEmailConfig": "[\"UNSEEN\"]"
+    }
+   },
+   "credentials": {
+    "imap": {
+     "id": "",
+     "name": "Gmail IMAP"
+    }
+   }
+  },
+  {
+   "id": "is2",
+   "name": "Shape email",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    220,
+    300
+   ],
+   "parameters": {
+    "jsCode": "// Code node \"Shape email\". One item per new inbox email (IMAP, format resolved).\n// Robots (no-reply senders, bulk mail, list mail) are labeled noise without asking the local AI.\nconst ME = /grahamivy\\.co@gmail\\.com|@openframe\\.design/i;\nconst ROBOT = /(no-?reply|donotreply|do-not-reply|mailer-daemon|postmaster|notifications?@|notify@|alerts?@|news(letter)?@|marketing@|updates?@|digest@)/i;\nconst OPTOUT = /\\b(unsubscribe me|remove me from|stop (emailing|contacting|sending)|take me off|please don'?t (email|contact) me)\\b/i;\nconst head = (j, k) => {\n  const h = j.headers || {};\n  if (h[k] != null) return String(h[k].value || h[k].text || h[k]);\n  const line = (j.headerLines || []).find(x => String(x.key).toLowerCase() === k);\n  return line ? String(line.line) : '';\n};\nconst clean = s => String(s || '').replace(/\\r/g, '').replace(/\\n{3,}/g, '\\n\\n').trim();\nconst strip = h => String(h || '').replace(/<style[\\s\\S]*?<\\/style>/gi, '').replace(/<br\\s*\\/?>/gi, '\\n').replace(/<\\/(p|div|tr|li)>/gi, '\\n').replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&');\n\nreturn $input.all().map(i => {\n  const j = i.json;\n  const from = (j.from && j.from.value && j.from.value[0]) || {};\n  const email = String(from.address || (String(j.from && j.from.text || j.from || '').match(/[^\\s<>]+@[^\\s<>]+/) || [''])[0]).toLowerCase();\n  const name = String(from.name || '').replace(/\"/g, '').trim();\n  const text = clean(j.text || strip(j.html || j.textHtml));\n  // Drop the quoted thread under \"On ... wrote:\" so the AI reads only the new part.\n  const fresh = text.split(/\\n\\s*On .{5,120}wrote:\\s*\\n|\\n-{2,}\\s*Original Message/i)[0].slice(0, 3000);\n  const bulk = /bulk|list|junk/i.test(head(j, 'precedence')) || !!head(j, 'list-unsubscribe') || !!head(j, 'list-id');\n  const robot = ROBOT.test(email) || bulk;\n  const calendly = /@calendly\\.com$/i.test(email);\n  return { json: {\n    message_id: String(j.messageId || head(j, 'message-id') || '').trim(),\n    received_at: new Date(j.date || Date.now()).toISOString(),\n    from_email: email, from_name: name, subject: String(j.subject || '').slice(0, 200),\n    snippet: fresh.slice(0, 600), body: fresh,\n    mine: ME.test(email),\n    // Calendly booking emails are read by the lead follow-up workflow; here they're just filed.\n    fixed_type: calendly ? 'admin' : robot ? 'noise' : '',\n    optout: !robot && OPTOUT.test(fresh.slice(0, 600)),\n  } };\n}).filter(i => i.json.message_id && !i.json.mine);\n"
+   }
+  },
+  {
+   "id": "is3",
+   "name": "Skip robots",
+   "type": "n8n-nodes-base.if",
+   "typeVersion": 2,
+   "position": [
+    440,
+    300
+   ],
+   "parameters": {
+    "conditions": {
+     "options": {
+      "caseSensitive": true,
+      "leftValue": "",
+      "typeValidation": "strict"
+     },
+     "combinator": "and",
+     "conditions": [
+      {
+       "id": "robot",
+       "leftValue": "={{ $json.fixed_type }}",
+       "rightValue": "",
+       "operator": {
+        "type": "string",
+        "operation": "notEmpty",
+        "singleValue": true
+       }
+      }
+     ]
+    },
+    "options": {}
+   }
+  },
+  {
+   "id": "is4",
+   "name": "Robot row",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    660,
+    180
+   ],
+   "parameters": {
+    "jsCode": "// Code node \"Robot row\". Noise and Calendly mail skip the AI.\nconst now = new Date().toISOString();\nreturn $input.all().map(i => { const e = i.json; return { json: {\n  message_id: e.message_id, received_at: e.received_at, from_email: e.from_email, from_name: e.from_name, subject: e.subject,\n  snippet: e.snippet.slice(0, 200), type: e.fixed_type, needs_reply: 'no', draft: '', optout: 'no', status: 'new', draft_id: '', note: '', updated_at: now,\n} }; });\n"
+   }
+  },
+  {
+   "id": "is5",
+   "name": "Build AI request",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    660,
+    420
+   ],
+   "parameters": {
+    "jsCode": "// Code node \"Build AI request\". LM Studio on Graham's Mac (free, local). Same model as the DM bot.\nconst SYSTEM = `You sort email for Graham Ivy, who runs Open Frame, a small design and marketing studio for mission-driven organizations and brands (Minneapolis and Barcelona, available US hours).\nPick one type:\n- lead: someone asking about working with Open Frame, its services, prices, availability, or a project\n- client: an existing client talking about ongoing work\n- money: invoices, receipts, payments, bank, taxes, subscriptions billing\n- admin: accounts, scheduling, tools, platform or legal notices addressed to Graham personally\n- personal: friends and family, nothing about the business\n- noise: newsletters, promotions, cold sales pitches, automated notifications\nneeds_reply: true only if a person is waiting on Graham.\nreply: only for lead or client when needs_reply is true, otherwise \"\". Write as Graham, warm and plain, under 90 words, then a blank line and \"Graham\".\nReply rules: never give prices, dates, deadlines or promises; never invent facts or links. For a lead, offer a free 30-minute call with this link on its own line after a blank line:\n\nhttps://calendly.com/grahamivy-co/30min\n\nNo em dashes, no hype words. If you are unsure what to say, reply \"\" so Graham writes it himself.`;\nconst SCHEMA = { type: 'object', additionalProperties: false, required: ['type', 'needs_reply', 'reply'],\n  properties: { type: { type: 'string', enum: ['lead', 'client', 'money', 'admin', 'personal', 'noise'] }, needs_reply: { type: 'boolean' }, reply: { type: 'string' } } };\nreturn $input.all().map(i => ({ json: Object.assign({}, i.json, { ai: {\n  model: 'google/gemma-4-e4b', temperature: 0.3, max_tokens: 400,\n  messages: [{ role: 'system', content: SYSTEM },\n    { role: 'user', content: `From: ${i.json.from_name} <${i.json.from_email}>\\nSubject: ${i.json.subject}\\n\\n${i.json.body}` }],\n  response_format: { type: 'json_schema', json_schema: { name: 'triage', strict: true, schema: SCHEMA } },\n} }) }));\n"
+   }
+  },
+  {
+   "id": "is6",
+   "name": "Ask local AI",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "position": [
+    880,
+    420
+   ],
+   "parameters": {
+    "method": "POST",
+    "url": "http://127.0.0.1:1234/v1/chat/completions",
+    "sendBody": true,
+    "specifyBody": "json",
+    "jsonBody": "={{ JSON.stringify($json.ai) }}",
+    "options": {
+     "timeout": 120000
+    }
+   },
+   "onError": "continueRegularOutput"
+  },
+  {
+   "id": "is7",
+   "name": "Read answer",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    1100,
+    420
+   ],
+   "parameters": {
+    "jsCode": "// Code node \"Read answer\". Turns the local AI's answer into a Mail tab row. A reply that breaks a rule is dropped,\n// so the card asks Graham to write it himself instead of sending something wrong.\nconst OK_LINK = /^https:\\/\\/(calendly\\.com\\/grahamivy-co\\/30min|openframe\\.design)/;\nconst now = new Date().toISOString();\nconst ins = $('Build AI request').all();\nreturn $input.all().map((i, n) => {\n  const e = (ins[n] || ins[0]).json;\n  let a = {};\n  try { a = JSON.parse(i.json.choices[0].message.content); } catch (x) { a = { type: 'check', needs_reply: false, reply: '' }; }\n  let reply = String(a.reply || '').replace(/\\s*[\u2014\u2013]\\s*/g, ', ').trim();\n  const links = reply.match(/https?:\\/\\/\\S+/g) || [];\n  const broke = /\\$\\s?\\d|\\d+\\s?(usd|dollars)/i.test(reply) || links.some(u => !OK_LINK.test(u));\n  if (broke || !['lead', 'client'].includes(a.type) || !a.needs_reply) reply = '';\n  return { json: {\n    message_id: e.message_id, received_at: e.received_at, from_email: e.from_email, from_name: e.from_name, subject: e.subject,\n    snippet: e.snippet, type: a.type || 'check', needs_reply: a.needs_reply ? 'yes' : 'no', draft: reply,\n    optout: e.optout ? 'yes' : 'no', status: 'new', draft_id: '', note: broke ? 'AI reply broke a rule, write your own' : '', updated_at: now,\n  } };\n});\n"
+   }
+  },
+  {
+   "id": "is8",
+   "name": "Save to Mail tab",
+   "type": "n8n-nodes-base.googleSheets",
+   "typeVersion": 4.5,
+   "position": [
+    1320,
+    300
+   ],
+   "parameters": {
+    "operation": "append",
+    "authentication": "serviceAccount",
+    "documentId": {
+     "__rl": true,
+     "mode": "url",
+     "value": "https://docs.google.com/spreadsheets/d/1nec5cD5RtjV6yDLzxeKX9vGhI0k123PIaFFDwXqFM6A/edit"
+    },
+    "sheetName": {
+     "__rl": true,
+     "mode": "name",
+     "value": "Mail"
+    },
+    "columns": {
+     "mappingMode": "autoMapInputData",
+     "value": {},
+     "matchingColumns": [],
+     "schema": [
+      {
+       "id": "message_id",
+       "displayName": "message_id",
+       "required": false,
+       "defaultMatch": false,
+       "display": true,
+       "type": "string",
+       "canBeUsedToMatch": true
+      },
+      {
+       "id": "received_at",
+       "displayName": "received_at",
+       "required": false,
+       "defaultMatch": false,
+       "display": true,
+       "type": "string",
+       "canBeUsedToMatch": true
+      },
+      {
+       "id": "from_email",
+       "displayName": "from_email",
+       "required": false,
+       "defaultMatch": false,
+       "display": true,
+       "type": "string",
+       "canBeUsedToMatch": true
+      },
+      {
+       "id": "from_name",
+       "displayName": "from_name",
+       "required": false,
+       "defaultMatch": false,
+       "display": true,
+       "type": "string",
+       "canBeUsedToMatch": true
+      },
+      {
+       "id": "subject",
+       "displayName": "subject",
+       "required": false,
+       "defaultMatch": false,
+       "display": true,
+       "type": "string",
+       "canBeUsedToMatch": true
+      },
+      {
+       "id": "snippet",
+       "displayName": "snippet",
+       "required": false,
+       "defaultMatch": false,
+       "display": true,
+       "type": "string",
+       "canBeUsedToMatch": true
+      },
+      {
+       "id": "type",
+       "displayName": "type",
+       "required": false,
+       "defaultMatch": false,
+       "display": true,
+       "type": "string",
+       "canBeUsedToMatch": true
+      },
+      {
+       "id": "needs_reply",
+       "displayName": "needs_reply",
+       "required": false,
+       "defaultMatch": false,
+       "display": true,
+       "type": "string",
+       "canBeUsedToMatch": true
+      },
+      {
+       "id": "draft",
+       "displayName": "draft",
+       "required": false,
+       "defaultMatch": false,
+       "display": true,
+       "type": "string",
+       "canBeUsedToMatch": true
+      },
+      {
+       "id": "optout",
+       "displayName": "optout",
+       "required": false,
+       "defaultMatch": false,
+       "display": true,
+       "type": "string",
+       "canBeUsedToMatch": true
+      },
+      {
+       "id": "status",
+       "displayName": "status",
+       "required": false,
+       "defaultMatch": false,
+       "display": true,
+       "type": "string",
+       "canBeUsedToMatch": true
+      },
+      {
+       "id": "draft_id",
+       "displayName": "draft_id",
+       "required": false,
+       "defaultMatch": false,
+       "display": true,
+       "type": "string",
+       "canBeUsedToMatch": true
+      },
+      {
+       "id": "note",
+       "displayName": "note",
+       "required": false,
+       "defaultMatch": false,
+       "display": true,
+       "type": "string",
+       "canBeUsedToMatch": true
+      },
+      {
+       "id": "updated_at",
+       "displayName": "updated_at",
+       "required": false,
+       "defaultMatch": false,
+       "display": true,
+       "type": "string",
+       "canBeUsedToMatch": true
+      }
+     ]
+    },
+    "options": {}
+   },
+   "credentials": {
+    "googleApi": {
+     "id": "",
+     "name": "Google Service Account account"
+    }
+   }
+  }
+ ],
+ "connections": {
+  "New email": {
+   "main": [
+    [
+     {
+      "node": "Shape email",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Shape email": {
+   "main": [
+    [
+     {
+      "node": "Skip robots",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Skip robots": {
+   "main": [
+    [
+     {
+      "node": "Robot row",
+      "type": "main",
+      "index": 0
+     }
+    ],
+    [
+     {
+      "node": "Build AI request",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Robot row": {
+   "main": [
+    [
+     {
+      "node": "Save to Mail tab",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Build AI request": {
+   "main": [
+    [
+     {
+      "node": "Ask local AI",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Ask local AI": {
+   "main": [
+    [
+     {
+      "node": "Read answer",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Read answer": {
+   "main": [
+    [
+     {
+      "node": "Save to Mail tab",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  }
+ },
+ "settings": {
+  "executionOrder": "v1",
+  "timezone": "America/Chicago"
+ },
+ "pinData": {}
+}
