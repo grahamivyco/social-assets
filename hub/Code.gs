@@ -92,6 +92,7 @@ function setup() {
   ScriptApp.newTrigger('healthCheck').timeBased().everyHours(1).create();
   ScriptApp.newTrigger('triageMail').timeBased().everyMinutes(10).create();
   hubTab_('Mail', MAIL_HEAD);
+  hubTab_('Projects', PROJECT_HEAD);
   Logger.log('Setup done. Now deploy as a web app, then run emailMeMyLinks.');
 }
 
@@ -178,6 +179,7 @@ function studioApi_(b) {
       }
       const c = Object.assign({ email: s.who.email }, clients_().find(x => x.brand === s.who.brand));
       if (b.name === 'getClientPosts') return { out: clientPosts_(c) };
+      if (b.name === 'getClientProjects') return { out: clientProjects_(c) };
       if (b.name === 'clientDecide') return { out: clientDecide_(c, (args[0] || []).map(String), args[1], args[2] || '') };
       throw new Error('Unknown request');
     }
@@ -274,6 +276,30 @@ function studioSession_(session) {
     setCells_(t, r._row, { last_used: now.toISOString(), expires: new Date(now.getTime() + STUDIO_DAYS * 864e5).toISOString() });
   }
   return { t, r, who };
+}
+
+// ---------- Studio projects (Projects tab) ----------
+// One row per client project, edited by Graham in the Sheet. A signed-in client sees their own rows as Project cards.
+// brand = the client's brand in the Clients tab. stage = a name from PROJECT_STAGES or its number (1-5).
+// status: blank = active, done = finished (shows as Done), hidden = not shown. link: optional https link to the latest work.
+const PROJECT_HEAD = ['brand', 'project', 'stage', 'next', 'need', 'due', 'note', 'link', 'status', 'updated'];
+const PROJECT_STAGES = ['Discover', 'Define', 'Design', 'Build', 'Launch'];
+
+function clientProjects_(c) {
+  const t = table_(hubId_(), 'Projects');
+  if (!t || !c.brand) return { stages: PROJECT_STAGES, projects: [] };
+  const stageOf = v => {
+    const x = String(v || '').trim(), n = Number(x);
+    if (n >= 1 && n <= PROJECT_STAGES.length) return n - 1;
+    return PROJECT_STAGES.findIndex(st => st.toLowerCase() === x.toLowerCase());
+  };
+  const projects = t.rows.filter(r => r.brand === c.brand && r.project && !/^hid/i.test(r.status || '')).map(r => ({
+    project: r.project, stage: stageOf(r.stage), done: /^(done|finished|complete)/i.test(r.status || ''),
+    next: r.next || '', need: r.need || '', due: r.due || '', note: r.note || '', updated: r.updated || '',
+    link: /^https:\/\//.test(r.link || '') ? r.link : '',
+  }));
+  projects.sort((a, b) => a.done - b.done);
+  return { stages: PROJECT_STAGES, projects };
 }
 
 function hex_(s) {
@@ -1634,7 +1660,7 @@ const CLIENT_JS = `
 document.getElementById('h').textContent = BOOT.client;
 function results(R) {
   const more = document.getElementById('more'); more.innerHTML = '';
-  if (!R || R.empty) { more.append($('p', { text: 'Results appear after the first stats pull.' }), R && R.newsletter ? $('p', { text: R.newsletter }) : ''); return; }
+  if (!R || R.empty) { more.append(BOOT.projects ? '' : $('p', { text: 'Results appear after the first stats pull.' }), R && R.newsletter ? $('p', { text: R.newsletter }) : ''); return; }
   const t = {}; R.tiles.forEach(x => t[x.title] = x);
   const reach = t['Accounts reached'], fol = t['New followers'], clk = t['Clicks and taps'];
   const parts = [];
@@ -1667,6 +1693,8 @@ function startClient() {
         skip: ['Skip this one', () => call('clientDecide', BOOT.token, p.ids, 'skip', '')],
       };
     });
+    // A client with Project cards and no posts waiting doesn't need the "All caught up" card under them.
+    if (!items.length && BOOT.projects) { box.textContent = ''; return; }
     runQueue(items, box, document.getElementById('count'), () => box.append($('div', { class: 'card done' },
       $('h2', { text: items.length ? 'All done, thank you!' : 'All caught up' }),
       $('p', { class: 'mute', text: 'We will email you when new posts are ready.' }))));
