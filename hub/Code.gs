@@ -158,7 +158,7 @@ const STUDIO_CODE_MIN = 15;
 const GOOGLE_CLIENT_ID = '444041586250-vmsnmvs3glhetpoidhb11r4g7ds4rfd8.apps.googleusercontent.com';
 const SESSION_HEAD = ['session', 'email', 'role', 'brand', 'created', 'expires', 'last_used'];
 // What a signed-in admin can run. Each takes the admin key first; the Studio never sees the key, the server adds it.
-const STUDIO_ADMIN_FNS = { getDashboard, adminPost, adminTopic, adminCaption, adminReply, adminEngage, adminLead, adminPhoto, adminNotifyClient, adminGraphic, adminLoop, studioResults, studioReels, studioStatus, adminReelAsk, studioApprovals, adminApproval, adminNudge, studioClients, studioClient, studioLoops };
+const STUDIO_ADMIN_FNS = { getDashboard, adminPost, adminTopic, adminCaption, adminReply, adminEngage, adminLead, adminPhoto, adminNotifyClient, adminGraphic, adminLoop, studioResults, studioReels, studioStatus, adminReelAsk, studioApprovals, adminApproval, adminNudge, studioClients, studioClient, studioLoops, adminClientSet, adminProjectSet, adminApprovalNew };
 
 function studioApi_(b) {
   try {
@@ -1434,7 +1434,7 @@ function studioClients(key) {
   const rows = approvalsTable_().rows.filter(r => r.id);
   return clients_().map(c => {
     const P = clientProjects_(c), p = P.projects.find(x => !x.done);
-    return { client: c.client, brand: c.brand, studio: c.studio, contact: !!c.contact_email,
+    return { client: c.client, brand: c.brand, studio: c.studio, paused: c.paused, contact: !!c.contact_email,
       waiting: rows.filter(r => r.client === c.client && r.status === 'client').length,
       needs: rows.filter(r => r.client === c.client && r.status === 'draft' && r.kind !== 'reply').length,
       project: p ? { name: p.project, stage: p.stage >= 0 ? P.stages[p.stage] : '' } : null };
@@ -1447,8 +1447,66 @@ function studioClient(key, client) {
   const c = clients_().find(x => x.client === client || x.brand === client);
   if (!c) throw new Error('That client moved or was removed. Refresh the page.');
   const page = clientPage_(c), ex = clientExtras_(c);
-  page.needs = approvalsTable_().rows.filter(r => r.id && r.client === c.client && r.status === 'draft' && r.kind !== 'reply').sort(byDue_).map(r => approvalView_(r, ex));
+  const rows = approvalsTable_().rows.filter(r => r.id && r.client === c.client);
+  page.needs = rows.filter(r => r.status === 'draft' && r.kind !== 'reply').sort(byDue_).map(r => approvalView_(r, ex));
+  page.waiting = rows.filter(r => r.status === 'client').sort(byDue_).map(r => approvalView_(r, ex));
+  // Only Graham sees these: his private notes and the details behind the Manage menu.
+  page.admin = { notes: c.notes, paused: c.paused, brand: c.brand, contact_email: c.contact_email, pay_url: c.pay_url, files_url: c.files_url,
+    report_url: c.report_url, client_approves: c.client_approves, kinds: APPROVAL_KINDS.filter(k => k !== 'reply'), stages: PROJECT_STAGES };
   return page;
+}
+
+// ---------- Studio: Graham's Manage menu on one client ----------
+// Edit client details, private notes, pause. Writes the Clients tab (new columns are added at the end when missing).
+const CLIENT_EDITABLE = ['contact_email', 'pay_url', 'files_url', 'report_url', 'notes', 'studio', 'client_approves'];
+function adminClientSet(key, client, fields) {
+  checkKey_(key);
+  return withLock_(() => {
+    const t = table_(hubId_(), 'Clients'), r = t.rows.find(x => x.client === client || x.brand === client);
+    if (!r) throw new Error('That client moved or was removed. Refresh the page.');
+    const diff = {};
+    Object.keys(fields || {}).forEach(k => {
+      if (CLIENT_EDITABLE.indexOf(k) < 0) return;
+      let v = String(fields[k] == null ? '' : fields[k]).trim().slice(0, k === 'notes' ? 4000 : 500);
+      if (/_url$/.test(k) && v && !/^https:\/\//.test(v)) throw new Error('Links need to start with https://');
+      if (k === 'contact_email') v = emails_(v).join(', ');
+      if (k === 'studio') v = /^(yes|paused)$/.test(v) ? v : '';
+      if (k === 'client_approves') v = /^(y|yes|true)$/i.test(v) ? 'yes' : 'no';
+      diff[k] = v;
+    });
+    if (Object.keys(diff).length) setCells_(t, r._row, diff);
+    return diff;
+  });
+}
+
+// Add a project, or update one with the same name (stage 1-5 or its name, next, need, due, note, link, status).
+function adminProjectSet(key, client, p) {
+  checkKey_(key);
+  const c = clients_().find(x => x.client === client || x.brand === client);
+  if (!c) throw new Error('That client moved or was removed. Refresh the page.');
+  const name = String((p && p.project) || '').trim().slice(0, 80);
+  if (!name) throw new Error('Give the project a name.');
+  return withLock_(() => {
+    const t = hubTab_('Projects', PROJECT_HEAD), now = new Date().toISOString();
+    const row = { brand: c.brand, project: name, updated: now };
+    ['stage', 'next', 'need', 'due', 'note', 'link', 'status'].forEach(k => { if (p[k] != null) row[k] = String(p[k]).trim().slice(0, 400); });
+    if (row.link && !/^https:\/\//.test(row.link)) throw new Error('Links need to start with https://');
+    const cur = t.rows.find(x => x.brand === c.brand && x.project === name);
+    if (cur) setCells_(t, cur._row, row); else t.sh.appendRow(t.head.map(h => safeCell_(row[h])));
+    return clientProjects_(c);
+  });
+}
+
+// "+ Send for approval": Graham makes an item by hand. client_ok yes = straight to the client (their next email has it).
+function adminApprovalNew(key, client, r) {
+  checkKey_(key);
+  const c = clients_().find(x => x.client === client || x.brand === client);
+  if (!c) throw new Error('That client moved or was removed. Refresh the page.');
+  const ok = /^(y|yes|true)$/i.test(String(r.client_ok || '')) || APPROVAL_CLIENT_ALWAYS.indexOf(r.kind) >= 0;
+  const row = { id: c.brand + '-graham-' + Utilities.formatDate(new Date(), TZ, 'yyyyMMdd-HHmmss'), client: c.client, kind: r.kind, title: r.title, detail: r.detail,
+    preview: /^https:\/\//.test(r.preview || '') ? r.preview : '', options: r.options, due: r.due, job: r.job, client_ok: ok ? 'yes' : 'no', made_by: 'graham',
+    status: ok ? 'client' : 'draft' };
+  return withLock_(() => { approvalAdd_([row]); return approvalView_(approvalsTable_().rows.find(x => x.id === row.id) || row); });
 }
 
 // Writes the answer (status, answer, comment, updated), then runs the sync for Queue and Inbox rows so the post or reply moves now, not at the next hourly run.
@@ -2045,6 +2103,7 @@ function clients_() {
     client: r.client || r.brand, brand: r.brand, sheet_id: r.sheet_id || hubId_(),
     contact_email: r.contact_email || '', report_url: r.report_url || '', client_approves: /^(y|yes|true)$/i.test(r.client_approves || ''), studio: /^(y|yes|true)$/i.test(r.studio || ''),
     pay_url: /^https:\/\//.test(r.pay_url || '') ? r.pay_url : '', files_url: /^https:\/\//.test(r.files_url || '') ? r.files_url : '',
+    notes: r.notes || '', paused: /^paused$/i.test(r.studio || ''),
     reel_music: String(r.reel_music || (r.brand === 'open-frame' ? 'app' : 'auto')).toLowerCase(),
   }));
 }
