@@ -31,9 +31,14 @@ function due(loop, last, now) {
   return dayOk && now >= at && (!last || new Date(last) < at);
 }
 
+// New loop code from git pull (the Mac keeper pulls every 10 min): exit between runs and pm2 starts the new version.
+const codeStamp = () => fs.readdirSync(L.HERE).filter(f => f.endsWith('.js')).map(f => f + fs.statSync(path.join(L.HERE, f)).mtimeMs).join('|');
+const START = codeStamp();
+
 let busy = false;
 async function tick() {
   if (busy) return;
+  if (cmd === 'daemon' && codeStamp() !== START) { L.log('new loop code, restarting'); process.exit(0); }
   busy = true;
   try {
     const now = new Date(), last = L.readJSON(LAST, {});
