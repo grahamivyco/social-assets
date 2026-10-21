@@ -1,0 +1,449 @@
+{
+ "name": "Open Frame viral scout",
+ "nodes": [
+  {
+   "parameters": {
+    "rule": {
+     "interval": [
+      {
+       "field": "weeks",
+       "triggerAtDay": [
+        1
+       ],
+       "triggerAtHour": 7,
+       "triggerAtMinute": 30
+      }
+     ]
+    }
+   },
+   "id": "vs0",
+   "name": "Every Monday 7:30",
+   "type": "n8n-nodes-base.scheduleTrigger",
+   "typeVersion": 1.2,
+   "position": [
+    0,
+    300
+   ]
+  },
+  {
+   "parameters": {
+    "documentId": {
+     "__rl": true,
+     "mode": "url",
+     "value": "https://docs.google.com/spreadsheets/d/1VgiiTBTpmFh5bqutvYvjvNZmSicc8Es2vLSmnPlpHaU/edit"
+    },
+    "sheetName": {
+     "__rl": true,
+     "mode": "name",
+     "value": "Viral creators"
+    },
+    "options": {},
+    "authentication": "serviceAccount"
+   },
+   "id": "vs1",
+   "name": "Read Viral creators",
+   "type": "n8n-nodes-base.googleSheets",
+   "typeVersion": 4.5,
+   "position": [
+    220,
+    300
+   ],
+   "credentials": {
+    "googleApi": {
+     "id": "",
+     "name": "Google Service Account account"
+    }
+   },
+   "executeOnce": true,
+   "alwaysOutputData": true,
+   "onError": "continueRegularOutput"
+  },
+  {
+   "parameters": {
+    "documentId": {
+     "__rl": true,
+     "mode": "url",
+     "value": "https://docs.google.com/spreadsheets/d/1VgiiTBTpmFh5bqutvYvjvNZmSicc8Es2vLSmnPlpHaU/edit"
+    },
+    "sheetName": {
+     "__rl": true,
+     "mode": "name",
+     "value": "Creators"
+    },
+    "options": {},
+    "authentication": "serviceAccount"
+   },
+   "id": "vs2",
+   "name": "Read Creators",
+   "type": "n8n-nodes-base.googleSheets",
+   "typeVersion": 4.5,
+   "position": [
+    440,
+    300
+   ],
+   "credentials": {
+    "googleApi": {
+     "id": "",
+     "name": "Google Service Account account"
+    }
+   },
+   "executeOnce": true,
+   "alwaysOutputData": true
+  },
+  {
+   "parameters": {
+    "documentId": {
+     "__rl": true,
+     "mode": "url",
+     "value": "https://docs.google.com/spreadsheets/d/1VgiiTBTpmFh5bqutvYvjvNZmSicc8Es2vLSmnPlpHaU/edit"
+    },
+    "sheetName": {
+     "__rl": true,
+     "mode": "name",
+     "value": "Outliers"
+    },
+    "options": {},
+    "authentication": "serviceAccount"
+   },
+   "id": "vs3",
+   "name": "Read Outliers",
+   "type": "n8n-nodes-base.googleSheets",
+   "typeVersion": 4.5,
+   "position": [
+    660,
+    300
+   ],
+   "credentials": {
+    "googleApi": {
+     "id": "",
+     "name": "Google Service Account account"
+    }
+   },
+   "executeOnce": true,
+   "alwaysOutputData": true
+  },
+  {
+   "parameters": {
+    "jsCode": "// Up to 50 creators a week: the \"Viral creators\" tab first (big names Graham adds), then active brand-scout creators.\nconst clean = h => String(h || '').trim().replace(/^@/, '').replace(/\\/$/, '').split('/').pop().toLowerCase();\nconst st = r => String(r.status || '').trim().toLowerCase();\nconst pick = node => { try { return $(node).all().map(i => i.json).filter(r => clean(r.handle) && (st(r) === 'active' || st(r) === '')); } catch (e) { return []; } };\nconst seen = new Set();\nconst F = '{username,followers_count,media.limit(50){caption,permalink,timestamp,media_type,media_product_type,like_count,comments_count}}';\nreturn [...pick('Read Viral creators'), ...pick('Read Creators')]\n  .map(r => clean(r.handle)).filter(h => !seen.has(h) && seen.add(h)).slice(0, 50)\n  .map(handle => ({ json: { handle, fields: `business_discovery.username(${handle})${F}` } }));\n"
+   },
+   "id": "vs4",
+   "name": "Creators to check",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    880,
+    300
+   ]
+  },
+  {
+   "parameters": {
+    "url": "https://graph.facebook.com/v21.0/17841420040350345",
+    "sendQuery": true,
+    "specifyQuery": "json",
+    "jsonQuery": "={{ JSON.stringify({ fields: $json.fields }) }}",
+    "options": {
+     "batching": {
+      "batch": {
+       "batchSize": 1,
+       "batchInterval": 400
+      }
+     }
+    },
+    "authentication": "predefinedCredentialType",
+    "nodeCredentialType": "facebookGraphApi"
+   },
+   "id": "vs5",
+   "name": "IG: creator Reels",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "position": [
+    1100,
+    300
+   ],
+   "credentials": {
+    "facebookGraphApi": {
+     "id": "",
+     "name": "Open Frame Page"
+    }
+   },
+   "onError": "continueRegularOutput"
+  },
+  {
+   "parameters": {
+    "jsCode": "// A Reel is an outlier when it beat that creator's own normal by 3x or more (likes + 3 x comments, last 12 months).\n// Beating their own normal works for any niche size, where a fixed \"2M views\" only fits huge niches.\nconst RATIO = 3, MIN_POSTS = 8, PER_CREATOR = 3, DAYS = 365;\nconst asked = $('Creators to check').all().map(i => i.json);\nconst known = new Set($('Read Outliers').all().map(i => String(i.json.permalink || '').trim()).filter(Boolean));\nconst cutoff = Date.now() - DAYS * 864e5;\nconst score = m => (m.like_count || 0) + 3 * (m.comments_count || 0);\nconst median = a => { const s = [...a].sort((x, y) => x - y); const n = s.length; return n ? (n % 2 ? s[(n - 1) / 2] : (s[n / 2 - 1] + s[n / 2]) / 2) : 0; };\nconst now = new Date().toISOString();\nconst out = [];\n$input.all().forEach((item, idx) => {\n  const bd = item.json.business_discovery;\n  const handle = (asked[idx] || {}).handle;\n  if (!bd) return;\n  // Hidden like counts come back missing; leave those posts out of the maths.\n  const posts = ((bd.media && bd.media.data) || []).filter(m => new Date(m.timestamp).getTime() >= cutoff && m.like_count != null);\n  if (posts.length < MIN_POSTS) return;\n  const base = median(posts.map(score)) || 1;\n  posts.filter(m => m.media_product_type === 'REELS' || m.media_type === 'VIDEO')\n    .map(m => ({ m, ratio: score(m) / base }))\n    .filter(x => x.ratio >= RATIO && !known.has(x.m.permalink))\n    .sort((a, b) => b.ratio - a.ratio).slice(0, PER_CREATOR)\n    .forEach(({ m, ratio }) => out.push({ json: {\n      permalink: m.permalink, handle: bd.username || handle, followers: bd.followers_count || '',\n      posted: String(m.timestamp).slice(0, 10), likes: m.like_count || 0, comments: m.comments_count || 0,\n      ratio: Math.round(ratio * 10) / 10, caption: String(m.caption || '').replace(/\\s+/g, ' ').slice(0, 200),\n      status: 'sent to watch', found_at: now } }));\n});\nreturn out;\n"
+   },
+   "id": "vs6",
+   "name": "Find outliers",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    1320,
+    300
+   ]
+  },
+  {
+   "parameters": {
+    "documentId": {
+     "__rl": true,
+     "mode": "url",
+     "value": "https://docs.google.com/spreadsheets/d/1VgiiTBTpmFh5bqutvYvjvNZmSicc8Es2vLSmnPlpHaU/edit"
+    },
+    "sheetName": {
+     "__rl": true,
+     "mode": "name",
+     "value": "Outliers"
+    },
+    "options": {},
+    "authentication": "serviceAccount",
+    "operation": "append",
+    "columns": {
+     "mappingMode": "defineBelow",
+     "value": {
+      "permalink": "={{ $json.permalink }}",
+      "handle": "={{ $json.handle }}",
+      "followers": "={{ $json.followers }}",
+      "posted": "={{ $json.posted }}",
+      "likes": "={{ $json.likes }}",
+      "comments": "={{ $json.comments }}",
+      "ratio": "={{ $json.ratio }}",
+      "caption": "={{ $json.caption }}",
+      "status": "={{ $json.status }}",
+      "found_at": "={{ $json.found_at }}"
+     },
+     "matchingColumns": [],
+     "schema": [
+      {
+       "id": "permalink",
+       "displayName": "permalink",
+       "required": false,
+       "defaultMatch": false,
+       "display": true,
+       "type": "string",
+       "canBeUsedToMatch": true,
+       "removed": false
+      },
+      {
+       "id": "handle",
+       "displayName": "handle",
+       "required": false,
+       "defaultMatch": false,
+       "display": true,
+       "type": "string",
+       "canBeUsedToMatch": true,
+       "removed": false
+      },
+      {
+       "id": "followers",
+       "displayName": "followers",
+       "required": false,
+       "defaultMatch": false,
+       "display": true,
+       "type": "string",
+       "canBeUsedToMatch": true,
+       "removed": false
+      },
+      {
+       "id": "posted",
+       "displayName": "posted",
+       "required": false,
+       "defaultMatch": false,
+       "display": true,
+       "type": "string",
+       "canBeUsedToMatch": true,
+       "removed": false
+      },
+      {
+       "id": "likes",
+       "displayName": "likes",
+       "required": false,
+       "defaultMatch": false,
+       "display": true,
+       "type": "string",
+       "canBeUsedToMatch": true,
+       "removed": false
+      },
+      {
+       "id": "comments",
+       "displayName": "comments",
+       "required": false,
+       "defaultMatch": false,
+       "display": true,
+       "type": "string",
+       "canBeUsedToMatch": true,
+       "removed": false
+      },
+      {
+       "id": "ratio",
+       "displayName": "ratio",
+       "required": false,
+       "defaultMatch": false,
+       "display": true,
+       "type": "string",
+       "canBeUsedToMatch": true,
+       "removed": false
+      },
+      {
+       "id": "caption",
+       "displayName": "caption",
+       "required": false,
+       "defaultMatch": false,
+       "display": true,
+       "type": "string",
+       "canBeUsedToMatch": true,
+       "removed": false
+      },
+      {
+       "id": "status",
+       "displayName": "status",
+       "required": false,
+       "defaultMatch": false,
+       "display": true,
+       "type": "string",
+       "canBeUsedToMatch": true,
+       "removed": false
+      },
+      {
+       "id": "found_at",
+       "displayName": "found_at",
+       "required": false,
+       "defaultMatch": false,
+       "display": true,
+       "type": "string",
+       "canBeUsedToMatch": true,
+       "removed": false
+      }
+     ],
+     "attemptToConvertTypes": false,
+     "convertFieldsToString": false
+    }
+   },
+   "id": "vs7",
+   "name": "Save to Outliers",
+   "type": "n8n-nodes-base.googleSheets",
+   "typeVersion": 4.5,
+   "position": [
+    1540,
+    200
+   ],
+   "credentials": {
+    "googleApi": {
+     "id": "",
+     "name": "Google Service Account account"
+    }
+   }
+  },
+  {
+   "parameters": {
+    "method": "POST",
+    "url": "http://127.0.0.1:5680/scout",
+    "sendBody": true,
+    "specifyBody": "json",
+    "jsonBody": "={{ JSON.stringify({ url: $json.permalink, note: 'outlier ' + $json.ratio + 'x @' + $json.handle }) }}",
+    "options": {
+     "batching": {
+      "batch": {
+       "batchSize": 1,
+       "batchInterval": 200
+      }
+     }
+    }
+   },
+   "id": "vs8",
+   "name": "Send to watch tool",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "position": [
+    1540,
+    420
+   ],
+   "onError": "continueRegularOutput"
+  }
+ ],
+ "connections": {
+  "Every Monday 7:30": {
+   "main": [
+    [
+     {
+      "node": "Read Viral creators",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Read Viral creators": {
+   "main": [
+    [
+     {
+      "node": "Read Creators",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Read Creators": {
+   "main": [
+    [
+     {
+      "node": "Read Outliers",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Read Outliers": {
+   "main": [
+    [
+     {
+      "node": "Creators to check",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Creators to check": {
+   "main": [
+    [
+     {
+      "node": "IG: creator Reels",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "IG: creator Reels": {
+   "main": [
+    [
+     {
+      "node": "Find outliers",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Find outliers": {
+   "main": [
+    [
+     {
+      "node": "Save to Outliers",
+      "type": "main",
+      "index": 0
+     },
+     {
+      "node": "Send to watch tool",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  }
+ },
+ "settings": {
+  "executionOrder": "v1"
+ }
+}
