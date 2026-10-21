@@ -395,6 +395,60 @@ def endcard_png(path, W, H, lines, bg=None, fg=None, head_font=None, hdr=False):
         hlg_image(path)
 
 
+NUMS = "zero one two three four five six seven eight nine ten eleven twelve".split()
+ORDS = ",first,second,third,fourth,fifth,sixth,seventh,eighth,ninth,tenth,eleventh,twelfth".split(",")
+
+
+def hlg_rgba(path):
+    """hlg_image for transparent PNGs: converts the color, keeps the alpha."""
+    from PIL import Image
+    import numpy as np
+    a = np.asarray(Image.open(path).convert("RGBA")).copy()
+    a[..., :3] = hlg_array(a[..., :3])
+    Image.fromarray(a, "RGBA").save(path)
+
+
+def list_cards(work, lst, words, dur, hdr):
+    """edit.json "list": {"spec": "spec.json"} (open-frame/list-cards format). Numbered cards made by list.js.
+    Card N slides up when its number ("three", "3", "third") or its site/label name is said, and stays until
+    the next one. The list title shows before the first card. Returns [(png, start, end)]."""
+    spec_path = Path(lst["spec"]) if Path(lst["spec"]).is_absolute() else (work / lst["spec"]).resolve()
+    spec = json.loads(spec_path.read_text())
+    d = work / "list"; d.mkdir(exist_ok=True)
+    run(["node", str(HERE / "list.js"), str(spec_path), str(d)])
+    key = lambda s: re.sub(r"[^a-z0-9]", "", str(s).lower())
+    ws = [(key(w["w"]), w["start"]) for w in words]
+    times, after = [], lst.get("start", 0.0)
+    for i, it in enumerate(spec["items"], 1):
+        keys = {str(i), NUMS[i] if i < len(NUMS) else "", ORDS[i] if i < len(ORDS) else "",
+                key(it.get("domain", "").split(".")[0]), key((it.get("label") or " ").split()[0])} - {""}
+        t = next((st for k, st in ws if st > after + 0.2 and k in keys), None)
+        if t is None:  # never said: keep the list moving at an even pace
+            t = after + (lst.get("each", 2.5) if times else 0.5)
+        times.append(min(t, dur - 0.5)); after = times[-1]
+    out = [(d / "title.png", 0.0, times[0])] if lst.get("title", True) and times[0] > 0.8 else []
+    for i, t in enumerate(times):
+        out.append((d / f"card-{i + 1:02d}.png", t, times[i + 1] if i + 1 < len(times) else min(dur, t + lst.get("last", 4.0))))
+    if hdr:
+        for png, _, _ in out:
+            hlg_rgba(png)
+    return out
+
+
+def list_chain(cards, first, inp, outp, W, H, conv):
+    """Overlay the list cards on [inp] -> [outp]: a 0.3 s slide-up and fade in at each start."""
+    if not cards:
+        return f"[{inp}]null[{outp}]"
+    g, cur = [], inp
+    for k, (_, a, b) in enumerate(cards):
+        nxt = outp if k == len(cards) - 1 else f"l{k}"
+        g.append(f"[{first + k}:v]scale=-2:{H},{conv},fade=in:st={a:.3f}:d=0.25:alpha=1[c{k}];"
+                 f"[{cur}][c{k}]overlay=x=(W-w)/2:y='max(0,1-(t-{a:.3f})/0.3)*{round(H * .06)}':"
+                 f"enable='between(t,{a:.3f},{b:.3f})':format=auto[{nxt}]")
+        cur = nxt
+    return ";".join(g)
+
+
 def load_parts(work, edit):
     """One take, or an edit.json "parts" list mixing lines from several takes:
     [{"take": "../work2", "from": 30, "to": 44}, ...] (word numbers from that take's transcript.md)."""
@@ -482,6 +536,7 @@ def cmd_render(work):
     if edit.get("pop") and edit.get("cutout", True):
         print("cutting the speaker out...")
         mat = matte(cut, work / "matte.mp4", sw, sh)
+    cards = list_cards(work, edit["list"], tw, dur, hdr) if edit.get("list") else []
     # stills and graphics are drawn in standard color; in HDR they are converted into the footage's HLG
     to_pf = (f"scale=out_color_matrix=bt2020:out_range=tv,format={PF}" if hdr else f"format={PF}")
     for name in edit["formats"]:
@@ -495,6 +550,9 @@ def cmd_render(work):
         vf = f"[0:v]crop={cw}:{ch}:{cx}:{cy},scale={W}:{H}:flags=lanczos,setsar=1,"
         inputs = ["-i", str(cut)]
         subs = f"subtitles=filename='{ass}':fontsdir='{brand['files']['head'].parent}'"
+        cconv = ("scale=out_color_matrix=bt2020:out_range=tv,format=yuva420p10le" if hdr else "format=rgba")
+        li = (3 if edit.get("endcard") else 1) + (1 if edit.get("pop") else 0) + (1 if mat else 0)
+        lchain = lambda a, b: list_chain(cards, li, a, b, W, H, cconv)
         if edit.get("pop"):
             fx = Pop(W, H, tw, pieces, part_starts, dur, brand, edit.get("hook", ""),
                      edit["hook_seconds"] if edit.get("hook") else 0, edit.get("keywords"))
@@ -509,13 +567,14 @@ def cmd_render(work):
                 vf += (f"{zp},split[bg][fg];[{gi + 1}:v]scale={sw}:{sh},crop={cw}:{ch}:{cx}:{cy},"
                        f"scale={W}:{H}:flags=bicubic,setsar=1,{zp},format=gray[mm];"
                        f"[fg][mm]alphamerge,format={AF}[person];[{gi}:v]{gconv}[gfx];"
-                       f"[bg][gfx]overlay=eof_action=pass:format=auto[back];"
+                       f"[bg][gfx]overlay=eof_action=pass:format=auto[back0];{lchain('back0', 'back')};"
                        f"[back][person]overlay=format=auto,{subs},format={PF}[main]")
             else:
                 vf += (f"{zp},{subs},format={PF}[base];[{gi}:v]{gconv}[gfx];"
-                       f"[base][gfx]overlay=eof_action=pass:format=auto,format={PF}[main]")
+                       f"[base][gfx]overlay=eof_action=pass:format=auto[main0];{lchain('main0', 'main1')};"
+                       f"[main1]format={PF}[main]")
         else:
-            vf += f"{subs},format={PF}[main]"
+            vf += f"{subs}[main0];{lchain('main0', 'main1')};[main1]format={PF}[main]"
         if edit.get("endcard"):
             png = work / f"endcard-{name}.png"
             sb = sdr_brand["hex"]
@@ -530,6 +589,8 @@ def cmd_render(work):
             inputs += ["-i", str(gfx)]
             if mat:
                 inputs += ["-i", str(mat)]
+        for png, _, _ in cards:
+            inputs += ["-loop", "1", "-framerate", str(FPS), "-t", f"{dur:.3f}", "-i", str(png)]
         if covers:
             ci, one = inputs.count("-i"), f"{1 / FPS:.4f}"
             inputs += ["-loop", "1", "-framerate", str(FPS), "-t", one, "-i", str(covers[name]),

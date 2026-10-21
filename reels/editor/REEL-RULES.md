@@ -27,6 +27,8 @@ These apply to every talking head Reel, for Open Frame and for every client. Gra
 4. Motion: one scene per idea, each fired on its spoken word. The local AI picks the words and scenes into `keywords`.
 5. Sound: sound effects made in code (no licensing): a whoosh on the hook and each take change, a tap on each graphic, a chime on the end card, mixed under the voice, about -14 LUFS. `"sfx": false` turns it off. Still no music, so trending audio goes on in the IG app.
 
+- "Top N" list Reels (2026-10-21): numbered list cards (from `open-frame/list-cards/`) via edit.json `"list": {"spec": "spec.json"}`. Card N slides up when its number or name is said and stays until the next one, behind the speaker cut-out. The list title shows before card 1.
+
 ## Deliver
 - An IG Reel at 1080x1920 and a Facebook square at 2160x2160, plus an end card with the CTA.
 - Each Reel comes with a ready-to-paste caption that has a CTA. Put the full https:// link on its own line, after a blank line.
@@ -35,3 +37,6 @@ These apply to every talking head Reel, for Open Frame and for every client. Gra
 
 ## Tool
 `/mnt/project-files/automation/talking-head/` (see README.md): `thedit.py transcribe`, review `transcript.md` and `edit.json` (`brand`, `hook` with a `*accent*` word, `parts`, `pop: true`, `cover`), then `thedit.py render`. The graphics need playwright-core (`npm i playwright-core@1.56.1`, path in `PW_CORE`) and the Chromium in `/opt/pw-browsers`.
+
+## Hooks and structure (2026-10-21)
+Use the hook bank and rules in `/mnt/project-files/lessons/ad-attention-videos.md`. Skeleton: Hook, Problem, Story, Payoff. Record 3 openings per Reel.
