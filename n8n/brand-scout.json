@@ -1,0 +1,892 @@
+{
+ "name": "Open Frame brand scout",
+ "nodes": [
+  {
+   "parameters": {
+    "rule": {
+     "interval": [
+      {
+       "field": "weeks",
+       "triggerAtDay": [
+        1
+       ],
+       "triggerAtHour": 6
+      }
+     ]
+    }
+   },
+   "id": "bd0",
+   "name": "Every Monday 6am",
+   "type": "n8n-nodes-base.scheduleTrigger",
+   "typeVersion": 1.2,
+   "position": [
+    0,
+    300
+   ]
+  },
+  {
+   "parameters": {
+    "documentId": {
+     "__rl": true,
+     "mode": "url",
+     "value": "https://docs.google.com/spreadsheets/d/1VgiiTBTpmFh5bqutvYvjvNZmSicc8Es2vLSmnPlpHaU/edit"
+    },
+    "sheetName": {
+     "__rl": true,
+     "mode": "name",
+     "value": "Creators"
+    },
+    "options": {},
+    "authentication": "serviceAccount"
+   },
+   "id": "bd1",
+   "name": "Read Creators",
+   "type": "n8n-nodes-base.googleSheets",
+   "typeVersion": 4.5,
+   "position": [
+    220,
+    300
+   ],
+   "credentials": {
+    "googleApi": {
+     "id": "",
+     "name": "Google Service Account account"
+    }
+   },
+   "executeOnce": true,
+   "alwaysOutputData": true
+  },
+  {
+   "parameters": {
+    "documentId": {
+     "__rl": true,
+     "mode": "url",
+     "value": "https://docs.google.com/spreadsheets/d/1VgiiTBTpmFh5bqutvYvjvNZmSicc8Es2vLSmnPlpHaU/edit"
+    },
+    "sheetName": {
+     "__rl": true,
+     "mode": "name",
+     "value": "Brands"
+    },
+    "options": {},
+    "authentication": "serviceAccount"
+   },
+   "id": "bd2",
+   "name": "Read Brands",
+   "type": "n8n-nodes-base.googleSheets",
+   "typeVersion": 4.5,
+   "position": [
+    440,
+    300
+   ],
+   "credentials": {
+    "googleApi": {
+     "id": "",
+     "name": "Google Service Account account"
+    }
+   },
+   "executeOnce": true,
+   "alwaysOutputData": true
+  },
+  {
+   "parameters": {
+    "url": "https://graph.facebook.com/v21.0/17841420040350345",
+    "sendQuery": true,
+    "specifyQuery": "json",
+    "jsonQuery": "={{ JSON.stringify({ fields: \"username,biography,followers_count,media.limit(50){caption}\" }) }}",
+    "options": {
+     "batching": {
+      "batch": {
+       "batchSize": 1,
+       "batchInterval": 400
+      }
+     }
+    },
+    "authentication": "predefinedCredentialType",
+    "nodeCredentialType": "facebookGraphApi"
+   },
+   "id": "bd3",
+   "name": "IG: my profile",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "position": [
+    660,
+    300
+   ],
+   "credentials": {
+    "facebookGraphApi": {
+     "id": "",
+     "name": "Open Frame Page"
+    }
+   },
+   "onError": "continueRegularOutput",
+   "executeOnce": true
+  },
+  {
+   "parameters": {
+    "jsCode": "// Up to 40 creators a week: active ones first, then suggested ones (oldest scan first)\nconst clean = h => String(h || '').trim().replace(/^@/, '').replace(/\\/$/, '').split('/').pop().toLowerCase();\nconst rows = $('Read Creators').all().map(i => i.json).filter(r => clean(r.handle));\nconst st = r => String(r.status || '').trim().toLowerCase();\nconst age = r => (r.last_scanned ? new Date(r.last_scanned).getTime() : 0) || 0;\nconst active = rows.filter(r => st(r) === 'active' || st(r) === '').sort((a, b) => age(a) - age(b));\nconst suggested = rows.filter(r => st(r) === 'suggested').sort((a, b) => age(a) - age(b));\nconst F = '{username,name,biography,website,followers_count,media_count,media.limit(25){caption,permalink,timestamp}}';\nreturn [...active, ...suggested].slice(0, 40).map(r => {\n  const handle = clean(r.handle);\n  return { json: { handle, status: st(r) || 'active', fields: `business_discovery.username(${handle})${F}` } };\n});\n"
+   },
+   "id": "bd4",
+   "name": "Creators to scan",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    880,
+    300
+   ]
+  },
+  {
+   "parameters": {
+    "url": "https://graph.facebook.com/v21.0/17841420040350345",
+    "sendQuery": true,
+    "specifyQuery": "json",
+    "jsonQuery": "={{ JSON.stringify({ fields: $json.fields }) }}",
+    "options": {
+     "batching": {
+      "batch": {
+       "batchSize": 1,
+       "batchInterval": 400
+      }
+     }
+    },
+    "authentication": "predefinedCredentialType",
+    "nodeCredentialType": "facebookGraphApi"
+   },
+   "id": "bd5",
+   "name": "IG: look up creator",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "position": [
+    1100,
+    300
+   ],
+   "credentials": {
+    "facebookGraphApi": {
+     "id": "",
+     "name": "Open Frame Page"
+    }
+   },
+   "onError": "continueRegularOutput"
+  },
+  {
+   "parameters": {
+    "jsCode": "// Scores each creator against our own profile and pulls their sponsored posts\nconst MIN_SIM = 20, MIN_FOLLOWERS = 1000, MAX_FOLLOWERS = 300000;\nconst DAYS = 365;\nconst STOP = new Set('the and for you your with this that are our was have has from but not all can just what when out new get got its it\\'s one more about how they them their will who make made into like love here there day today week year time back been some very also than then which would could should these those over only even most much many really thing things want need see let lets dont don\\'t isnt didnt cant http https www com link bio comment comments post posts follow share save'.split(' '));\nconst TOPICS = ['design','designer','brand','branding','logo','logos','marketing','social','socialmedia','content','creative','creator','studio','agency','nonprofit','nonprofits','smallbusiness','business','website','websites','web','typography','type','illustration','graphic','graphicdesign','canva','figma','adobe','photography','newsletter','strategy','mission','community','minneapolis','barcelona','freelance','entrepreneur'];\nconst words = t => (String(t || '').toLowerCase().match(/[a-z][a-z0-9']{2,}/g) || []).filter(w => !STOP.has(w));\nfunction vec(bio, captions) {\n  const v = {};\n  words(bio).forEach(w => v[w] = (v[w] || 0) + 3);\n  captions.forEach(c => words(c).forEach(w => v[w] = (v[w] || 0) + 1));\n  return v;\n}\nfunction similarity(a, b) {\n  let dot = 0, na = 0, nb = 0;\n  for (const k in a) { na += a[k] * a[k]; if (b[k]) dot += a[k] * b[k]; }\n  for (const k in b) nb += b[k] * b[k];\n  const cos = na && nb ? dot / Math.sqrt(na * nb) : 0;\n  const mine = TOPICS.filter(t => a[t]);\n  const shared = mine.filter(t => b[t]).length;\n  const topic = mine.length ? Math.min(1, shared / Math.min(mine.length, 6)) : 0;\n  return Math.round(100 * (0.5 * Math.min(1, cos * 2) + 0.5 * topic));\n}\nconst DEAL = /(#ad\\b|#ads\\b|#sponsored|#spon\\b|#paidpartnership|#partner\\b|#brandpartner|#ambassador|#[a-z0-9]+partner\\b|#[a-z0-9]+ambassador\\b|#gifted|paid partnership|in partnership with|partnered with|partnering with|sponsored by|thanks to @|thank you @|use (my )?code|discount code|promo code|affiliate link|#collab\\b)/i;\nconst IGNORE = new Set(['gmail.com', 'instagram', 'threads', 'youtube', 'tiktok', 'linkedin']);\nfunction dealBrands(caption, self) {\n  const out = new Set();\n  (caption.match(/@([a-z0-9._]{2,30})/gi) || []).forEach(m => {\n    const h = m.slice(1).toLowerCase().replace(/\\.+$/, '');\n    if (h && h !== self && !IGNORE.has(h)) out.add(h);\n  });\n  if (!out.size) (caption.match(/#([a-z0-9]{3,25})(partner|ambassador)\\b/gi) || []).forEach(m => {\n    const h = m.slice(1).toLowerCase().replace(/(partner|ambassador)$/, '');\n    if (h && h !== 'brand' && h !== 'paid') out.add(h);\n  });\n  return [...out];\n}\n\nconst me = $('IG: my profile').first().json;\nconst myVec = vec(me.biography, ((me.media && me.media.data) || []).map(m => m.caption || ''));\nconst asked = $('Creators to scan').all().map(i => i.json);\nconst now = new Date().toISOString();\nconst cutoff = Date.now() - DAYS * 864e5;\n\nreturn $input.all().map((item, idx) => {\n  const ask = asked[idx] || {};\n  const bd = item.json.business_discovery;\n  if (!bd) {\n    return { json: { handle: ask.handle, status: ask.status === 'suggested' ? 'skip' : ask.status, last_scanned: now,\n      handle_check: 'not found, or a personal account (only creator/business accounts can be read)', _deals: [] } };\n  }\n  const media = (bd.media && bd.media.data) || [];\n  const sim = similarity(myVec, vec(bd.biography, media.map(m => m.caption || '')));\n  const deals = media.filter(m => m.caption && DEAL.test(m.caption) && new Date(m.timestamp).getTime() >= cutoff)\n    .map(m => ({ permalink: m.permalink, timestamp: m.timestamp, brands: dealBrands(m.caption, bd.username.toLowerCase()) }))\n    .filter(d => d.brands.length);\n  const count = {};\n  deals.forEach(d => d.brands.forEach(b => count[b] = (count[b] || 0) + 1));\n  const top = Object.entries(count).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([b]) => '@' + b).join(', ');\n  let status = ask.status;\n  if (status === 'suggested') {\n    const f = bd.followers_count || 0;\n    status = sim >= MIN_SIM && f >= MIN_FOLLOWERS && f <= MAX_FOLLOWERS ? 'active' : 'skip';\n  }\n  return { json: { handle: ask.handle, status, name: bd.name || '', followers: bd.followers_count || '', similarity: sim,\n    deal_posts: deals.length, top_brands: top, last_scanned: now, handle_check: 'ok', _deals: deals } };\n});\n"
+   },
+   "id": "bd6",
+   "name": "Creator results",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    1320,
+    300
+   ]
+  },
+  {
+   "parameters": {
+    "documentId": {
+     "__rl": true,
+     "mode": "url",
+     "value": "https://docs.google.com/spreadsheets/d/1VgiiTBTpmFh5bqutvYvjvNZmSicc8Es2vLSmnPlpHaU/edit"
+    },
+    "sheetName": {
+     "__rl": true,
+     "mode": "name",
+     "value": "Creators"
+    },
+    "options": {},
+    "authentication": "serviceAccount",
+    "operation": "appendOrUpdate",
+    "columns": {
+     "mappingMode": "defineBelow",
+     "value": {
+      "handle": "={{ $json.handle }}",
+      "status": "={{ $json.status }}",
+      "name": "={{ $json.name }}",
+      "followers": "={{ $json.followers }}",
+      "similarity": "={{ $json.similarity }}",
+      "deal_posts": "={{ $json.deal_posts }}",
+      "top_brands": "={{ $json.top_brands }}",
+      "last_scanned": "={{ $json.last_scanned }}",
+      "handle_check": "={{ $json.handle_check }}"
+     },
+     "matchingColumns": [
+      "handle"
+     ],
+     "schema": [
+      {
+       "id": "handle",
+       "displayName": "handle",
+       "required": false,
+       "defaultMatch": false,
+       "display": true,
+       "type": "string",
+       "canBeUsedToMatch": true,
+       "removed": false
+      },
+      {
+       "id": "status",
+       "displayName": "status",
+       "required": false,
+       "defaultMatch": false,
+       "display": true,
+       "type": "string",
+       "canBeUsedToMatch": true,
+       "removed": false
+      },
+      {
+       "id": "name",
+       "displayName": "name",
+       "required": false,
+       "defaultMatch": false,
+       "display": true,
+       "type": "string",
+       "canBeUsedToMatch": true,
+       "removed": false
+      },
+      {
+       "id": "followers",
+       "displayName": "followers",
+       "required": false,
+       "defaultMatch": false,
+       "display": true,
+       "type": "string",
+       "canBeUsedToMatch": true,
+       "removed": false
+      },
+      {
+       "id": "similarity",
+       "displayName": "similarity",
+       "required": false,
+       "defaultMatch": false,
+       "display": true,
+       "type": "string",
+       "canBeUsedToMatch": true,
+       "removed": false
+      },
+      {
+       "id": "deal_posts",
+       "displayName": "deal_posts",
+       "required": false,
+       "defaultMatch": false,
+       "display": true,
+       "type": "string",
+       "canBeUsedToMatch": true,
+       "removed": false
+      },
+      {
+       "id": "top_brands",
+       "displayName": "top_brands",
+       "required": false,
+       "defaultMatch": false,
+       "display": true,
+       "type": "string",
+       "canBeUsedToMatch": true,
+       "removed": false
+      },
+      {
+       "id": "last_scanned",
+       "displayName": "last_scanned",
+       "required": false,
+       "defaultMatch": false,
+       "display": true,
+       "type": "string",
+       "canBeUsedToMatch": true,
+       "removed": false
+      },
+      {
+       "id": "handle_check",
+       "displayName": "handle_check",
+       "required": false,
+       "defaultMatch": false,
+       "display": true,
+       "type": "string",
+       "canBeUsedToMatch": true,
+       "removed": false
+      }
+     ],
+     "attemptToConvertTypes": false,
+     "convertFieldsToString": false
+    }
+   },
+   "id": "bd7",
+   "name": "Update Creators",
+   "type": "n8n-nodes-base.googleSheets",
+   "typeVersion": 4.5,
+   "position": [
+    1540,
+    160
+   ],
+   "credentials": {
+    "googleApi": {
+     "id": "",
+     "name": "Google Service Account account"
+    }
+   }
+  },
+  {
+   "parameters": {
+    "jsCode": "// Brands that similar creators tagged in sponsored posts, merged with what the Brands tab already knows\nconst clean = h => String(h || '').trim().replace(/^@/, '').toLowerCase();\nconst list = s => String(s || '').split(/[,\\s]+/).map(clean).filter(Boolean);\nconst creators = new Set($('Read Creators').all().map(i => clean(i.json.handle)).filter(Boolean));\nconst known = new Map($('Read Brands').all().map(i => i.json).filter(r => clean(r.handle)).map(r => [clean(r.handle), r]));\nconst agg = {};\nfor (const { json: c } of $('Creator results').all()) {\n  if (c.status !== 'active') continue;\n  for (const d of c._deals || []) for (const b of d.brands) {\n    if (creators.has(b)) continue;\n    const a = agg[b] = agg[b] || { creators: new Set(), posts: 0, example: '', last: '' };\n    a.creators.add(c.handle); a.posts++;\n    if (!a.last || d.timestamp > a.last) { a.last = d.timestamp; a.example = d.permalink; }\n  }\n}\nconst out = [];\nfor (const [handle, a] of Object.entries(agg)) {\n  const k = known.get(handle) || {};\n  if (['skip', 'not a brand'].includes(String(k.status || '').toLowerCase())) continue;\n  list(k.creator_handles).forEach(h => a.creators.add(h));\n  const prevPosts = Number(k.deal_posts) || 0;\n  out.push({ handle, isNew: !known.has(handle), status: k.status || 'new',\n    creators_seen: a.creators.size, creator_handles: [...a.creators].map(h => '@' + h).join(', '),\n    deal_posts: Math.max(prevPosts, a.posts), example_post: a.example || k.example_post || '',\n    last_seen: a.last ? a.last.slice(0, 10) : (k.last_seen || '') });\n}\n// New brands and brands seen with the most creators first; 40 lookups a week keeps us far under Instagram's limit\nout.sort((x, y) => (y.isNew - x.isNew) || (y.creators_seen - x.creators_seen) || (y.deal_posts - x.deal_posts));\nconst F = '{username,name,biography,website,followers_count,media_count,media.limit(25){caption}}';\nreturn out.slice(0, 40).map(b => ({ json: { ...b, fields: `business_discovery.username(${b.handle})${F}` } }));\n"
+   },
+   "id": "bd8",
+   "name": "Brand candidates",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    1540,
+    420
+   ]
+  },
+  {
+   "parameters": {
+    "url": "https://graph.facebook.com/v21.0/17841420040350345",
+    "sendQuery": true,
+    "specifyQuery": "json",
+    "jsonQuery": "={{ JSON.stringify({ fields: $json.fields }) }}",
+    "options": {
+     "batching": {
+      "batch": {
+       "batchSize": 1,
+       "batchInterval": 400
+      }
+     }
+    },
+    "authentication": "predefinedCredentialType",
+    "nodeCredentialType": "facebookGraphApi"
+   },
+   "id": "bd9",
+   "name": "IG: look up brand",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "position": [
+    1760,
+    420
+   ],
+   "credentials": {
+    "facebookGraphApi": {
+     "id": "",
+     "name": "Open Frame Page"
+    }
+   },
+   "onError": "continueRegularOutput"
+  },
+  {
+   "parameters": {
+    "jsCode": "// Adds each brand's profile and builds the question for the local AI model (LM Studio)\nconst ABOUT = 'Open Frame is a small design and marketing studio (Minneapolis and Barcelona) that posts about branding, logos, websites, social media and marketing for mission-driven organizations, nonprofits and small brands.';\nconst SYSTEM = 'You sort Instagram accounts for a creator looking for brand deals. Reply only with JSON.';\nconst asked = $('Brand candidates').all().map(i => i.json);\nreturn $input.all().map((item, idx) => {\n  const b = { ...asked[idx] };\n  delete b.fields;\n  const bd = item.json.business_discovery;\n  if (!bd) return { json: { ...b, handle_check: 'not found, or a personal account', tagged: [], llm: null } };\n  const tagged = new Set();\n  ((bd.media && bd.media.data) || []).forEach(m => (String(m.caption || '').match(/@([a-z0-9._]{2,30})/gi) || [])\n    .forEach(t => { const h = t.slice(1).toLowerCase().replace(/\\.+$/, ''); if (h !== b.handle) tagged.add(h); }));\n  const user = `${ABOUT}\\n\\nAccount: @${bd.username}\\nName: ${bd.name || ''}\\nFollowers: ${bd.followers_count || 0}\\nWebsite: ${bd.website || ''}\\nBio: ${String(bd.biography || '').slice(0, 400)}\\n\\n` +\n    'Answer:\\n- type: \"brand\" if this is a company or product that pays creators, \"creator\" if it is a person or creator, \"other\" for media, events, agencies or anything else.\\n' +\n    '- fit: \"high\", \"medium\" or \"low\" for how likely this brand would sponsor Open Frame\\'s content.\\n- why: one plain sentence, max 15 words.';\n  return { json: { ...b, name: bd.name || '', followers: bd.followers_count || '', website: bd.website || '',\n    bio: String(bd.biography || '').replace(/\\s+/g, ' ').slice(0, 200), handle_check: 'ok', tagged: [...tagged].slice(0, 15),\n    llm: { model: 'google/gemma-4-e4b', temperature: 0.2, max_tokens: 200,\n      messages: [{ role: 'system', content: SYSTEM }, { role: 'user', content: user }],\n      response_format: { type: 'json_schema', json_schema: { name: 'brand_fit', strict: true, schema: { type: 'object',\n        properties: { type: { type: 'string', enum: ['brand', 'creator', 'other'] }, fit: { type: 'string', enum: ['high', 'medium', 'low'] }, why: { type: 'string' } },\n        required: ['type', 'fit', 'why'] } } } } } };\n});\n"
+   },
+   "id": "bd10",
+   "name": "Brand profiles",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    1980,
+    420
+   ]
+  },
+  {
+   "parameters": {
+    "method": "POST",
+    "url": "http://127.0.0.1:1234/v1/chat/completions",
+    "sendBody": true,
+    "specifyBody": "json",
+    "jsonBody": "={{ JSON.stringify($json.llm || { skip: true }) }}",
+    "options": {
+     "timeout": 120000,
+     "batching": {
+      "batch": {
+       "batchSize": 1,
+       "batchInterval": 0
+      }
+     }
+    }
+   },
+   "id": "bd11",
+   "name": "Local AI: brand fit",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "position": [
+    2200,
+    420
+   ],
+   "onError": "continueRegularOutput"
+  },
+  {
+   "parameters": {
+    "jsCode": "// Reads the local AI's answer. If LM Studio is off, the brand is still saved, just without fit and why\nconst prev = $('Brand profiles').all().map(i => i.json);\nconst now = new Date().toISOString();\nreturn $input.all().map((item, idx) => {\n  const b = { ...prev[idx] };\n  let ai = {};\n  if (b.handle_check === 'ok') try {\n    const txt = item.json.choices[0].message.content;\n    ai = JSON.parse(txt.slice(txt.indexOf('{'), txt.lastIndexOf('}') + 1));\n  } catch (e) { ai = {}; }\n  const type = b.handle_check !== 'ok' ? 'unknown' : (ai.type || 'brand');\n  delete b.llm;\n  return { json: { ...b, type, fit: type === 'unknown' ? '' : (ai.fit || ''), why: type === 'unknown' ? 'Check the handle on Instagram' : String(ai.why || '').slice(0, 140), last_checked: now } };\n});\n"
+   },
+   "id": "bd12",
+   "name": "Brand rows",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    2420,
+    420
+   ]
+  },
+  {
+   "parameters": {
+    "jsCode": "// Every looked-up account is saved so it isn't looked up again. People and media accounts get status \"not a brand\"\nreturn $input.all().map(i => {\n  const b = i.json;\n  const status = b.type === 'creator' || b.type === 'other' ? 'not a brand' : b.status;\n  return { json: { handle: b.handle, status, fit: b.fit, why: b.why, creators_seen: b.creators_seen,\n    creator_handles: b.creator_handles, deal_posts: b.deal_posts, followers: b.followers || '', website: b.website || '',\n    example_post: b.example_post, last_seen: b.last_seen, bio: b.bio || '', handle_check: b.handle_check, last_checked: b.last_checked } };\n});\n"
+   },
+   "id": "bd13",
+   "name": "Brands to save",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    2640,
+    320
+   ]
+  },
+  {
+   "parameters": {
+    "documentId": {
+     "__rl": true,
+     "mode": "url",
+     "value": "https://docs.google.com/spreadsheets/d/1VgiiTBTpmFh5bqutvYvjvNZmSicc8Es2vLSmnPlpHaU/edit"
+    },
+    "sheetName": {
+     "__rl": true,
+     "mode": "name",
+     "value": "Brands"
+    },
+    "options": {},
+    "authentication": "serviceAccount",
+    "operation": "appendOrUpdate",
+    "columns": {
+     "mappingMode": "defineBelow",
+     "value": {
+      "handle": "={{ $json.handle }}",
+      "status": "={{ $json.status }}",
+      "fit": "={{ $json.fit }}",
+      "why": "={{ $json.why }}",
+      "creators_seen": "={{ $json.creators_seen }}",
+      "creator_handles": "={{ $json.creator_handles }}",
+      "deal_posts": "={{ $json.deal_posts }}",
+      "followers": "={{ $json.followers }}",
+      "website": "={{ $json.website }}",
+      "example_post": "={{ $json.example_post }}",
+      "last_seen": "={{ $json.last_seen }}",
+      "bio": "={{ $json.bio }}",
+      "handle_check": "={{ $json.handle_check }}",
+      "last_checked": "={{ $json.last_checked }}"
+     },
+     "matchingColumns": [
+      "handle"
+     ],
+     "schema": [
+      {
+       "id": "handle",
+       "displayName": "handle",
+       "required": false,
+       "defaultMatch": false,
+       "display": true,
+       "type": "string",
+       "canBeUsedToMatch": true,
+       "removed": false
+      },
+      {
+       "id": "status",
+       "displayName": "status",
+       "required": false,
+       "defaultMatch": false,
+       "display": true,
+       "type": "string",
+       "canBeUsedToMatch": true,
+       "removed": false
+      },
+      {
+       "id": "fit",
+       "displayName": "fit",
+       "required": false,
+       "defaultMatch": false,
+       "display": true,
+       "type": "string",
+       "canBeUsedToMatch": true,
+       "removed": false
+      },
+      {
+       "id": "why",
+       "displayName": "why",
+       "required": false,
+       "defaultMatch": false,
+       "display": true,
+       "type": "string",
+       "canBeUsedToMatch": true,
+       "removed": false
+      },
+      {
+       "id": "creators_seen",
+       "displayName": "creators_seen",
+       "required": false,
+       "defaultMatch": false,
+       "display": true,
+       "type": "string",
+       "canBeUsedToMatch": true,
+       "removed": false
+      },
+      {
+       "id": "creator_handles",
+       "displayName": "creator_handles",
+       "required": false,
+       "defaultMatch": false,
+       "display": true,
+       "type": "string",
+       "canBeUsedToMatch": true,
+       "removed": false
+      },
+      {
+       "id": "deal_posts",
+       "displayName": "deal_posts",
+       "required": false,
+       "defaultMatch": false,
+       "display": true,
+       "type": "string",
+       "canBeUsedToMatch": true,
+       "removed": false
+      },
+      {
+       "id": "followers",
+       "displayName": "followers",
+       "required": false,
+       "defaultMatch": false,
+       "display": true,
+       "type": "string",
+       "canBeUsedToMatch": true,
+       "removed": false
+      },
+      {
+       "id": "website",
+       "displayName": "website",
+       "required": false,
+       "defaultMatch": false,
+       "display": true,
+       "type": "string",
+       "canBeUsedToMatch": true,
+       "removed": false
+      },
+      {
+       "id": "example_post",
+       "displayName": "example_post",
+       "required": false,
+       "defaultMatch": false,
+       "display": true,
+       "type": "string",
+       "canBeUsedToMatch": true,
+       "removed": false
+      },
+      {
+       "id": "last_seen",
+       "displayName": "last_seen",
+       "required": false,
+       "defaultMatch": false,
+       "display": true,
+       "type": "string",
+       "canBeUsedToMatch": true,
+       "removed": false
+      },
+      {
+       "id": "bio",
+       "displayName": "bio",
+       "required": false,
+       "defaultMatch": false,
+       "display": true,
+       "type": "string",
+       "canBeUsedToMatch": true,
+       "removed": false
+      },
+      {
+       "id": "handle_check",
+       "displayName": "handle_check",
+       "required": false,
+       "defaultMatch": false,
+       "display": true,
+       "type": "string",
+       "canBeUsedToMatch": true,
+       "removed": false
+      },
+      {
+       "id": "last_checked",
+       "displayName": "last_checked",
+       "required": false,
+       "defaultMatch": false,
+       "display": true,
+       "type": "string",
+       "canBeUsedToMatch": true,
+       "removed": false
+      }
+     ],
+     "attemptToConvertTypes": false,
+     "convertFieldsToString": false
+    }
+   },
+   "id": "bd14",
+   "name": "Save Brands",
+   "type": "n8n-nodes-base.googleSheets",
+   "typeVersion": 4.5,
+   "position": [
+    2860,
+    320
+   ],
+   "credentials": {
+    "googleApi": {
+     "id": "",
+     "name": "Google Service Account account"
+    }
+   }
+  },
+  {
+   "parameters": {
+    "jsCode": "// Snowball: creators that brands tag, plus \"brands\" that turned out to be people, become suggested creators.\n// They get scanned next week and switch to active or skip on their own.\nconst clean = h => String(h || '').trim().replace(/^@/, '').toLowerCase();\nconst have = new Set([...$('Read Creators').all(), ...$('Read Brands').all()].map(i => clean(i.json.handle)).filter(Boolean));\nconst brandSet = new Set($input.all().map(i => i.json.handle));\nconst out = new Map();\nfor (const { json: b } of $input.all()) {\n  if (b.type === 'creator' && !have.has(b.handle)) out.set(b.handle, `looked like a brand, is a creator (seen with ${b.creator_handles})`);\n  if (b.type !== 'brand') continue;\n  for (const t of b.tagged || []) if (!have.has(t) && !brandSet.has(t) && !out.has(t)) out.set(t, `tagged by @${b.handle}`);\n}\nreturn [...out].slice(0, 30).map(([handle, source]) => ({ json: { handle, status: 'suggested', source } }));\n"
+   },
+   "id": "bd15",
+   "name": "New creators",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    2640,
+    540
+   ]
+  },
+  {
+   "parameters": {
+    "documentId": {
+     "__rl": true,
+     "mode": "url",
+     "value": "https://docs.google.com/spreadsheets/d/1VgiiTBTpmFh5bqutvYvjvNZmSicc8Es2vLSmnPlpHaU/edit"
+    },
+    "sheetName": {
+     "__rl": true,
+     "mode": "name",
+     "value": "Creators"
+    },
+    "options": {},
+    "authentication": "serviceAccount",
+    "operation": "append",
+    "columns": {
+     "mappingMode": "defineBelow",
+     "value": {
+      "handle": "={{ $json.handle }}",
+      "status": "={{ $json.status }}",
+      "source": "={{ $json.source }}"
+     },
+     "matchingColumns": [],
+     "schema": [
+      {
+       "id": "handle",
+       "displayName": "handle",
+       "required": false,
+       "defaultMatch": false,
+       "display": true,
+       "type": "string",
+       "canBeUsedToMatch": true,
+       "removed": false
+      },
+      {
+       "id": "status",
+       "displayName": "status",
+       "required": false,
+       "defaultMatch": false,
+       "display": true,
+       "type": "string",
+       "canBeUsedToMatch": true,
+       "removed": false
+      },
+      {
+       "id": "source",
+       "displayName": "source",
+       "required": false,
+       "defaultMatch": false,
+       "display": true,
+       "type": "string",
+       "canBeUsedToMatch": true,
+       "removed": false
+      }
+     ],
+     "attemptToConvertTypes": false,
+     "convertFieldsToString": false
+    }
+   },
+   "id": "bd16",
+   "name": "Add suggested creators",
+   "type": "n8n-nodes-base.googleSheets",
+   "typeVersion": 4.5,
+   "position": [
+    2860,
+    540
+   ],
+   "credentials": {
+    "googleApi": {
+     "id": "",
+     "name": "Google Service Account account"
+    }
+   }
+  }
+ ],
+ "connections": {
+  "Every Monday 6am": {
+   "main": [
+    [
+     {
+      "node": "Read Creators",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Read Creators": {
+   "main": [
+    [
+     {
+      "node": "Read Brands",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Read Brands": {
+   "main": [
+    [
+     {
+      "node": "IG: my profile",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "IG: my profile": {
+   "main": [
+    [
+     {
+      "node": "Creators to scan",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Creators to scan": {
+   "main": [
+    [
+     {
+      "node": "IG: look up creator",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "IG: look up creator": {
+   "main": [
+    [
+     {
+      "node": "Creator results",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Creator results": {
+   "main": [
+    [
+     {
+      "node": "Update Creators",
+      "type": "main",
+      "index": 0
+     },
+     {
+      "node": "Brand candidates",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Brand candidates": {
+   "main": [
+    [
+     {
+      "node": "IG: look up brand",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "IG: look up brand": {
+   "main": [
+    [
+     {
+      "node": "Brand profiles",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Brand profiles": {
+   "main": [
+    [
+     {
+      "node": "Local AI: brand fit",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Local AI: brand fit": {
+   "main": [
+    [
+     {
+      "node": "Brand rows",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Brand rows": {
+   "main": [
+    [
+     {
+      "node": "Brands to save",
+      "type": "main",
+      "index": 0
+     },
+     {
+      "node": "New creators",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Brands to save": {
+   "main": [
+    [
+     {
+      "node": "Save Brands",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "New creators": {
+   "main": [
+    [
+     {
+      "node": "Add suggested creators",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  }
+ },
+ "settings": {
+  "executionOrder": "v1"
+ }
+}
