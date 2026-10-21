@@ -1,0 +1,104 @@
+// Shared pieces for every loop: settings, the local AI, the Hub, the self-check, the run log, git sync.
+// Free tools only: LM Studio on this Mac, the Hub (Google Apps Script), git.
+const fs = require('fs'), path = require('path'), os = require('os');
+const { execFileSync } = require('child_process');
+
+const HERE = __dirname, HOME = os.homedir();
+const readJSON = (p, d) => { try { return JSON.parse(fs.readFileSync(p, 'utf8')); } catch { return d; } };
+const reels = readJSON(path.join(HERE, '..', 'reels', 'config.json'), {});
+
+// loops/config.json wins, then reels/config.json (hub, hubKey, model are shared), then these defaults.
+const C = {
+  repo: path.resolve(HERE, '..'),
+  llm: 'http://127.0.0.1:1234/v1/chat/completions',
+  model: reels.model || 'google/gemma-4-e4b',
+  hub: reels.hub || '', hubKey: reels.hubKey || '',
+  watched: `${HOME}/Downloads/Open Frame LLC & Clients/Watched`,
+  scripts: `${HOME}/Downloads/Open Frame LLC & Clients/Scripts`,
+  push: true,
+  ...readJSON(path.join(HERE, 'config.json'), {}),
+};
+const STATE = path.join(HERE, 'state');
+
+function log(...a) { console.log(new Date().toISOString(), ...a); }
+const slug = s => String(s).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40) || 'item';
+const today = () => new Date().toISOString().slice(0, 10);
+const clients = () => Object.entries(readJSON(path.join(HERE, 'clients.json'), {}))
+  .filter(([k, v]) => !k.startsWith('_') && v.enabled).map(([id, v]) => ({ id, ...v }));
+
+// {{name}} in a prompt file -> value. Lists become bullet lines.
+function fill(file, vars) {
+  return fs.readFileSync(path.join(HERE, 'prompts', file), 'utf8').replace(/\{\{(\w+)\}\}/g, (_, k) => {
+    const v = vars[k];
+    if (Array.isArray(v)) return v.length ? v.map(x => '- ' + x).join('\n') : '(none yet)';
+    return v == null || v === '' ? '(none yet)' : String(v);
+  });
+}
+
+async function ask(prompt, schema, temperature = 0.4) {
+  const res = await fetch(C.llm, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ model: C.model, temperature, messages: [{ role: 'user', content: prompt }],
+      response_format: { type: 'json_schema', json_schema: { name: 'out', strict: true, schema } } }),
+    signal: AbortSignal.timeout(240000) });
+  if (!res.ok) throw new Error(`LM Studio said ${res.status}. Is it running with ${C.model} loaded?`);
+  return JSON.parse((await res.json()).choices[0].message.content);
+}
+
+async function hub(action, data = {}) {
+  if (!C.hub || !C.hubKey) throw new Error('Add "hub" and "hubKey" to reels/config.json or loops/config.json');
+  const res = await fetch(C.hub, { method: 'POST', redirect: 'follow', headers: { 'Content-Type': 'text/plain' },
+    body: JSON.stringify({ key: C.hubKey, fn: 'loops', action, ...data }) });
+  const out = await res.json();
+  if (out.error) throw new Error('Hub: ' + out.error);
+  return out;
+}
+
+// The rule half of the self-check. Same bans as Graham's copy rules (memory + brands/design-notes.md).
+const BANNED = ['leverage', 'seamless', 'robust', 'elevate', 'unlock', 'empower', 'transform', 'game-changer', 'game changer',
+  'landscape', 'journey', 'delve', 'dive in', 'testament', "in today's world", 'next level', 'synergy', 'cutting-edge'];
+function rules(text, { maxWords = 0, firstPersonOk = true } = {}) {
+  const t = String(text || ''), low = t.toLowerCase(), out = [];
+  BANNED.forEach(w => { if (new RegExp(`\\b${w.replace(/[-']/g, '.')}`, 'i').test(low)) out.push(`banned word "${w}"`); });
+  if (/[—–]/.test(t)) out.push('em dash');
+  if (/\bnot (just |only )?[\w\s']{1,30}, but\b|\bisn'?t just\b|\bisn't about\b/i.test(t)) out.push('"not X, but Y"');
+  if (/whether you'?re/i.test(t)) out.push('"whether you\'re" setup');
+  if (/^[^.\n]{0,80}\?/.test(t.trim())) out.push('opens with a question');
+  if (!firstPersonOk && /\b(i|we|our|us|my)\b/i.test(t)) out.push('first-person word');
+  if (/\[(name|client|insert)[^\]]*\]|lorem ipsum|XX%/i.test(t)) out.push('placeholder left in');
+  const words = t.split(/\s+/).filter(Boolean).length;
+  if (maxWords && words > maxWords) out.push(`${words} words, max ${maxWords}`);
+  return out;
+}
+
+// The AI half of the self-check: a second local-AI pass scores it. Kept only if every score is 3+ and the average is 3.5+.
+const JUDGE = { type: 'object', additionalProperties: false, required: ['fit', 'specific', 'hook', 'doable', 'reason'],
+  properties: { fit: { type: 'integer' }, specific: { type: 'integer' }, hook: { type: 'integer' }, doable: { type: 'integer' }, reason: { type: 'string' } } };
+async function judge(client, text) {
+  const s = await ask(fill('judge.md', { ...client, text }), JUDGE, 0);
+  const nums = [s.fit, s.specific, s.hook, s.doable].map(n => Math.max(1, Math.min(5, Number(n) || 1)));
+  const avg = nums.reduce((a, b) => a + b, 0) / nums.length;
+  return { ok: Math.min(...nums) >= 3 && avg >= 3.5, avg: Math.round(avg * 10) / 10, reason: s.reason };
+}
+
+// One line per run, here (state/runs.jsonl, read by the weekly review) and in the Hub "Loop runs" tab.
+async function logRun(run) {
+  fs.mkdirSync(STATE, { recursive: true });
+  fs.appendFileSync(path.join(STATE, 'runs.jsonl'), JSON.stringify({ at: new Date().toISOString(), ...run }) + '\n');
+  try { await hub('log', { run }); } catch (e) { log('hub log failed:', e.message); }
+}
+
+// Loops share state through the repo: the Mac pushes loops/state, the weekly review reads it and pushes lessons + prompt fixes.
+const git = (...a) => execFileSync('git', ['-C', C.repo, ...a], { encoding: 'utf8' });
+function pull() { try { git('pull', '--rebase', '--autostash', '-q'); } catch (e) { log('git pull failed:', e.message.split('\n')[0]); } }
+function pushState(msg) {
+  if (!C.push) return;
+  try {
+    git('add', 'loops/state');
+    if (!git('status', '--porcelain', 'loops/state').trim()) return;
+    git('commit', '-q', '-m', msg, '--', 'loops/state');
+    pull();
+    git('push', '-q');
+  } catch (e) { log('git push failed:', e.message.split('\n')[0]); }
+}
+
+module.exports = { C, HERE, STATE, readJSON, log, slug, today, clients, fill, ask, hub, rules, judge, logRun, pull, pushState };
