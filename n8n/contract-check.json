@@ -1,0 +1,310 @@
+{
+ "name": "Open Frame contract check",
+ "nodes": [
+  {
+   "parameters": {
+    "mailbox": "INBOX",
+    "postProcessAction": "read",
+    "downloadAttachments": true,
+    "format": "simple",
+    "options": {
+     "customEmailConfig": "[\"UNSEEN\", [\"TO\", \"grahamivy.co+contract@gmail.com\"]]"
+    }
+   },
+   "id": "cc0",
+   "name": "Contract emails",
+   "type": "n8n-nodes-base.emailReadImap",
+   "typeVersion": 2.1,
+   "position": [
+    0,
+    300
+   ],
+   "credentials": {
+    "imap": {
+     "id": "",
+     "name": "Gmail IMAP"
+    }
+   }
+  },
+  {
+   "parameters": {
+    "jsCode": "// One forwarded email = one deal. Pulls the email text and finds the contract PDF among the attachments.\nconst strip = h => String(h || '').replace(/<style[\\s\\S]*?<\\/style>/gi, '').replace(/<br\\s*\\/?>|<\\/p>|<\\/div>/gi, '\\n')\n  .replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/[ \\t]+/g, ' ').replace(/\\n{3,}/g, '\\n\\n').trim();\nreturn $input.all().map(item => {\n  const j = item.json;\n  const bin = item.binary || {};\n  const keys = Object.keys(bin);\n  const pdfKey = keys.find(k => /pdf/i.test(bin[k].mimeType || '') || /\\.pdf$/i.test(bin[k].fileName || '')) || '';\n  const other = keys.filter(k => k !== pdfKey).map(k => bin[k].fileName || k);\n  return { json: { subject: String(j.subject || '').replace(/^(fwd?|fw):\\s*/i, ''), from: j.from || '',\n    emailText: String(j.textPlain || j.text || strip(j.textHtml || j.html)).trim(),\n    pdfKey: pdfKey || 'none', contractFile: pdfKey ? bin[pdfKey].fileName || 'contract.pdf' : '', otherFiles: other },\n    binary: item.binary };\n});\n"
+   },
+   "id": "cc1",
+   "name": "Find the contract",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    220,
+    300
+   ]
+  },
+  {
+   "parameters": {
+    "operation": "pdf",
+    "binaryPropertyName": "={{ $json.pdfKey }}",
+    "options": {}
+   },
+   "id": "cc2",
+   "name": "Read contract PDF",
+   "type": "n8n-nodes-base.extractFromFile",
+   "typeVersion": 1,
+   "position": [
+    440,
+    300
+   ],
+   "onError": "continueRegularOutput",
+   "alwaysOutputData": true
+  },
+  {
+   "parameters": {
+    "jsCode": "// Two questions for the local AI: what the emails agreed, and what the contract says. Same fields for both.\nconst MODEL = 'google/gemma-4-e4b';\nconst CAP = 14000; // characters per text, so it fits the model's context window\nconst KEY = /(fee|pay|paid|\\$|usd|eur|invoice|net ?\\d|rate|compens|deliverabl|post|reel|video|stor(y|ies)|deadline|due|date|usage|licen[cs]|rights?|perpetu|exclusiv|compet|revision|approv|terminat|cancel|kill|own|intellectual|whitelist|boost|ads?\\b|spark|term\\b|months?|days?|weeks?)/i;\nfunction focus(text) {\n  const t = String(text || '').replace(/\\r/g, '');\n  if (t.length <= CAP) return { text: t, cut: false };\n  // Long text: keep the paragraphs that talk about money, rights, deliverables and dates\n  const parts = t.split(/\\n\\s*\\n|(?<=\\.)\\s{2,}/).filter(p => KEY.test(p));\n  let out = '';\n  for (const p of parts) { if (out.length + p.length > CAP) break; out += p.trim() + '\\n\\n'; }\n  return { text: out || t.slice(0, CAP), cut: true };\n}\nconst FIELD = { type: 'object', properties: { value: { type: ['string', 'null'] }, quote: { type: ['string', 'null'] } }, required: ['value', 'quote'] };\nconst NUM = { type: 'object', properties: { value: { type: ['number', 'null'] }, quote: { type: ['string', 'null'] } }, required: ['value', 'quote'] };\nconst FIELDS = {\n  fee: NUM, currency: FIELD, payment_due_days: NUM, deliverables: FIELD, deliverable_count: NUM, deadlines: FIELD,\n  usage_rights: FIELD, paid_ads_or_whitelisting: FIELD, exclusivity: FIELD, revisions: FIELD, approval: FIELD,\n  cancellation_or_kill_fee: FIELD, content_ownership: FIELD\n};\nconst schema = { type: 'object', properties: FIELDS, required: Object.keys(FIELDS) };\nconst HELP = 'fee = total money paid to the creator as a number. payment_due_days = days after invoice or posting until payment (Net 30 = 30). ' +\n  'deliverables = what the creator must make and post, in short words. deliverable_count = number of pieces of content. ' +\n  'usage_rights = how long and where the brand may use the content. paid_ads_or_whitelisting = whether the brand can run the content as ads or from the creator\\'s account. ' +\n  'exclusivity = any ban on working with competitors, with how long. content_ownership = who owns the content.';\nconst ask = (who, text) => ({ model: MODEL, temperature: 0, max_tokens: 1500,\n  messages: [\n    { role: 'system', content: 'You read creator brand-deal documents and pull out the terms. Reply only with JSON. Use null when the text does not say. quote = a short exact quote from the text, max 25 words. Never guess.' },\n    { role: 'user', content: `${HELP}\\n\\n${who}\\n\\n---\\n${text}\\n---` }],\n  response_format: { type: 'json_schema', json_schema: { name: 'deal_terms', strict: true, schema } } });\nreturn $input.all().map((item, idx) => {\n  const src = $('Find the contract').all()[idx].json;\n  const contract = String(item.json.text || '').trim();\n  const e = focus(src.emailText), c = focus(contract);\n  return { json: { ...src, contractRead: contract.length > 200, emailCut: e.cut, contractCut: c.cut,\n    llmEmail: ask('These are the emails between the creator and the brand. Use the LATEST terms both sides agreed to. Ignore quoted older versions that were changed later.', e.text),\n    llmContract: ask('This is the contract.', c.text) } };\n});\n"
+   },
+   "id": "cc3",
+   "name": "Build extraction requests",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    660,
+    300
+   ]
+  },
+  {
+   "parameters": {
+    "method": "POST",
+    "url": "http://127.0.0.1:1234/v1/chat/completions",
+    "sendBody": true,
+    "specifyBody": "json",
+    "jsonBody": "={{ JSON.stringify($json.llmEmail) }}",
+    "options": {
+     "timeout": 300000,
+     "batching": {
+      "batch": {
+       "batchSize": 1,
+       "batchInterval": 0
+      }
+     }
+    }
+   },
+   "id": "cc4",
+   "name": "Local AI: terms from emails",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "position": [
+    880,
+    300
+   ],
+   "onError": "continueRegularOutput"
+  },
+  {
+   "parameters": {
+    "method": "POST",
+    "url": "http://127.0.0.1:1234/v1/chat/completions",
+    "sendBody": true,
+    "specifyBody": "json",
+    "jsonBody": "={{ JSON.stringify($('Build extraction requests').item.json.llmContract) }}",
+    "options": {
+     "timeout": 300000,
+     "batching": {
+      "batch": {
+       "batchSize": 1,
+       "batchInterval": 0
+      }
+     }
+    }
+   },
+   "id": "cc5",
+   "name": "Local AI: terms from contract",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "position": [
+    1100,
+    300
+   ],
+   "onError": "continueRegularOutput"
+  },
+  {
+   "parameters": {
+    "jsCode": "// Compares the two sets of terms. Numbers are compared here; wording is sent to the local AI as same/different questions.\nconst parse = r => { try { const t = r.choices[0].message.content; return JSON.parse(t.slice(t.indexOf('{'), t.lastIndexOf('}') + 1)); } catch (e) { return null; } };\nconst LABEL = { fee: 'Fee', currency: 'Currency', payment_due_days: 'Payment timing (days)', deliverables: 'Deliverables', deliverable_count: 'Number of pieces',\n  deadlines: 'Deadlines', usage_rights: 'Usage rights', paid_ads_or_whitelisting: 'Paid ads / whitelisting', exclusivity: 'Exclusivity',\n  revisions: 'Revisions', approval: 'Approval process', cancellation_or_kill_fee: 'Cancellation / kill fee', content_ownership: 'Who owns the content' };\nconst NUMERIC = ['fee', 'payment_due_days', 'deliverable_count'];\nconst norm = x => String(x).toLowerCase().replace(/[^a-z0-9]/g, '');\nconst has = f => f && f.value !== null && f.value !== undefined && String(f.value).trim() !== '';\nconst prev = $('Build extraction requests').all().map(i => i.json);\nconst emailRes = $('Local AI: terms from emails').all().map(i => i.json);\nreturn $input.all().map((item, idx) => {\n  const p = prev[idx];\n  const E = parse(emailRes[idx]) || {}, C = parse(item.json) || {};\n  const rows = [], pairs = [];\n  for (const k of Object.keys(LABEL)) {\n    const e = E[k], c = C[k];\n    const row = { field: k, label: LABEL[k], email: has(e) ? e : null, contract: has(c) ? c : null, result: '' };\n    if (!row.email && !row.contract) row.result = 'neither';\n    else if (row.email && !row.contract) row.result = 'missing';\n    else if (!row.email && row.contract) row.result = 'contract only';\n    else if (NUMERIC.includes(k)) row.result = Number(e.value) === Number(c.value) ? 'match' : 'mismatch';\n    else if (norm(e.value) === norm(c.value)) row.result = 'match';\n    else { row.result = 'check'; pairs.push({ id: k, email: String(e.value), contract: String(c.value) }); }\n    rows.push(row);\n  }\n  // Red flags in the contract itself, whatever the emails said\n  const flags = [];\n  const v = k => (has(C[k]) ? String(C[k].value) : '');\n  if (/perpetu|in perpetuity|forever|unlimited|irrevocable/i.test(v('usage_rights'))) flags.push(['Usage rights look permanent', C.usage_rights]);\n  if (/assign|work.?for.?hire|all right|brand owns|company owns|exclusive owner/i.test(v('content_ownership'))) flags.push(['You may be giving up ownership of the content', C.content_ownership]);\n  if (/yes|may|can|right to|whitelist|spark|boost|paid/i.test(v('paid_ads_or_whitelisting')) && !/no\\b|not|without/i.test(v('paid_ads_or_whitelisting'))) flags.push(['Brand can run your content as paid ads. That usually earns an extra fee', C.paid_ads_or_whitelisting]);\n  if (has(C.payment_due_days) && Number(C.payment_due_days.value) > 30) flags.push([`Payment comes ${C.payment_due_days.value} days after invoice`, C.payment_due_days]);\n  const ex = v('exclusivity'); const exDays = (() => { const m = ex.match(/(\\d+)\\s*(day|week|month|year)/i); if (!m) return 0; return Number(m[1]) * { day: 1, week: 7, month: 30, year: 365 }[m[2].toLowerCase()]; })();\n  if (ex && !/no exclusiv|none|not exclusive/i.test(ex) && (exDays === 0 || exDays > 30)) flags.push([exDays ? `Exclusivity lasts about ${exDays} days` : 'Exclusivity with no clear end date', C.exclusivity]);\n  if (/unlimited|as many|until satisf/i.test(v('revisions'))) flags.push(['Unlimited revisions', C.revisions]);\n  if (!has(C.cancellation_or_kill_fee)) flags.push(['No kill fee if the brand cancels after you start', null]);\n  const judge = pairs.length ? { model: 'google/gemma-4-e4b', temperature: 0, max_tokens: 800,\n    messages: [{ role: 'system', content: 'You compare deal terms. Reply only with JSON.' },\n      { role: 'user', content: 'For each pair, say \"same\" if the contract matches what the emails agreed (wording can differ), or \"different\" if a number, amount, length of time, channel, count or obligation differs. Add a short reason, max 15 words.\\n\\n' + JSON.stringify(pairs) }],\n    response_format: { type: 'json_schema', json_schema: { name: 'judgement', strict: true, schema: { type: 'object', properties: { results: { type: 'array', items: { type: 'object',\n      properties: { id: { type: 'string' }, verdict: { type: 'string', enum: ['same', 'different'] }, reason: { type: 'string' } }, required: ['id', 'verdict', 'reason'] } } }, required: ['results'] } } } } : null;\n  return { json: { ...p, llmEmail: undefined, llmContract: undefined, aiOk: !!(parse(emailRes[idx]) && parse(item.json)), rows, flags, judge } };\n});\n"
+   },
+   "id": "cc6",
+   "name": "Compare terms",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    1320,
+    300
+   ]
+  },
+  {
+   "parameters": {
+    "method": "POST",
+    "url": "http://127.0.0.1:1234/v1/chat/completions",
+    "sendBody": true,
+    "specifyBody": "json",
+    "jsonBody": "={{ JSON.stringify($json.judge || { skip: true }) }}",
+    "options": {
+     "timeout": 300000,
+     "batching": {
+      "batch": {
+       "batchSize": 1,
+       "batchInterval": 0
+      }
+     }
+    }
+   },
+   "id": "cc7",
+   "name": "Local AI: same or different",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "position": [
+    1540,
+    300
+   ],
+   "onError": "continueRegularOutput"
+  },
+  {
+   "parameters": {
+    "jsCode": "// Turns the comparison into a plain email for Graham. Flags only, never legal advice.\nconst parse = r => { try { const t = r.choices[0].message.content; return JSON.parse(t.slice(t.indexOf('{'), t.lastIndexOf('}') + 1)); } catch (e) { return null; } };\nconst prev = $('Compare terms').all().map(i => i.json);\nconst q = f => (f && f.quote ? `\"${String(f.quote).trim()}\"` : (f ? String(f.value) : ''));\nreturn $input.all().map((item, idx) => {\n  const p = prev[idx];\n  const verdicts = {};\n  ((parse(item.json) || {}).results || []).forEach(r => verdicts[r.id] = r);\n  const issues = [], ok = [], missing = [];\n  for (const r of p.rows) {\n    let res = r.result;\n    if (res === 'check') res = verdicts[r.field] ? (verdicts[r.field].verdict === 'same' ? 'match' : 'mismatch') : 'unsure';\n    if (res === 'mismatch' || res === 'unsure') issues.push(`- ${r.label}${res === 'unsure' ? ' (check by eye)' : ''}\\n  Emails: ${q(r.email)}\\n  Contract: ${q(r.contract)}${verdicts[r.field] ? `\\n  Why: ${verdicts[r.field].reason}` : ''}`);\n    else if (res === 'missing') missing.push(`- ${r.label}: agreed in email (${q(r.email)}) but not in the contract`);\n    else if (res === 'match') ok.push(r.label);\n  }\n  const lines = [];\n  if (!p.contractFile) lines.push('No PDF contract was attached, so only the emails were read. Forward the thread again with the contract PDF attached.', '');\n  else if (!p.contractRead) lines.push(`Couldn't read text from ${p.contractFile}. If it's a scan, ask the brand for a text PDF.`, '');\n  if (!p.aiOk) lines.push('The local AI (LM Studio) did not answer, so this check is incomplete. Make sure LM Studio is running, then forward the thread again.', '');\n  lines.push(issues.length ? `DIFFERENT FROM WHAT YOU AGREED (${issues.length})` : 'Nothing in the contract contradicts the emails.', ...issues, '');\n  if (missing.length) lines.push(`AGREED BUT MISSING FROM THE CONTRACT (${missing.length})`, ...missing, '');\n  if (p.flags.length) lines.push(`WORTH A SECOND LOOK (${p.flags.length})`, ...p.flags.map(([t, f]) => `- ${t}${f ? `\\n  Contract: ${q(f)}` : ''}`), '');\n  if (ok.length) lines.push(`MATCHES: ${ok.join(', ')}`, '');\n  if (p.emailCut || p.contractCut) lines.push('Long document: only the parts about money, rights, deliverables and dates were checked.', '');\n  lines.push('This is an automatic check that flags differences to ask about. It is not legal advice. For anything big, have a lawyer read the contract.');\n  const n = issues.length + missing.length;\n  return { json: { subject: `Contract check: ${n ? n + ' to fix' : 'no differences'}${p.flags.length ? `, ${p.flags.length} to review` : ''} | ${p.subject}`.slice(0, 180), text: lines.join('\\n') } };\n});\n"
+   },
+   "id": "cc8",
+   "name": "Write report",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    1760,
+    300
+   ]
+  },
+  {
+   "parameters": {
+    "fromEmail": "Contract check <grahamivy.co@gmail.com>",
+    "toEmail": "grahamivy.co@gmail.com",
+    "subject": "={{ $json.subject }}",
+    "emailFormat": "text",
+    "text": "={{ $json.text }}",
+    "options": {
+     "appendAttribution": false
+    }
+   },
+   "id": "cc9",
+   "name": "Email me the report",
+   "type": "n8n-nodes-base.emailSend",
+   "typeVersion": 2.1,
+   "position": [
+    1980,
+    300
+   ],
+   "credentials": {
+    "smtp": {
+     "id": "",
+     "name": "Gmail SMTP"
+    }
+   }
+  }
+ ],
+ "connections": {
+  "Contract emails": {
+   "main": [
+    [
+     {
+      "node": "Find the contract",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Find the contract": {
+   "main": [
+    [
+     {
+      "node": "Read contract PDF",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Read contract PDF": {
+   "main": [
+    [
+     {
+      "node": "Build extraction requests",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Build extraction requests": {
+   "main": [
+    [
+     {
+      "node": "Local AI: terms from emails",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Local AI: terms from emails": {
+   "main": [
+    [
+     {
+      "node": "Local AI: terms from contract",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Local AI: terms from contract": {
+   "main": [
+    [
+     {
+      "node": "Compare terms",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Compare terms": {
+   "main": [
+    [
+     {
+      "node": "Local AI: same or different",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Local AI: same or different": {
+   "main": [
+    [
+     {
+      "node": "Write report",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Write report": {
+   "main": [
+    [
+     {
+      "node": "Email me the report",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  }
+ },
+ "settings": {
+  "executionOrder": "v1"
+ }
+}

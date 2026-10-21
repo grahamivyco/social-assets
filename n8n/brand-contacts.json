@@ -1,0 +1,266 @@
+{
+ "name": "Open Frame brand contacts",
+ "nodes": [
+  {
+   "parameters": {
+    "rule": {
+     "interval": [
+      {
+       "field": "weeks",
+       "triggerAtDay": [
+        1
+       ],
+       "triggerAtHour": 7
+      }
+     ]
+    }
+   },
+   "id": "bc0",
+   "name": "Every Monday 7am",
+   "type": "n8n-nodes-base.scheduleTrigger",
+   "typeVersion": 1.2,
+   "position": [
+    0,
+    300
+   ]
+  },
+  {
+   "parameters": {
+    "documentId": {
+     "__rl": true,
+     "mode": "url",
+     "value": "https://docs.google.com/spreadsheets/d/1VgiiTBTpmFh5bqutvYvjvNZmSicc8Es2vLSmnPlpHaU/edit"
+    },
+    "sheetName": {
+     "__rl": true,
+     "mode": "name",
+     "value": "Brands"
+    },
+    "options": {},
+    "authentication": "serviceAccount"
+   },
+   "id": "bc1",
+   "name": "Read Brands",
+   "type": "n8n-nodes-base.googleSheets",
+   "typeVersion": 4.5,
+   "position": [
+    220,
+    300
+   ],
+   "credentials": {
+    "googleApi": {
+     "id": "",
+     "name": "Google Service Account account"
+    }
+   },
+   "executeOnce": true,
+   "alwaysOutputData": true
+  },
+  {
+   "parameters": {
+    "jsCode": "// Brands worth contacting that don't have contact info yet: new or pitch, fit high or medium, 10 per run\nconst rows = $('Read Brands').all().map(i => i.json).filter(r => r.handle);\nconst rank = { high: 0, medium: 1 };\nreturn rows\n  .filter(r => ['new', 'pitch'].includes(String(r.status).toLowerCase()) && String(r.fit).toLowerCase() in rank && !r.contacts_checked)\n  .sort((a, b) => rank[String(a.fit).toLowerCase()] - rank[String(b.fit).toLowerCase()] || (Number(b.creators_seen) || 0) - (Number(a.creators_seen) || 0))\n  .slice(0, 10)\n  .map(r => ({ json: { handle: r.handle, name: r.name || r.handle, website: r.website || '', bio: r.bio || '' } }));\n"
+   },
+   "id": "bc2",
+   "name": "Brands to check",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    440,
+    300
+   ]
+  },
+  {
+   "parameters": {
+    "jsCode": "// Reads each brand's public website (no logins, no LinkedIn) for partnership emails and creator program pages,\n// and builds a LinkedIn people search link Graham opens himself.\nconst LINK_IN_BIO = /(linktr\\.ee|linkin\\.bio|clicklinkin\\.bio|visitstore\\.bio|linkstre\\.am|beacons\\.ai|stan\\.store|lnk\\.bio|campsite\\.bio|tap\\.bio|bio\\.site|hoo\\.be|later\\.com|shorby|milkshake|solo\\.to|flowcode|bit\\.ly|linkpop|snipfeed|komi\\.io|direct\\.me)/i;\nconst SOCIAL = /(instagram|facebook|fb\\.me|tiktok|youtube|youtu\\.be|twitter|x\\.com|threads\\.net|pinterest|linkedin|spotify|apple\\.com|google|gstatic|cloudflare|cdn|w3\\.org|schema\\.org|wa\\.me|whatsapp|snapchat|discord|reddit|vimeo|twitch)/i;\nconst PAGE_WORDS = /(creator|influencer|ambassador|affiliate|partner|collab|press|media|contact)/i;\nconst PROGRAM_WORDS = /(creator|influencer|ambassador|affiliate|partner)/i;\nconst GOOD_EMAIL = [/partner|collab|creator|influencer|ambassador|affiliate/i, /marketing|brand|social|pr\\b|press|media|pr@/i, /hello|info|contact|team/i];\nconst BAD_EMAIL = /(\\.(png|jpe?g|gif|svg|webp)$|example\\.|sentry|wixpress|domain\\.com|email\\.com|yourname|noreply|no-reply|privacy|legal|dpo|gdpr|careers|jobs|support|help|abuse|security|billing|invoice|orders?@|returns)/i;\n\nconst host = u => { try { return new URL(u).hostname.replace(/^www\\./, '').toLowerCase(); } catch (e) { return ''; } };\nconst base = d => d.split('.').slice(-2).join('.');\nconst self = this;\nasync function get(url) {\n  try {\n    const r = await self.helpers.httpRequest({ url, method: 'GET', timeout: 10000, ignoreHttpStatusErrors: true, returnFullResponse: true,\n      headers: { 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15', 'Accept': 'text/html' } });\n    return r.statusCode < 400 && typeof r.body === 'string' ? r.body : '';\n  } catch (e) { return ''; }\n}\nconst links = (html, from) => [...html.matchAll(/href=[\"']([^\"'#]+)[\"']/gi)].map(m => { try { return new URL(m[1], from).href; } catch (e) { return ''; } }).filter(Boolean);\nconst emails = html => [...new Set((html.replace(/&#64;|\\[at\\]|\\(at\\)/gi, '@').match(/[a-z0-9._%+-]+@[a-z0-9.-]+\\.[a-z]{2,}/gi) || []).map(e => e.toLowerCase()))].filter(e => !BAD_EMAIL.test(e));\nconst emailScore = e => { const local = e.split('@')[0]; const i = GOOD_EMAIL.findIndex(r => r.test(local)); return i < 0 ? 9 : i; };\n\nconst out = [];\nfor (const { json: b } of $input.all()) {\n  let site = b.website && !/^https?:/i.test(b.website) ? 'https://' + b.website : b.website;\n  let domain = host(site);\n  let home = '';\n  // Link-in-bio page: pick the brand's own domain from its links (the one used most, ideally named like the brand)\n  if (!domain || LINK_IN_BIO.test(domain)) {\n    const html = site ? await get(site) : '';\n    const count = {};\n    links(html, site).map(host).filter(h => h && !SOCIAL.test(h) && !LINK_IN_BIO.test(h)).forEach(h => count[base(h)] = (count[base(h)] || 0) + 1);\n    const stem = b.handle.replace(/[^a-z0-9]/g, '');\n    const best = Object.entries(count).sort((x, y) => (y[0].includes(stem) - x[0].includes(stem)) || y[1] - x[1])[0];\n    domain = best ? best[0] : '';\n  }\n  const found = new Map(); let program = '';\n  if (domain) {\n    const root = 'https://' + domain;\n    home = await get(root);\n    const pages = [...new Set(links(home, root).filter(u => base(host(u)) === base(domain) && PAGE_WORDS.test(u.split(/[?#]/)[0].replace(root, ''))))].slice(0, 6);\n    if (!pages.some(u => /contact/i.test(u))) pages.push(root + '/contact');\n    program = pages.find(u => PROGRAM_WORDS.test(u)) || '';\n    emails(home).forEach(e => found.set(e, 'home page'));\n    for (const p of pages) {\n      const html = await get(p);\n      emails(html).forEach(e => { if (!found.has(e)) found.set(e, p); });\n    }\n  }\n  const ranked = [...found.keys()].sort((x, y) => emailScore(x) - emailScore(y) || (base(x.split('@')[1]) === base(domain) ? -1 : 1));\n  const brandName = String(b.name || b.handle).replace(/[^\\w\\s&'.-]/g, '').trim();\n  out.push({ json: { handle: b.handle, domain, contact_email: ranked[0] || '', other_emails: ranked.slice(1, 4).join(', '),\n    email_found_on: ranked[0] ? found.get(ranked[0]) : '', program_url: program,\n    linkedin_search: 'https://www.linkedin.com/search/results/people/?keywords=' + encodeURIComponent(`${brandName} creator partnerships`),\n    contacts_checked: new Date().toISOString() } });\n}\nreturn out;\n"
+   },
+   "id": "bc3",
+   "name": "Find contacts on brand websites",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    660,
+    300
+   ]
+  },
+  {
+   "parameters": {
+    "documentId": {
+     "__rl": true,
+     "mode": "url",
+     "value": "https://docs.google.com/spreadsheets/d/1VgiiTBTpmFh5bqutvYvjvNZmSicc8Es2vLSmnPlpHaU/edit"
+    },
+    "sheetName": {
+     "__rl": true,
+     "mode": "name",
+     "value": "Brands"
+    },
+    "options": {},
+    "authentication": "serviceAccount",
+    "operation": "appendOrUpdate",
+    "columns": {
+     "mappingMode": "defineBelow",
+     "value": {
+      "handle": "={{ $json.handle }}",
+      "domain": "={{ $json.domain }}",
+      "contact_email": "={{ $json.contact_email }}",
+      "other_emails": "={{ $json.other_emails }}",
+      "email_found_on": "={{ $json.email_found_on }}",
+      "program_url": "={{ $json.program_url }}",
+      "linkedin_search": "={{ $json.linkedin_search }}",
+      "contacts_checked": "={{ $json.contacts_checked }}"
+     },
+     "matchingColumns": [
+      "handle"
+     ],
+     "schema": [
+      {
+       "id": "handle",
+       "displayName": "handle",
+       "required": false,
+       "defaultMatch": false,
+       "display": true,
+       "type": "string",
+       "canBeUsedToMatch": true,
+       "removed": false
+      },
+      {
+       "id": "domain",
+       "displayName": "domain",
+       "required": false,
+       "defaultMatch": false,
+       "display": true,
+       "type": "string",
+       "canBeUsedToMatch": true,
+       "removed": false
+      },
+      {
+       "id": "contact_email",
+       "displayName": "contact_email",
+       "required": false,
+       "defaultMatch": false,
+       "display": true,
+       "type": "string",
+       "canBeUsedToMatch": true,
+       "removed": false
+      },
+      {
+       "id": "other_emails",
+       "displayName": "other_emails",
+       "required": false,
+       "defaultMatch": false,
+       "display": true,
+       "type": "string",
+       "canBeUsedToMatch": true,
+       "removed": false
+      },
+      {
+       "id": "email_found_on",
+       "displayName": "email_found_on",
+       "required": false,
+       "defaultMatch": false,
+       "display": true,
+       "type": "string",
+       "canBeUsedToMatch": true,
+       "removed": false
+      },
+      {
+       "id": "program_url",
+       "displayName": "program_url",
+       "required": false,
+       "defaultMatch": false,
+       "display": true,
+       "type": "string",
+       "canBeUsedToMatch": true,
+       "removed": false
+      },
+      {
+       "id": "linkedin_search",
+       "displayName": "linkedin_search",
+       "required": false,
+       "defaultMatch": false,
+       "display": true,
+       "type": "string",
+       "canBeUsedToMatch": true,
+       "removed": false
+      },
+      {
+       "id": "contacts_checked",
+       "displayName": "contacts_checked",
+       "required": false,
+       "defaultMatch": false,
+       "display": true,
+       "type": "string",
+       "canBeUsedToMatch": true,
+       "removed": false
+      }
+     ],
+     "attemptToConvertTypes": false,
+     "convertFieldsToString": false
+    }
+   },
+   "id": "bc4",
+   "name": "Save contacts",
+   "type": "n8n-nodes-base.googleSheets",
+   "typeVersion": 4.5,
+   "position": [
+    880,
+    300
+   ],
+   "credentials": {
+    "googleApi": {
+     "id": "",
+     "name": "Google Service Account account"
+    }
+   }
+  }
+ ],
+ "connections": {
+  "Every Monday 7am": {
+   "main": [
+    [
+     {
+      "node": "Read Brands",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Read Brands": {
+   "main": [
+    [
+     {
+      "node": "Brands to check",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Brands to check": {
+   "main": [
+    [
+     {
+      "node": "Find contacts on brand websites",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Find contacts on brand websites": {
+   "main": [
+    [
+     {
+      "node": "Save contacts",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  }
+ },
+ "settings": {
+  "executionOrder": "v1"
+ }
+}
