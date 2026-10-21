@@ -64,6 +64,7 @@ const GFX_HEAD = ['id', 'client', 'video', 'at', 'line', 'kind', 'params', 'idea
 // ---------- setup ----------
 
 function setup() {
+  askAllScopes_();
   const ss = SpreadsheetApp.getActiveSpreadsheet() || SpreadsheetApp.openById(HUB_SHEET_ID);
   const props = PropertiesService.getScriptProperties();
   props.setProperty('HUB_ID', ss.getId());
@@ -254,7 +255,7 @@ function studioGoogle_(credential) {
   try {
     r = UrlFetchApp.fetch('https://oauth2.googleapis.com/tokeninfo?id_token=' + encodeURIComponent(credential), { muteHttpExceptions: true });
   } catch (e) {
-    // Usually the script hasn't been allowed to reach Google yet: run setup once in the editor and click Allow.
+    // Usually the script hasn't been allowed to reach Google yet: run checkGoogleSignIn in the editor and click Allow.
     console.error('Studio Google sign-in: ' + e.message);
     return { error: 'Google sign-in isn\'t working right now. Use your email to get a code instead.' };
   }
@@ -262,6 +263,20 @@ function studioGoogle_(credential) {
   const t = JSON.parse(r.getContentText());
   if (t.aud !== id || String(t.email_verified) !== 'true' || !/accounts\.google\.com$/.test(t.iss || '')) return { error: 'Google sign-in didn\'t go through. Try again.' };
   return studioStart_(String(t.email || '').toLowerCase());
+}
+
+// Google lets people untick single permissions on the Allow screen, and then never asks again on its own.
+// This makes Google show the Allow screen for anything still missing (like reaching Google for Studio's sign-in).
+function askAllScopes_() {
+  if (typeof ScriptApp.requireAllScopes === 'function') ScriptApp.requireAllScopes(ScriptApp.AuthMode.FULL);
+}
+
+// Run this from the editor if Google sign-in on Studio fails. It asks for any missing permission, then checks
+// the script can reach Google's sign-in check. The result shows in the Execution log.
+function checkGoogleSignIn() {
+  askAllScopes_();
+  const r = UrlFetchApp.fetch('https://oauth2.googleapis.com/tokeninfo?id_token=test', { muteHttpExceptions: true });
+  console.log('Reached Google (answer ' + r.getResponseCode() + ', 400 is expected for a test token). Google sign-in on Studio should work now.');
 }
 
 function studioStart_(email) {
