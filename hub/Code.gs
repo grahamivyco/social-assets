@@ -1322,9 +1322,10 @@ function approvalButtons_(r) {
 }
 
 // What Studio gets for one row: the row without its sheet position, plus its buttons.
-function approvalView_(r) {
+function approvalView_(r, extras) {
   const o = Object.assign({}, r);
   delete o._row;
+  if (extras && extras[r.id]) Object.assign(o, extras[r.id]);
   o.buttons = approvalButtons_(r).map(b => ({ label: b[0], act: b[1] }));
   return o;
 }
@@ -1333,11 +1334,21 @@ const byDue_ = (a, b) => String(a.due || '9999').localeCompare(String(b.due || '
 const recent_ = (r, days) => APPROVAL_DONE.indexOf(r.status) >= 0 && within_(r.updated, days);
 
 // Graham's Home: what needs him first (draft), what waits on a client, what's being redone or in the works, and the last week's answers.
+// Syncs first, so a post drafted a minute ago is already here, and the caption and media come along from that run.
 function studioApprovals(key) {
   checkKey_(key);
-  const rows = approvalsTable_().rows.filter(r => r.id), pick = st => rows.filter(r => r.status === st).sort(byDue_).map(approvalView_);
+  try { syncApprovalsNow(); } catch (e) { console.error('Approvals sync on Home: ' + e.message); }
+  const ex = extras_(lastDecisions_ || []);
+  const rows = approvalsTable_().rows.filter(r => r.id), view = r => approvalView_(r, ex), pick = st => rows.filter(r => r.status === st).sort(byDue_).map(view);
   return { needs: pick('draft'), waiting: pick('client'), changing: pick('changes'), planned: pick('planned'),
-    done: rows.filter(r => recent_(r, 7)).sort((a, b) => String(b.updated).localeCompare(String(a.updated))).map(approvalView_) };
+    done: rows.filter(r => recent_(r, 7)).sort((a, b) => String(b.updated).localeCompare(String(a.updated))).map(view) };
+}
+
+// id -> { text, media } for rows that come from a Queue sheet.
+function extras_(ds) {
+  const out = {};
+  ds.forEach(([c, d]) => { if (d.extra) out[d.id] = d.extra; });
+  return out;
 }
 
 function adminApproval(key, id, label, comment) {
@@ -1352,7 +1363,8 @@ function adminApproval(key, id, label, comment) {
 // A client's page: Ready for you (waiting on them), Coming up (in the works or being redone), and the last month's answers.
 function clientApprovals_(c) {
   const rows = approvalsTable_().rows.filter(r => r.id && r.client === c.client);
-  const view = r => { const o = approvalView_(r); if (r.status !== 'client') o.buttons = []; return o; };
+  const q = c.sheet_id && table_(c.sheet_id, 'Queue'), ex = q ? extras_(queueDecisions_(c, q, approvalProjects_()).map(d => [c, d])) : {};
+  const view = r => { const o = approvalView_(r, ex); if (r.status !== 'client') o.buttons = []; return o; };
   return { ready: rows.filter(r => r.status === 'client').sort(byDue_).map(view),
     coming: rows.filter(r => r.status === 'planned' || r.status === 'changes').sort(byDue_).map(view),
     done: rows.filter(r => recent_(r, 30)).sort((a, b) => String(b.updated).localeCompare(String(a.updated))).map(view) };
@@ -1512,12 +1524,15 @@ function queueDecisions_(c, q, projects) {
     }
     row.open = plan ? !dec : ['draft', 'in_review', 'changes'].indexOf(status) >= 0;
     row.queue = { sheetId: c.sheet_id, ids: rows.map(r => r.id), status, plan };
+    // For Studio's cards only (not written to the tab): the full caption and every photo or video.
+    row.extra = { text: String((rows.find(r => r.platform === 'instagram') || r0).caption || pick('caption') || ''), media };
     out.push(row);
   });
   return out;
 }
 
 function syncApprovalsNow() { return withLock_(syncApprovals_); }
+let lastDecisions_ = null;
 
 function syncApprovals_() {
   const t = approvalsTable_(), seenT = hubTab_('Approvals sync', APPROVAL_SEEN_HEAD);
@@ -1535,6 +1550,7 @@ function syncApprovals_() {
     const ph = table_(sid, 'Photo submissions');
     if (ph) photoDecisions_(all.filter(c => c.sheet_id === sid), ph, sid).forEach(x => ds.push(x));
   });
+  lastDecisions_ = ds;
   ds.forEach(([c, d]) => {
       const cur = byId[d.id];
       if (!cur) {
