@@ -1491,7 +1491,8 @@ function syncApprovals_() {
 function reportRows_(t, byId, out) {
   clients_().forEach(c => {
     if (!/^https:\/\//.test(c.report_url)) return;
-    const m = c.report_url.match(/(20\d\d)-(\d\d)/), month = m ? m[0] : Utilities.formatDate(new Date(), TZ, 'yyyy-MM');
+    // Month from a #yyyy-mm on the link (Drive links carry it there), else any yyyy-mm in the path, else this month.
+    const m = c.report_url.match(/#(20\d\d-\d\d)\b/) || c.report_url.match(/(20\d\d-\d\d)/), month = m ? m[1] : Utilities.formatDate(new Date(), TZ, 'yyyy-MM');
     const id = 'report-' + c.brand + '-' + month;
     if (byId[id]) return;
     const label = Utilities.formatDate(new Date(Number(month.slice(0, 4)), Number(month.slice(5)) - 1, 15), TZ, 'MMMM yyyy');
