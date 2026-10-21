@@ -53,19 +53,26 @@ def read(folder):
 
 def ask_llm(videos):
     brief = [{k: v[k] for k in ("creator", "outlier", "likes", "seconds", "wpm", "cuts", "shot_avg", "hook_said",
-                                 "hook_screen", "first_line", "last_line", "transitions", "captions", "camera", "caption")}
+                                 "hook_screen", "first_line", "last_line", "transitions", "captions", "camera", "sound", "look",
+                                 "caption")}
              for v in videos[:40]]
     prompt = (
         "These are short videos that beat their creator's normal engagement (outlier = times their usual likes), "
-        "plus some Graham saved himself. Find what repeats. Reply in Markdown with exactly these sections:\n"
-        "## Hook formulas (each as a fill-in-the-blank template, with 1-2 real examples and @creator)\n"
-        "## Formats and concepts (named families, which videos use them)\n"
-        "## Edit patterns (length, pace, cuts, captions, camera, sound; give numbers from the data)\n"
-        "## Topics that pull\n"
-        "## 5 rebuilds for Open Frame: each a hook line, a 3-beat outline and the format, in Graham's voice: warm, "
-        "plain, specific, no hype words. Open Frame is a design and marketing studio for mission-driven organisations "
-        "(Minneapolis and Barcelona). Use his real experience, never copy a creator's words.\n"
-        "Only use what is in the data. Short bullets.\n\nDATA:\n" + json.dumps(brief, ensure_ascii=False))
+        "plus some Graham saved himself. Find what repeats. Reply in Markdown using exactly these five headings, "
+        "word for word, with nothing added to them:\n"
+        "## Hook formulas\n## Formats and concepts\n## Edit patterns\n## Topics that pull\n## 5 rebuilds for Open Frame\n\n"
+        "What goes under each:\n"
+        "- Hook formulas: each as a fill-in-the-blank template, with 1-2 real examples and @creator.\n"
+        "- Formats and concepts: named families, and which videos use them.\n"
+        "- Edit patterns: length, pace, cuts, captions, camera, sound, with numbers from the data.\n"
+        "- Topics that pull.\n"
+        "- 5 rebuilds for Open Frame: each built on one hook formula from above (name it), with a hook line, a 3-beat "
+        "outline and the format, in Graham's voice: warm, plain, specific, no hype words. Open Frame is a design and "
+        "marketing studio for mission-driven organisations (Minneapolis and Barcelona). Never copy a creator's words. "
+        "Where a real client story, number or result is needed, write [placeholder: what Graham should fill in] "
+        "instead of inventing one.\n"
+        "Only use what is in the data. An empty field means it was not measured: say so, and never write 'all' or "
+        "'every' unless every video shows it. Short bullets.\n\nDATA:\n" + json.dumps(brief, ensure_ascii=False))
     body = json.dumps({"model": MODEL, "temperature": 0.4, "messages": [{"role": "user", "content": prompt}]}).encode()
     req = urllib.request.Request(LLM, body, {"Content-Type": "application/json"})
     with urllib.request.urlopen(req, timeout=600) as r:
@@ -81,7 +88,11 @@ def main():
     since = time.time() - a.days * 86400
     folders = [f for f in sorted(a.out.iterdir()) if f.is_dir() and not f.name.startswith(("_", "."))
                and (f / "report.md").exists() and (a.all or (f / "report.md").stat().st_mtime >= since)]
-    vids = [read(f) for f in folders]
+    vids, seen = [], set()
+    for v in sorted((read(f) for f in folders), key=lambda v: v["folder"], reverse=True):  # same link twice: keep the newest
+        if v["link"] and v["link"] in seen:
+            continue
+        seen.add(v["link"]); vids.append(v)
     if not vids:
         sys.exit("nothing watched in that window")
     vids.sort(key=lambda v: -(v["outlier"] or 0))
