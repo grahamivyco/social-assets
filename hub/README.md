@@ -41,6 +41,7 @@ Follows the shared schema: /mnt/project-files/automation/queue-schema.md
 
 ## Updating the code
 Paste the new `Code.gs`, then Deploy > Manage deployments > edit > Version: New version. The links stay the same.
+Before pasting, `node hub/check-pages.js hub/Code.gs` checks the page scripts (a broken one leaves the check-in page stuck on "Loading...").
 
 ## Check-in timing
 At the top of `Code.gs`:
