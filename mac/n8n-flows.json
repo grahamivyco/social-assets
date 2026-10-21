@@ -1,0 +1,6 @@
+[
+  { "file": "watch/scout/n8n-viral-scout.json", "name": "Open Frame viral scout", "id": "ofViralScout0001", "active": true },
+  { "file": "n8n/brand-scout.json", "name": "Open Frame brand scout", "id": "O6W5ovadJJg1Wn6e", "active": true },
+  { "file": "n8n/brand-contacts.json", "name": "Open Frame brand contacts", "id": "ofBrandContact01", "active": false },
+  { "file": "n8n/contract-check.json", "name": "Open Frame contract check", "id": "ofContractChk001", "active": true }
+]

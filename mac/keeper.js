@@ -3,7 +3,7 @@
 //   - n8n answers on :5678, LM Studio's server answers on :1234 with the model loaded (starts it with lms if not)
 //   - every 10 min: git pull, so merged fixes reach this Mac on their own
 //   - hub/Code.gs changed on main: pushes it to Apps Script and deploys a new version (clasp, after one sign-in)
-//   - every hour: the n8n viral scout is imported and published (n8n-fix.js)
+//   - every hour (or when a flow file changes): the n8n workflows in n8n-flows.json are imported and published (n8n-fix.js)
 // Status goes to the Hub "Mac status" tab -> status lights on openframe.design/studio (Reels) and one email when
 // something stays down. Free tools only. Run one check now: node mac/keeper.js once
 const fs = require('fs'), path = require('path'), os = require('os'), crypto = require('crypto');
@@ -144,12 +144,17 @@ function hubDeploy() {
 
 // ---------- n8n workflows (hourly) ----------
 function n8nFlows() {
-  if (Date.now() - (S.flowsAt || 0) < 60 * 6e4 && S.flows) return S.flows;
+  // hourly, or right away when a workflow file changed on main
+  const sum = require('crypto').createHash('sha1');
+  try { for (const f of JSON.parse(fs.readFileSync(path.join(HERE, 'n8n-flows.json'), 'utf8'))) { try { sum.update(fs.readFileSync(path.join(REPO, f.file))); } catch {} } } catch {}
+  const flowsSha = sum.digest('hex');
+  if (Date.now() - (S.flowsAt || 0) < 60 * 6e4 && S.flows && S.flowsSha === flowsSha) return S.flows;
+  S.flowsSha = flowsSha;
   const r = run(process.execPath, [path.join(HERE, 'n8n-fix.js'), '--json'], { timeout: 300000 });
   let x;
   try { x = JSON.parse(r.out.slice(r.out.lastIndexOf('\n{') + 1)); } catch { x = { status: 'fail', detail: 'Check failed: ' + r.out.slice(-160) }; }
   S.flowsAt = Date.now();
-  S.flows = row('scout', 'Viral scout (n8n)', x.status, x.detail, x.fix || '');
+  S.flows = row('scout', 'n8n workflows (scouts, contracts)', x.status, x.detail, x.fix || '');
   return S.flows;
 }
 
