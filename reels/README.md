@@ -31,6 +31,9 @@ On its first start the watcher marks everything already in Downloads as seen, so
 ## Other clients
 Set `"brand": "ngm"` (or another slug) in `config.json`. Today the watcher makes Open Frame Reels by default. A client Reel also needs that client's fonts in `brands/<slug>/fonts/` on the Mac, and its own Reel graphics from `brands/design-notes.md`.
 
+## Presets
+Set `"preset": "one-take"` in `config.json` for the plain one-take look (no cuts beyond head and tail, no graphics or sound effects, static title box, small white captions). Leave it out for the full edit. See `editor/REEL-RULES.md`.
+
 ## Files
 - `reel-watch.js`: the watcher. `state.json` remembers which files it has seen (delete a line to redo one).
 - `editor/`: copy of the talking head editor from the project files, with env overrides for Mac paths. Fonts here are OFL (Fraunces, Inter, Manrope).

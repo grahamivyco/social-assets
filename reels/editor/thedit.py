@@ -26,6 +26,15 @@ FORMATS = {  # name: (w, h, crop focus 0=top 1=bottom, caption y as share of hei
     "reel": (1080, 1920, 0.5, 0.83, "12M"),
     "square": (2160, 2160, 0.55, 0.94, "20M"),
 }
+# edit.json "preset" (2026-10-21). These settings win over the rest of edit.json.
+# "one-take", from @nategaffney's Reel (references/nategaffney-one-take-recipe.md): one locked-off take, only the
+# head and tail trimmed, no punch-ins, graphics, cut-out, sound effects or end card, ends on the last word so it
+# loops. Small white one-word captions ~55% down, static title on a white rounded box for 4 s.
+PRESETS = {
+    "one-take": {"one_take": True, "pop": False, "cutout": False, "sfx": False, "endcard": False,
+                 "cut_fillers": False, "cut": [], "hook_seconds": 4.0, "caption_words": 1,
+                 "caption_color": "ffffff", "caption_y": 0.556, "caption_size": 0.04, "title_box": True},
+}
 
 
 def run(cmd, **kw):
@@ -275,6 +284,9 @@ def cmd_transcribe(video, work):
 # ---------- render ----------
 
 def keep_segments(words, edit):
+    if edit.get("one_take"):  # one piece: first word to last word, so the loop restarts on the next word
+        snap = lambda t: round(t * FPS) / FPS
+        return [(snap(max(words[0]["start"] - edit["pad_before"], 0)), snap(words[-1]["end"] + 0.05), list(words))]
     cut = set()
     for c in edit["cut"]:
         cut.update(range(c["from"], c["to"] + 1))
@@ -328,7 +340,7 @@ def write_ass(path, words, W, H, cap_y, edit):
     INK, CREAM, YELLOW = br["hex"]["ink"], br["hex"]["cream"], br["hex"]["y"]
     wname = {300: "Light", 400: "Regular", 500: "Medium", 600: "SemiBold", 700: "Bold", 800: "ExtraBold"}
     font = f"{br['head']['family']} {wname.get(br['head']['weight'], '')}".strip()
-    fs = round(W * (0.10 if H > W else 0.075))
+    fs = round(H * edit["caption_size"]) if edit.get("caption_size") else round(W * (0.10 if H > W else 0.075))
     hook_fs = round(W * (0.078 if H > W else 0.062))
     pad = round(fs * 0.22)
     hdr = f"""[Script Info]
@@ -348,7 +360,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 """
     ts = lambda t: f"{int(t // 3600)}:{int(t % 3600 // 60):02d}:{t % 60:05.2f}"
     ev = []
-    if edit.get("hook") and not edit.get("pop"):  # with pop on, pop.js draws the title on a shape
+    if edit.get("hook") and not edit.get("pop") and not edit.get("title_box"):  # pop.js / title_png draw it otherwise
         ev.append(f"Dialogue: 1,{ts(0)},{ts(edit['hook_seconds'])},Hook,,0,0,0,,{{\\fad(0,200)}}{ass_text(edit['hook'].replace('*', ''))}")
     pos = f"{{\\an5\\pos({W // 2},{round(H * cap_y)})}}"
     seam = f"{{\\an5\\pos({W // 2},{H // 2})}}"
@@ -399,6 +411,36 @@ def endcard_png(path, W, H, lines, bg=None, fg=None, head_font=None, hdr=False):
     im.save(path)
     if hdr:
         hlg_image(path)
+
+
+def title_png(path, W, H, text, brand, hdr=False):
+    """Static title for the one-take preset: brand head font on a white rounded box near the top, the *accent*
+    word in italic. Full-frame transparent PNG."""
+    from PIL import Image, ImageDraw, ImageFont
+    im = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    d = ImageDraw.Draw(im)
+    f = brand["files"]
+    bw, bh = round(W * 0.74), round(H * 0.085)
+    size = round(H * 0.052)
+    toks = [(t.strip("*"), t.startswith("*")) for t in re.findall(r"\*[^*]+\*|[^\s*]+", text)]
+    while True:
+        reg, ita = ImageFont.truetype(str(f["head"]), size), ImageFont.truetype(str(f["head_italic"]), size)
+        gap = reg.getlength(" ")
+        widths = [(ita if it else reg).getlength(w) for w, it in toks]
+        total = sum(widths) + gap * (len(toks) - 1)
+        if total <= bw * 0.88 or size < 12:
+            break
+        size -= 2
+    x0, cy = (W - bw) // 2, round(H * 0.1675)
+    d.rounded_rectangle((x0, cy - bh // 2, x0 + bw, cy + bh // 2), radius=round(bh * 0.28), fill=(255, 255, 255, 255))
+    x = (W - total) / 2
+    ink = "#" + brand["hex"]["ink"]
+    for (w, it), wd in zip(toks, widths):
+        d.text((x, cy), w, font=ita if it else reg, fill=ink, anchor="lm")
+        x += wd + gap
+    im.save(path)
+    if hdr:
+        hlg_rgba(path)
 
 
 NUMS = "zero one two three four five six seven eight nine ten eleven twelve".split()
@@ -557,6 +599,10 @@ def make_covers(work, cut, out, stem, cover, hook, hdr=False):
 def cmd_render(work):
     work = Path(work)
     edit = json.loads((work / "edit.json").read_text())
+    if edit.get("preset"):
+        if edit["preset"] not in PRESETS:
+            raise SystemExit(f"unknown preset {edit['preset']!r}, pick one of: {', '.join(PRESETS)}")
+        edit.update(PRESETS[edit["preset"]])
     parts = load_parts(work, edit)
     tw, dur = remap_words([s for _, segs in parts for s in segs])
     pieces, part_starts, t = [], [], 0.0  # output-timeline pieces, for punch-ins and wipes
@@ -607,6 +653,7 @@ def cmd_render(work):
     to_pf = (f"scale=out_color_matrix=bt2020:out_range=tv,format={PF}" if hdr else f"format={PF}")
     for name in edit["formats"]:
         W, H, focus, cap_y, rate = FORMATS[name]
+        cap_y = edit.get("caption_y", cap_y)
         if sw / sh > W / H:
             cw, ch = int(sh * W / H) // 2 * 2, sh; cx, cy = (sw - cw) // 2, 0
         else:
@@ -621,12 +668,21 @@ def cmd_render(work):
         lchain = lambda a, b: list_chain(cards, li, a, b, W, H, cconv)
         pills = item_pills(work, edit["items"], tw, dur, W, H, FONTS / "Inter-SemiBold.otf", hdr) if edit.get("items") else []
         pi = li + len(cards)
-        si = pi + len(pills)
+        ti = pi + len(pills)
+        tbox = None
+        if edit.get("title_box") and edit.get("hook"):
+            tbox = work / f"title-{name}.png"
+            title_png(tbox, W, H, edit["hook"], brand, hdr)
+        si = ti + (1 if tbox else 0)
         tail = f";{list_chain(pills, pi, 'comp', 'compp', W, H, cconv)}"
+        if tbox:  # static title, no motion: on for hook_seconds, then gone
+            tail += (f";[{ti}:v]{cconv}[tbox];[compp][tbox]overlay=0:0:enable='lt(t,{edit['hook_seconds']:.3f})'"
+                     f":format=auto[comptt]")
+        top = "comptt" if tbox else "compp"
         if edit["_split"]:
-            tail += f";{split_chain(edit['_split'], si, 'compp', 'comps', W, H, PF, hdr, sp.get('face_y', 0.3))};[comps]{subs},format={PF}[main]"
+            tail += f";{split_chain(edit['_split'], si, top, 'comps', W, H, PF, hdr, sp.get('face_y', 0.3))};[comps]{subs},format={PF}[main]"
         else:
-            tail += f";[compp]{subs},format={PF}[main]"
+            tail += f";[{top}]{subs},format={PF}[main]"
         if edit.get("pop"):
             fx = Pop(W, H, tw, pieces, part_starts, dur, brand, edit.get("hook", ""),
                      edit["hook_seconds"] if edit.get("hook") else 0, edit.get("keywords"))
@@ -664,6 +720,8 @@ def cmd_render(work):
                 inputs += ["-i", str(mat)]
         for png, _, _ in cards + pills:
             inputs += ["-loop", "1", "-framerate", str(FPS), "-t", f"{dur:.3f}", "-i", str(png)]
+        if tbox:
+            inputs += ["-loop", "1", "-framerate", str(FPS), "-t", f"{dur:.3f}", "-i", str(tbox)]
         if edit["_split"]:
             inputs += ["-stream_loop", "-1", "-i", str((work / sp["screen"]).resolve())]
         if covers:

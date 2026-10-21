@@ -43,3 +43,6 @@ These apply to every talking head Reel, for Open Frame and for every client. Gra
 
 ## Hooks and structure (2026-10-21)
 Use the hook bank and rules in `/mnt/project-files/lessons/ad-attention-videos.md`. Skeleton: Hook, Problem, Story, Payoff. Record 3 openings per Reel.
+
+## Presets (2026-10-21)
+- `"preset": "one-take"` in edit.json (or `"preset"` in the Mac watcher's config.json): one take with only head and tail trimmed, no punch-ins, graphics, cut-out, sound effects or end card, small white one-word captions 55.6% down, static title on a white rounded box for 4 s. Frame with the face in the top third or set `caption_y`.
