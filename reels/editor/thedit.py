@@ -349,6 +349,9 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
     pos = f"{{\\an5\\pos({W // 2},{round(H * cap_y)})}}"
     # Graham, 2026-10-20: one word at a time, just the word being said, plain letters in the brand accent
     per = edit.get("caption_words", 1)
+    # single-word captions are white (Graham, 2026-10-20); "caption_color" overrides, as sRGB hex
+    cc = edit.get("caption_color", "ffffff").lstrip("#")
+    WORD = hlg_hex(cc) if edit.get("hdr") else cc
     chunks = caption_chunks(words, max_words=per)
     for n, ch in enumerate(chunks):
         nxt = chunks[n + 1][0]["start"] if n + 1 < len(chunks) else 1e9
@@ -360,7 +363,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                 continue  # the hook title owns the screen while it's up
             if per == 1:
                 ev.append(f"Dialogue: 0,{ts(max(a, edit['hook_seconds'] if edit.get('hook') else 0))},{ts(b)},Cap,,0,0,0,,"
-                          f"{pos}{{\\c{ass_color(YELLOW)}}}{ass_text(clean(w['w']))}")
+                          f"{pos}{{\\c{ass_color(WORD)}}}{ass_text(clean(w['w']))}")
                 continue
             parts = [(f"{{\\i1\\c{ass_color(YELLOW)}}}" if j == k else "") + ass_text(clean(x["w"])) +
                      (f"{{\\i0\\c{ass_color(CREAM)}}}" if j == k else "") for j, x in enumerate(ch)]
@@ -473,6 +476,12 @@ def cmd_render(work):
     edit["_brand"] = brand
     covers = make_covers(work, cut, out, stem, edit.get("cover"), edit.get("hook", "").replace("*", ""), hdr)
     PF = "yuv420p10le" if hdr else "yuv420p"
+    # pass 2 (2026-10-21): cut the speaker out so titles and graphics sit behind the head
+    from passes import matte, sfx_track
+    mat = None
+    if edit.get("pop") and edit.get("cutout", True):
+        print("cutting the speaker out...")
+        mat = matte(cut, work / "matte.mp4", sw, sh)
     # stills and graphics are drawn in standard color; in HDR they are converted into the footage's HLG
     to_pf = (f"scale=out_color_matrix=bt2020:out_range=tv,format={PF}" if hdr else f"format={PF}")
     for name in edit["formats"]:
@@ -494,9 +503,17 @@ def cmd_render(work):
             fx.render(gfx, FPS)
             gi = 3 if edit.get("endcard") else 1
             gconv = ("scale=out_color_matrix=bt2020:out_range=tv,format=yuva420p10le" if hdr else "format=rgba")
-            vf += (f"zoompan=z='{fx.zoom_expr()}':x='iw/2-iw/zoom/2':y='(ih-ih/zoom)*0.35':d=1:s={W}x{H}:fps={FPS},"
-                   f"{subs},format={PF}[base];[{gi}:v]{gconv}[gfx];"
-                   f"[base][gfx]overlay=eof_action=pass:format=auto,format={PF}[main]")
+            zp = f"zoompan=z='{fx.zoom_expr()}':x='iw/2-iw/zoom/2':y='(ih-ih/zoom)*0.35':d=1:s={W}x{H}:fps={FPS}"
+            if mat:  # graphics go between the background and the speaker; captions stay on top
+                AF = "yuva420p10le" if hdr else "yuva420p"
+                vf += (f"{zp},split[bg][fg];[{gi + 1}:v]scale={sw}:{sh},crop={cw}:{ch}:{cx}:{cy},"
+                       f"scale={W}:{H}:flags=bicubic,setsar=1,{zp},format=gray[mm];"
+                       f"[fg][mm]alphamerge,format={AF}[person];[{gi}:v]{gconv}[gfx];"
+                       f"[bg][gfx]overlay=eof_action=pass:format=auto[back];"
+                       f"[back][person]overlay=format=auto,{subs},format={PF}[main]")
+            else:
+                vf += (f"{zp},{subs},format={PF}[base];[{gi}:v]{gconv}[gfx];"
+                       f"[base][gfx]overlay=eof_action=pass:format=auto,format={PF}[main]")
         else:
             vf += f"{subs},format={PF}[main]"
         if edit.get("endcard"):
@@ -511,6 +528,8 @@ def cmd_render(work):
             fc = vf + ";[0:a]anull[a];[main]null[v]"
         if edit.get("pop"):
             inputs += ["-i", str(gfx)]
+            if mat:
+                inputs += ["-i", str(mat)]
         if covers:
             ci, one = inputs.count("-i"), f"{1 / FPS:.4f}"
             inputs += ["-loop", "1", "-framerate", str(FPS), "-t", one, "-i", str(covers[name]),
@@ -518,6 +537,19 @@ def cmd_render(work):
             fc = (fc.replace("[v]", "[vb]").replace("[a]", "[ab]") +
                   f";[{ci}:v]scale={W}:{H}:flags=lanczos,{to_pf},setsar=1[cov];"
                   f"[cov][{ci + 1}:a][vb][ab]concat=n=2:v=1:a=1[v][a]")
+        if edit.get("sfx", True):  # pass 5 (2026-10-21): whoosh on the hook and take changes, tap per graphic, chime to close
+            lead = 1 / FPS if covers else 0.0
+            cues = ([(lead, "whoosh")] if edit.get("hook") else [])
+            if edit.get("pop"):
+                cues += [(lead + s["t"], "tap") for s in fx.scenes]
+                cues += [(lead + w["t"] - 0.25, "whoosh") for w in fx.wipes if w["t"] < dur - 0.1]
+            if edit.get("endcard"):
+                cues.append((lead + dur, "chime"))
+            wav = sfx_track(work / f"sfx-{name}.wav", lead + dur + (2.5 if edit.get("endcard") else 0) + 0.5, cues)
+            si = inputs.count("-i")
+            inputs += ["-i", str(wav)]
+            fc = (fc.replace("[a]", "[av]") +
+                  f";[av][{si}:a]amix=inputs=2:duration=first:normalize=0,alimiter=limit=0.89:level=false[a]")
         dst = out / f"{stem}-{name}-{W}x{H}.mp4"
         if hdr:  # HEVC 10-bit HLG, the same kind of file the iPhone records, so its color is untouched
             venc = ["-c:v", "libx265", "-pix_fmt", PF, "-profile:v", "main10", "-tag:v", "hvc1", "-preset", "medium",

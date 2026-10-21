@@ -10,7 +10,7 @@ These apply to every talking head Reel, for Open Frame and for every client. Gra
 
 ## Text
 - All text uses the client's brand fonts and colors from `/mnt/project-files/brands/<client>/brand.json` (fonts in `fonts/`). For Open Frame that's Fraunces for headings and captions and Inter for small text, plus the Open Frame palette.
-- Captions (updated 2026-10-20): one word at a time, only the word being spoken. Just the letters, in the brand head font, in one brand color (cream/white or a brand accent). No outline, no shadow, no box. Word starts snap to the audio.
+- Captions (updated 2026-10-20): one word at a time, only the word being spoken. Just the letters, in the brand head font, in white (Graham, 2026-10-20; edit.json "caption_color" overrides). No outline, no shadow, no box. Word starts snap to the audio.
 - All other on-screen text also has no outline and no shadow (Graham, 2026-10-20).
 - Video titles are styled: brand head font, one *italic accent word*, on a background shape. They pop in, then animate out.
 
@@ -19,6 +19,13 @@ These apply to every talking head Reel, for Open Frame and for every client. Gra
 - Bauhaus is Open Frame only: flat ink-outlined illustrations on bold color fields, simple, fast and minimal. Examples: a screen going off for "marketing", an artboard for "design", a swatch fan for "brand", a browser window for "website", a phone with likes for "social", and a paper airplane that lands on "Done ✓" for "let's talk".
 - For every brand: graphics are small, fast and animated, in the brand's colors. They sit at the top, clear of the face, and slide out as the next one comes in.
 - A new client with no Reel graphics listed yet: propose two from their brand look, get Graham's OK, then add them to their section.
+
+## Passes (added 2026-10-21, from the 5-pass method Graham sent)
+1. Transcribe: every word timestamped in `words.json`. Captions, graphics and sound all sync to it.
+2. Cut-out: the speaker is lifted off the background on every frame (soft edges, no outline), so titles and graphics sit behind the head. Captions stay on top. `"cutout": true` in edit.json (default with `pop`). Free local model (RobustVideoMatting).
+3. Captions: see Text above.
+4. Motion: one scene per idea, each fired on its spoken word. The local AI picks the words and scenes into `keywords`.
+5. Sound: sound effects made in code (no licensing): a whoosh on the hook and each take change, a tap on each graphic, a chime on the end card, mixed under the voice, about -14 LUFS. `"sfx": false` turns it off. Still no music, so trending audio goes on in the IG app.
 
 ## Deliver
 - An IG Reel at 1080x1920 and a Facebook square at 2160x2160, plus an end card with the CTA.
