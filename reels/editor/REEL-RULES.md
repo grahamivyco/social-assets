@@ -50,4 +50,4 @@ Use the hook bank and rules in `/mnt/project-files/lessons/ad-attention-videos.m
 ## Keywords (Graham, 2026-10-21)
 - Every Reel gets 15 search keywords from the local AI: the main one in the hook and the first caption sentence, 1 or 2 more worked into the caption, and all 15 as one plain line above the call to action.
 - On screen: the top 3 as a small but readable line where the captions sit, while the hook is up (edit.json `topic_line`). Never hidden or unreadable text. Instagram reads on-screen text it can actually see, and text made to be invisible is a spam pattern that can get a Reel held back.
-- Alt text: one plain sentence with the main keyword, saved in caption.md. Instagram's API takes alt text on photos, not on Reels, so for a Reel Graham pastes it in the app (Advanced settings) if he wants it.
+- Alt text: one plain sentence with the main keyword, saved in caption.md. Instagram's API takes alt text on photos, not on Reels, so it is ready for photo posts and for pasting in the app where Instagram offers an alt text field.
