@@ -112,11 +112,21 @@ async function lmstudio() {
 function pull() {
   if (Date.now() - (S.pulled || 0) < 10 * 6e4) return null;
   if (fs.existsSync(path.join(REPO, '.git', 'index.lock'))) return null;
-  const r = run('git', ['-C', REPO, 'pull', '--rebase', '--autostash', '-q'], { timeout: 90000 });
+  const mine = () => run('git', ['-C', REPO, 'log', '-1', '--format=%H', '--', 'mac/keeper.js']).out.trim();
+  const before = mine();
+  let r = run('git', ['-C', REPO, 'pull', '--rebase', '--autostash', '-q'], { timeout: 90000 });
+  if (!r.ok && fs.existsSync(path.join(REPO, '.git', 'rebase-merge'))) {
+    // a stuck rebase (two pulls at once, or a clash with a Reel commit): undo it and try once more
+    run('git', ['-C', REPO, 'rebase', '--abort']);
+    r = run('git', ['-C', REPO, 'pull', '--rebase', '--autostash', '-q'], { timeout: 90000 });
+  }
   S.pulled = Date.now();
   if (r.ok) S.pullFailSince = 0; else S.pullFailSince = S.pullFailSince || Date.now();
+  // new keeper code came down: let pm2 start the new version after this check reports
+  if (r.ok && before && mine() !== before) S.restart = true;
+  const why = r.out.replace(/\s+/g, ' ').trim().slice(-200);
   const long = S.pullFailSince && Date.now() - S.pullFailSince > 60 * 6e4;
-  return row('repo', 'Code updates', long ? 'fail' : 'ok', long ? `git pull keeps failing: ${r.out.slice(-160)}` : r.ok ? 'Up to date.' : 'Pull failed once, will retry.');
+  return row('repo', 'Code updates', long ? 'fail' : 'ok', r.ok ? 'Up to date.' : (long ? 'git pull keeps failing: ' : 'Pull failed, will retry: ') + why);
 }
 
 // After one sign-in (install.sh runs `clasp login`), every change to hub/Code.gs on main deploys itself.
@@ -185,6 +195,7 @@ async function tick() {
     if (process.argv[2] === 'once') console.log(JSON.stringify(rows, null, 1));
   } catch (e) { log('tick failed:', e.message); }
   finally { busy = false; }
+  if (S.restart && process.argv[2] !== 'once') { S.restart = false; save(); log('new keeper code, restarting'); process.exit(0); }
 }
 
 if (process.argv[2] === 'once') tick();
