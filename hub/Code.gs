@@ -185,7 +185,14 @@ function studioApi_(b) {
     }
     throw new Error('Unknown request');
   } catch (x) {
-    return { error: x.message || String(x), signedOut: !!x.signedOut };
+    // Our own messages are plain sentences. Google's system errors (permissions, quotas) carry links or
+    // service names and can come in Spanish, so clients get a plain line and the details go to the log.
+    const msg = x.message || String(x);
+    if (/https?:\/\/|[A-Z]\w+App\.|Exception|Service invoked|permis/i.test(msg)) {
+      console.error('Studio: ' + msg);
+      return { error: 'Something went wrong on my side. Try again in a minute, or use your email to get a code.' };
+    }
+    return { error: msg, signedOut: !!x.signedOut };
   }
 }
 
@@ -243,7 +250,14 @@ function studioLink_(token) {
 function studioGoogle_(credential) {
   const id = GOOGLE_CLIENT_ID || PropertiesService.getScriptProperties().getProperty('GOOGLE_CLIENT_ID');
   if (!id || !credential) return { error: 'Google sign-in isn\'t set up yet. Use the email code.' };
-  const r = UrlFetchApp.fetch('https://oauth2.googleapis.com/tokeninfo?id_token=' + encodeURIComponent(credential), { muteHttpExceptions: true });
+  let r;
+  try {
+    r = UrlFetchApp.fetch('https://oauth2.googleapis.com/tokeninfo?id_token=' + encodeURIComponent(credential), { muteHttpExceptions: true });
+  } catch (e) {
+    // Usually the script hasn't been allowed to reach Google yet: run setup once in the editor and click Allow.
+    console.error('Studio Google sign-in: ' + e.message);
+    return { error: 'Google sign-in isn\'t working right now. Use your email to get a code instead.' };
+  }
   if (r.getResponseCode() !== 200) return { error: 'Google sign-in didn\'t go through. Try again.' };
   const t = JSON.parse(r.getContentText());
   if (t.aud !== id || String(t.email_verified) !== 'true' || !/accounts\.google\.com$/.test(t.iss || '')) return { error: 'Google sign-in didn\'t go through. Try again.' };
