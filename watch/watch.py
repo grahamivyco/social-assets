@@ -213,14 +213,15 @@ def report(work, src, info, meta, words, lufs, shot_list, note):
         L += [f"> Why it was saved: {note}", ""]
     L += ["| | |", "|---|---|", f"| Source | {info.get('webpage_url') or src} |"]
     if info.get("uploader") or info.get("channel"):
-        L.append(f"| Creator | {info.get('uploader') or info.get('channel')} (@{handle(info)}) |")
+        L.append(f"| Creator | {str(info.get('uploader') or info.get('channel')).replace('|', '/')} (@{handle(info)}) |")
     if info.get("upload_date"):
         u = info["upload_date"]; L.append(f"| Posted | {u[:4]}-{u[4:6]}-{u[6:]} |")
     for k, lbl in (("view_count", "Views"), ("like_count", "Likes"), ("comment_count", "Comments")):
         if info.get(k) is not None:
             L.append(f"| {lbl} | {info[k]:,} |")
     if info.get("track") or info.get("artist"):
-        L.append(f"| Audio | {info.get('track') or ''} {('· ' + info['artist']) if info.get('artist') else ''} |")
+        audio = f"{info.get('track') or ''} {('· ' + info['artist']) if info.get('artist') else ''}".replace("|", "/")
+        L.append(f"| Audio | {audio} |")
     L += [f"| Length | {dur:.1f} s, {meta['w']}x{meta['h']}, {meta['fps']} fps |",
           f"| Pacing | {n_cuts} cuts, one every {dur / (n_cuts + 1):.1f} s on average |",
           f"| Speech | {len(words)} words, {wpm} per minute, talking {100 * spoken / dur:.0f}% of the time |"
