@@ -1167,7 +1167,7 @@ function build(d) {
     const go = a => () => call('adminLoop', K, l.id, a, '');
     const body = [textEl(l.body), l.why ? $('p', { class: 'mute', text: 'Why: ' + l.why }) : '',
       l.link ? $('p', {}, $('a', { class: 'link', href: l.link, target: '_blank', text: 'Open' })) : ''];
-    if (l.to) q.push({ label, body: [$('p', { class: 'text', text: 'To: ' + l.to + '\nSubject: ' + (l.subject || l.title) }), $('div', { class: 'quote', text: l.body }), l.why ? $('p', { class: 'mute', text: 'Why: ' + l.why }) : ''],
+    if (l.to) q.push({ label, body: [$('p', { class: 'text', text: 'To: ' + l.to + '\\nSubject: ' + (l.subject || l.title) }), $('div', { class: 'quote', text: l.body }), l.why ? $('p', { class: 'mute', text: 'Why: ' + l.why }) : ''],
       ask: l.ask || 'Send this email?', yes: ['Send', go('yes')], change: ['Edit', 'Your email', n => call('adminLoop', K, l.id, 'send', n), l.body], skip: ['Don\\'t send', go('pass')] });
     else if (l.status === 'todo') q.push({ label, body, ask: l.ask || '', yes: ['Got it', go('done')], change: null, skip: null });
     else q.push({ label, body, ask: l.ask || 'Go ahead?', yes: ['Yes', go('yes')],
