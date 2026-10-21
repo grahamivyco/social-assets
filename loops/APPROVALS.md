@@ -25,7 +25,7 @@ How to write a row:
 | 5 | Brand kit rounds | `pick_one` (directions), `design` (colours and type), `files` (final files) | yes | `brand-kit/build-brand-kit.js` when it renders a round | Each round | Pick: next round built from the pick. Comment: revise this round. Final files: handoff. |
 | 6 | Website launches | `launch` | yes | Projects tab row for a website job reaches "staging ready" | Staging link ready | Approve to launch: Got it card for Graham to go live. Not yet: their note goes on a Graham card. |
 | 7 | Brand deals | `brand_deal` | yes, always | `triageMail` in the Hub (inbound offers), `deals.js` when a pitched brand answers with an offer | Offer arrives | Yes: acceptance email card for Graham. Not for us: polite no draft. Ask: Graham card. |
-| 8 | Sensitive replies | `reply` | yes for touchy, no for everyday | n8n comment replies + DM inbox (Inbox `needs_reply`) | A comment or DM gets flagged | Send as is: n8n sends it. Change: edited, then sent. I'll handle it: closed, nothing sent. |
+| 8 | Sensitive replies | `reply` | yes for touchy (upset, press, donor, sponsor, refund) when the client approves their own posts, no for everyday | **Inbox sync** in the Hub (rows the n8n comment replies + DM inbox write with `needs_reply`) | A comment or DM gets flagged | Send as is: n8n sends it. Change: edited, then sent. I'll handle it: closed, nothing sent. |
 | 9 | Reposts | `repost` | yes, always | Content submissions (n8n) and photo posts when the photo isn't the client's own; `spotlight` in `key.js` | Submission flagged as someone else's | Approve: becomes a Queue post with credit. Skip: archived. |
 | 10 | Ad spend | `ad_spend` | yes, always | Boost check on report day (post beat 3x the median), Ad Grants builder | Monthly | Approve spend: Got it card for Graham to set it up. No: not suggested again for that post. |
 | 11 | Photos or info from the client | `request` | yes | Monthly content plan (a slot with no real material), `onboard.js` (logins, logo files) | Plan day, onboarding day 0 | Upload: content intake fills the slot and closes the row. Not yet: one reminder at the next check-in. |
@@ -41,7 +41,7 @@ Graham-only planning cards have no kind in the list: weekly ideas, scripts, tren
 ## Build order
 
 1. Queue sync (posts, reels, newsletters). **Built first.**
-2. Sensitive replies.
+2. Sensitive replies (Inbox sync in the Hub, same hourly run). **Built.**
 3. Requests for photos or info.
 4. Quotes (proposal loop).
 5. Reports.

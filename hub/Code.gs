@@ -1309,10 +1309,13 @@ function syncApprovals_() {
   const projects = table_(hubId_(), 'Projects'), stamp = r => [r.status, r.answer, r.comment].join('|');
   const out = { added: 0, mirrored: 0, applied: 0 }, now = new Date().toISOString();
   let approvedAny = false;
-  clients_().forEach(c => {
-    const q = table_(c.sheet_id, 'Queue');
-    if (!q) return;
-    queueDecisions_(c, q, projects).forEach(d => {
+  const all = clients_(), ds = [];
+  all.forEach(c => { const q = table_(c.sheet_id, 'Queue'); if (q) queueDecisions_(c, q, projects).forEach(d => ds.push([c, d])); });
+  uniq_(all.map(c => c.sheet_id)).forEach(sid => {
+    const ib = table_(sid, 'Inbox');
+    if (ib) inboxDecisions_(all.filter(c => c.sheet_id === sid), ib, sid).forEach(x => ds.push(x));
+  });
+  ds.forEach(([c, d]) => {
       const cur = byId[d.id];
       if (!cur) {
         if (!d.open) return;   // history (posted, skipped before this existed) stays out
@@ -1321,17 +1324,17 @@ function syncApprovals_() {
         byId[d.id] = row; out.added++;
         return remember_(seenT, seen, d.id, stamp(row), now);
       }
-      // Studio changed the row since the last run: move the Queue row to match, if it's still waiting.
+      // Studio changed the row since the last run: move the Queue or Inbox row to match, if it's still waiting.
       // Only Studio edits these rows after they're made, so any change since the last run is Studio's.
       const studio = seen[d.id] && seen[d.id].seen !== stamp(cur);
-      if (studio && applyStudioAnswer_(d, cur)) { out.applied++; if (cur.status === 'approved') approvedAny = true; return remember_(seenT, seen, d.id, stamp(cur), now); }
+      if (studio && (d.inbox ? applyStudioReply_ : applyStudioAnswer_)(d, cur)) { out.applied++; if (cur.status === 'approved' && d.queue) approvedAny = true; return remember_(seenT, seen, d.id, stamp(cur), now); }
       const want = { status: d.status, title: d.title, detail: d.detail, preview: d.preview, due: approvalRow_(d, [c]).due };
-      if (d.answer) Object.assign(want, { answer: d.answer, comment: d.comment, updated: d.updated || now });
+      const answerMoved = cur.status !== d.status || String(cur.answer || '') !== d.answer || String(cur.comment || '') !== String(d.comment || '');
+      if (d.answer && answerMoved) Object.assign(want, { answer: d.answer, comment: d.comment, updated: d.updated || now });
       const diff = {};
       Object.keys(want).forEach(k => { if (String(cur[k] || '') !== String(want[k] || '')) diff[k] = want[k]; });
       if (Object.keys(diff).length) { setCells_(t, cur._row, diff); Object.assign(cur, diff); out.mirrored++; }
       remember_(seenT, seen, d.id, stamp(cur), now);
-    });
   });
   if (approvedAny) phoneReels_();
   return out;
@@ -1342,6 +1345,46 @@ function remember_(t, seen, id, value, now) {
   if (s && s.seen === value) return;
   if (s && s._row) setCells_(t, s._row, { seen: value, at: now });
   else { t.sh.appendRow([id, value, now]); seen[id] = { id, seen: value, _row: t.sh.getLastRow() }; }
+}
+
+// Comment and DM replies waiting on a yes (Inbox status needs_reply, from the n8n comment replies + DM inbox workflows).
+// Everyday ones are Graham's (client_ok no). Touchy ones (upset, press, donors, sponsors) go to the client too,
+// when the client signs off on their own posts (client_approves). Rows without a brand belong to the first client on that Sheet.
+const TOUCHY_REPLY = /\b(journalist|reporter|press|article|interview|podcast|news|donat\w*|donor|gift|grant|sponsor\w*|lawyer|legal|refund|complain\w*)\b/i;
+function inboxDecisions_(cs, ib, sid) {
+  return ib.rows.filter(r => r.id && ['needs_reply', 'approved', 'sent', 'handled'].indexOf(r.status) >= 0).map(r => {
+    const c = cs.find(x => x.brand === r.brand) || cs[0];
+    const who = r.username || r.sender_name || r.sender || 'someone', dm = (r.kind || 'dm') === 'dm';
+    const touchy = r.intent === 'upset' || TOUCHY_REPLY.test(r.text || '');
+    const status = { needs_reply: r.review_note ? 'changes' : 'draft', approved: 'approved', sent: 'approved', handled: 'skipped' }[r.status];
+    const d = {
+      id: 'reply-' + r.id, client: c.client, kind: 'reply',
+      title: (dm ? 'Reply to a message from ' : 'Reply to a comment from ') + (who[0] === '@' || / /.test(who) ? who : '@' + who),
+      detail: ('They wrote: ' + String(r.text || '').slice(0, 160) + (r.draft_reply ? ' Reply: ' + String(r.draft_reply).slice(0, 180) : '')).trim(),
+      job: 'none', preview: '', options: '',
+      // Meta closes DM replies 24 hours after their message.
+      due: dm && r.received_at ? new Date(new Date(r.received_at).getTime() + 864e5).toISOString() : '',
+      client_ok: touchy && c.client_approves ? 'yes' : 'no', made_by: 'replies', status, open: r.status === 'needs_reply',
+      inbox: { sheetId: sid, id: r.id, status: r.status },
+    };
+    if (status !== 'draft') {
+      d.answer = { skipped: "I'll handle it", changes: 'Change' }[status] || 'Send as is';
+      d.comment = status === 'changes' ? r.review_note : ''; d.updated = r.sent_at || '';
+    }
+    return [c, d];
+  });
+}
+
+// Studio's answer on a reply: Send as is -> approved (n8n sends it), I'll handle it -> handled,
+// Change -> the note goes on the Inbox row (review_note) and the reply waits for a new draft on the old card.
+function applyStudioReply_(d, a) {
+  if (d.inbox.status !== 'needs_reply') return false;
+  const set = { approved: { status: 'approved' }, skipped: { status: 'handled' }, changes: { review_note: a.comment || 'Change' } }[a.status];
+  if (a.status === 'client') return true;   // waiting on the client now; nothing to do in the Inbox yet
+  if (!set) return false;
+  const ib = table_(d.inbox.sheetId, 'Inbox');
+  setCells_(ib, findRow_(ib, 'id', d.inbox.id)._row, set);
+  return true;
 }
 
 // An answer from Studio, written onto the Queue rows the same way the old cards do it. False = the Queue moved on already.
