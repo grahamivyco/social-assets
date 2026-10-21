@@ -100,25 +100,35 @@ def transitions(fr, pf, hard_cuts, dur):
     out = []
     for t in hard_cuts:
         i = min(max(int(round(t * FPS)), 1), n - 1)
+        i = max(range(max(i - 1, 1), min(i + 2, n)), key=lambda k: pf[k]["hdiff"])  # the frame where it changes
         a, b = max(i - 2, 0), min(i + 1, n - 1)
         kind = "hard cut"
-        blur = np.mean([pf[k]["sharp"] for k in range(max(i - 2, 0), min(i + 2, n))])
-        base = np.median([p["sharp"] for p in pf[max(i - 15, 0):i + 15]]) or 1
-        fast = max(pf[k]["mag"] for k in range(max(i - 2, 1), min(i + 2, n)))
+        # The effect often plays just before the cut lands, so look back further than forward.
+        near = range(max(i - 4, 1), min(i + 2, n))
+        blur = min(pf[k]["sharp"] for k in near)
+        # Blur means softer than both shots, not just softer than a crisp graphic on one side.
+        base = min(np.median([p["sharp"] for p in pf[max(i - 8, 0):max(i - 3, 1)]] or [1]),
+                   np.median([p["sharp"] for p in pf[min(i + 2, n - 1):i + 8]] or [1])) or 1
+        fast = max(pf[k]["mag"] for k in near)
+        zoom = max((pf[k]["zoom"] for k in near), key=abs)
         if pf[i]["hdiff"] < 0.45:
             s = scale_between(fr[a], fr[b])
-            kind = ("punch-in" if s and s > 1.07 else "punch-out" if s and s < 0.93 else "jump cut")
-            if s:
-                kind += f" ({s:.2f}x)"
-        if fast > 4 and blur < 0.5 * base:
-            kind = "whip / blur transition"
-        if any(pf[k]["luma"] > 0.9 for k in range(max(i - 1, 0), min(i + 2, n))) and pf[i]["luma"] > 2 * pf[a]["luma"]:
+            if s:   # no feature match means a different shot that happens to share colours
+                kind = ("punch-in" if s > 1.07 else "punch-out" if s < 0.93 else "jump cut") + f" ({s:.2f}x)"
+        both = range(max(i - 3, 1), min(i + 4, n))   # a slide can play out on either side of the cut point
+        spread = sum(pf[k]["hdiff"] > 0.3 for k in both)
+        if max(pf[k]["mag"] for k in both) > 5 and spread >= 2 and blur >= 0.3 * base:   # both pictures on screen, moving
+            kind = "slide / whip"
+        if fast > 4 and blur < 0.3 * base:
+            kind = "zoom / blur transition" if abs(zoom) > 0.04 else "whip / blur transition"
+        if any(pf[k]["luma"] > 0.85 for k in range(max(i - 1, 0), min(i + 2, n))) and pf[i]["luma"] > 2 * pf[a]["luma"]:
             kind = "flash"
         out.append({"t": t, "kind": kind})
     # fades and flashes: the picture dips to black or white and comes back
     lum = np.array([p["luma"] for p in pf])
     used = set()
-    for dark, test in ((True, lambda v: v < 0.07), (False, lambda v: v > 0.9)):
+    # 0.85, not higher: at 10 fps the whitest frame of a short flash is often not sampled.
+    for dark, test in ((True, lambda v: v < 0.07), (False, lambda v: v > 0.85)):
         i = 0
         while i < n:
             if not test(lum[i]) or i in used:
@@ -134,6 +144,8 @@ def transitions(fr, pf, hard_cuts, dur):
                 span = (b - a + 1) / FPS
                 kind = ("fade through black" if dark else "fade through white") if span > 0.25 else \
                        ("cut to black" if dark else "flash")
+                if span > 1.5 or b >= n - 2:   # it stays there: an end card or title card, not a fade
+                    kind = "cut to black card" if dark else "cut to white card"
                 out = [t for t in out if not (a - 1) / FPS <= t["t"] <= (b + 1) / FPS]
                 out.append({"t": round((a + b) / 2 / FPS, 2), "kind": kind, "len": round(span, 1)})
                 used.update(range(a - 1, b + 2))
@@ -146,16 +158,21 @@ def transitions(fr, pf, hard_cuts, dur):
             i += 1; continue
         for span in range(3, 13):
             j = i + span
-            if j >= n or j in used:
+            if j >= n or j in used or any(i < c <= j + 3 for c in cut_frames):  # a cut inside or just after is labelled above
                 break
             steps = [pf[k]["hdiff"] for k in range(i + 1, j + 1)]
             nov = [pf[k]["novel"] for k in range(i + 1, j + 1)]
             total = float(np.abs(np.array(hist_at(fr, i)) - np.array(hist_at(fr, j))).sum())
-            if total > 0.3 and max(steps) < 0.5 and min(nov) > 0.025 and sum(nov) > 0.2:
-                if np.mean([pf[k]["mag"] for k in range(i + 1, j + 1)]) > 2.5:
-                    kind = "camera move / reframe (see the strip)"
-                elif is_blend(fr[i], fr[(i + j) // 2], fr[j]):
+            if total > 0.5 and max(steps) < 0.9 and min(nov) > 0.025 and sum(nov) > 0.2:
+                # Trim the lead-in: start where the picture really starts to change.
+                full = float(np.abs(np.array(hist_at(fr, i)) - np.array(hist_at(fr, j))).sum())
+                while j - i > 3 and np.abs(np.array(hist_at(fr, i + 1)) - np.array(hist_at(fr, j))).sum() > 0.85 * full:
+                    i += 1
+                span = j - i
+                if is_blend(fr[i], fr[(i + j) // 2], fr[j]):   # before the motion test: footage under a dissolve can move
                     kind = "dissolve"
+                elif np.mean([pf[k]["mag"] for k in range(i + 1, j + 1)]) > 2.5:
+                    kind = "camera move / reframe (see the strip)"
                 else:
                     kind = "gradual (slide, morph or animated, see the strip)"
                 prev = out[-1] if out and out[-1].get("len") and out[-1]["t"] + out[-1]["len"] / 2 >= i / FPS - 0.3 else None
@@ -271,7 +288,8 @@ def text_events(vis, words):
     for t in sorted(vis):
         for line in vis[t]["text"]:
             s = line["s"].strip()
-            if len(s) < 2:
+            # Skip fragments and sideways credits (boxes taller than wide, read in broken pieces).
+            if len(re.sub(r"\W", "", s)) < 3 or line["h"] > line["w"]:
                 continue
             hit = next((e for e in ev if e["end"] >= t - 1.5 / OCR_FPS and
                         difflib.SequenceMatcher(None, e["s"].lower(), s.lower()).ratio() > 0.7 and
@@ -473,7 +491,7 @@ def run(work, video=None):
         L.append("| Text | not checked (needs Apple Vision on the Mac) |")
     L += ["", "## Transitions", "", "| Time | Type | Lands on a hit |", "|---|---|---|"]
     for t in trans:
-        L.append(f"| {clock(t['t'])} | {t['kind']}{f' over {t[chr(108)+chr(101)+chr(110)]}s' if t.get('len') else ''} | "
+        L.append(f"| {clock(t['t'])} | {t['kind']}{(' held ' if 'card' in t['kind'] else ' over ') + str(t['len']) + 's' if t.get('len') else ''} | "
                  f"{'yes' if t in sync else ''} |")
     if not trans:
         L.append("| | one continuous shot | |")

@@ -13,7 +13,7 @@ One folder per video in `~/Downloads/Open Frame LLC & Clients/Watched/<date>-<cr
 ## Use it
 - **From Claude on the Mac:** paste the link and say "watch this". The `watch-video` skill runs the tool and writes the breakdown.
 - **From the iPhone:** Share > "Watch with Claude" on any Reel or video. It lands in the folder within a few minutes. Then ask Claude about it.
-- **By hand:** `python3 ~/social-assets/watch/watch.py "<link>" --note "why I saved it"`. Add `--cookies chrome` if Instagram asks for a login.
+- **By hand** (`python3.13`: Homebrew's `python3` has none of the packages): `python3.13 ~/social-assets/watch/watch.py "<link>" --note "why I saved it"`. Add `--cookies chrome` if Instagram asks for a login.
 
 ## How it works
 1. `yt-dlp` downloads the video and the post's details.
@@ -25,12 +25,12 @@ One folder per video in `~/Downloads/Open Frame LLC & Clients/Watched/<date>-<cr
 
 ## Setup on the Mac (once)
 1. `git -C ~/social-assets pull` (or clone it).
-2. `python3 -m pip install --user yt-dlp sherpa-onnx numpy pillow opencv-python-headless`
+2. `python3.13 -m pip install --user yt-dlp sherpa-onnx numpy pillow opencv-python-headless`
 3. ffmpeg + ffprobe without Homebrew: download the macOS builds from https://ffmpeg.martin-riedl.de into `~/.local/bin` and make them executable.
 4. Skill: `cp -R ~/social-assets/watch/skill/watch-video ~/.claude/skills/`
 5. Phone intake:
    - `mkdir -p ~/.config/video-watch && openssl rand -hex 16 > ~/.config/video-watch/token`
-   - `pm2 start ~/social-assets/watch/server.py --name video-watch --interpreter python3 && pm2 save`
+   - `pm2 start ~/social-assets/watch/server.py --name video-watch --interpreter python3.13 && pm2 save`
    - n8n: Import from URL `https://raw.githubusercontent.com/grahamivyco/social-assets/main/watch/n8n-video-watch.json`, then Publish.
    - iPhone Shortcut "Watch with Claude": Show in Share Sheet, accepts URLs and Text. Actions: **Get Contents of URL** `https://overthrow-spoken-verbalize.ngrok-free.dev/webhook/watch`, Method POST, Request Body JSON: `url` = Shortcut Input, `token` = the token, `note` = Ask for Input (optional). Then **Show Notification** with the result's `message`.
 
