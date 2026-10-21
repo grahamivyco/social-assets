@@ -34,13 +34,19 @@ Sunday: weekly review -> lessons + prompt fixes -> next run
 | `loops.json` | Registry of every loop: trigger, work, check, card, feeds, status. `run` + `schedule`/`every` = runner.js runs it. |
 | `runner.js` | `daemon` (pm2), or run one loop now. |
 | `lib.js` | Local AI, Hub API, self-check rules, run log, git sync of `state/`. |
-| `ideas.js`, `scripts.js` | The first two loops. |
+| `ideas.js`, `scripts.js`, `audio.js` | Weekly ideas, scripts from each Yes, trending sounds picked for each script. |
+| `engage.js`, `leads.js` | Daily comment drafts (learns from your edits), weekly pipeline that tunes how many. |
+| `site.js`, `magnet.js` | Monthly site + ChatGPT check; the free check form (`../check/`) runs a check, emails it, adds a lead. |
+| `proposal.js`, `onboard.js` | Proposal page + email after a consult (rate card prices only); day 0-90 onboarding cards after a yes. |
+| `grow.js` | Directories (3rd), local events (Mon, Yes adds to calendar), Google Business post (Thu), template saver (Fri). |
+| `later.js` | Built but `off` until there's data: proof posts, warm-up DMs, client health, trend Reels. |
+| `data/directories.json`, `tools/audit.js` | Free listings list; copy of the SEO thread's site check. |
 | `prompts/*.md` | What the local AI is told. The weekly review edits these. |
 | `state/` | Run log, lessons, approved-idea backlog and scripts per client. Pushed by the Mac. |
 
 ## Mac setup (once)
 
-1. In the Hub Apps Script, paste the new `hub/Code.gs` and deploy a new version (adds the `Loops` and `Loop runs` tabs and cards).
+1. In the Hub Apps Script, paste the new `hub/Code.gs` and deploy a new version (adds the `Loops`, `Loop runs` and `Check requests` tabs, email and calendar cards). Google asks once to allow Calendar and sending email.
 2. `reels/config.json` already has `hub`, `hubKey` and `model`; the loops reuse them. Optional `loops/config.json` overrides anything in `lib.js` `C`.
 3. LM Studio running with the model loaded (same as reel-watch).
 4. Start it:
@@ -49,7 +55,9 @@ Sunday: weekly review -> lessons + prompt fixes -> next run
 cd ~/social-assets && git pull && pm2 start loops/runner.js --name loops -- daemon && pm2 save
 ```
 
-Run one now: `node loops/runner.js ideas open-frame`
+Run one now: `node loops/runner.js ideas open-frame` (any name in `MODS`).
+
+Free check form: https://grahamivyco.github.io/social-assets/check/ (link it from openframe.design and the IG links page). Reports and proposals are published under unguessable links in `checks/` and `proposals/`.
 
 ## Adding a loop
 

@@ -51,13 +51,14 @@ async function tick() {
       await L.logRun({ loop: 'scripts', client: client.id, status: 'check', made: 2, kept: 0, cards: 0, note: `${card.title}: ${s.failed}` });
       continue;
     }
+    const audio = await require('./audio').pick(s.script);
     const name = `${L.today()}-${L.slug(card.title)}.md`;
-    const md = `# ${card.title}\n\n${card.body}\n\n## Script\n\n${s.script}\n\n## Caption\n\n${s.caption}\n`;
+    const md = `# ${card.title}\n\n${card.body}\n\n## Script\n\n${s.script}\n\n## Caption\n\n${s.caption}\n\n## Audio\n\n${audio}\n`;
     for (const dir of [path.join(L.C.scripts, client.name), path.join(L.STATE, client.id, 'scripts')]) {
       try { fs.mkdirSync(dir, { recursive: true }); fs.writeFileSync(path.join(dir, name), md); } catch (e) { L.log('save failed:', e.message); }
     }
     await L.hub('add', { rows: [{ id: card.id.replace(/^ideas-/, 'script-'), loop: 'scripts', client: client.id, kind: 'script', status: 'todo',
-      title: 'Film this: ' + card.title, body: `${s.script}\n\nCaption:\n${s.caption}`,
+      title: 'Film this: ' + card.title, body: `${s.script}\n\nCaption:\n${s.caption}\n\n${audio}`,
       ask: 'Film it in one take and AirDrop it. The Reel draft makes itself.' }] });
     await L.logRun({ loop: 'scripts', client: client.id, status: 'ok', made: 1, kept: 1, cards: 1, note: card.title });
     L.log(`script ${client.id}: ${card.title}`);

@@ -1,5 +1,5 @@
 {
-  "_how": "One entry per brand. Every loop runs for each client with enabled: true. To add a client, copy a block, change the slug (must match the Hub Clients tab brand and brands/<slug>/), and fill in who they talk to. Optional: site (monthly site + AI search check), ai_prompts (3 asked per month, rotating), engage (true = daily comment drafts from the outreach Sheet; Open Frame only for now).",
+  "_how": "One entry per brand. Every loop runs for each client with enabled: true. To add a client, copy a block, change the slug (must match the Hub Clients tab brand and brands/<slug>/), and fill in who they talk to. Optional: site (monthly site + AI search check), ai_prompts (3 asked per month, rotating), engage (true = daily comment drafts from the outreach Sheet; Open Frame only for now). listings (agency | local | nonprofit) = directories loop. city + event_feeds (RSS, iCal, or any page with event schema; dead feeds switch themselves off) = events loop. gbp = weekly Google Business post draft.",
   "open-frame": {
     "enabled": true,
     "name": "Open Frame",
@@ -32,7 +32,16 @@
       "Affordable branding and website help for a small nonprofit",
       "Who can manage social media for a small nonprofit on a tight budget?"
     ],
-    "engage": true
+    "engage": true,
+    "listings": "agency",
+    "city": "Minneapolis",
+    "gbp": true,
+    "event_feeds": [
+      "https://www.eventbrite.com/d/mn--minneapolis/nonprofit/",
+      "https://www.eventbrite.com/d/mn--minneapolis/marketing/",
+      "https://www.minnesotanonprofits.org/events",
+      "https://minnesota.aiga.org/events/"
+    ]
   },
   "ngm": {
     "enabled": false,
@@ -55,6 +64,8 @@
     "cta": "Join a meeting: https://needleworkguildmn.org",
     "voice": "Friendly, welcoming, a little old-fashioned warmth. Credits members by first name only when they OK it.",
     "first_person_ok": true,
-    "site": "https://needleworkguildmn.org"
+    "site": "https://needleworkguildmn.org",
+    "listings": "nonprofit",
+    "city": "Minneapolis"
   }
 }
