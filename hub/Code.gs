@@ -636,6 +636,9 @@ function loopsApi_(b) {
       .map(r => ({ handle: h(r.username || r.sender), kind: r.kind || 'dm', text: String(r.text || '').slice(0, 200), at: String(r.received_at || r.timestamp) }));
     return { accounts, touches };
   }
+  if (b.action === 'approval-add') return approvalAdd_(b.rows);
+  if (b.action === 'approval-list') return approvalList_(b);
+  if (b.action === 'approval-sync') return syncApprovals_();
   if (b.action === 'mac') return macReport_(b.rows);
   if (b.action === 'results') { const c = clients_().find(x => x.brand === b.client); return c ? results_(c) : { empty: true }; }
   if (b.action === 'funnel') {
@@ -1188,6 +1191,176 @@ function clientDecide_(c, ids, decision, note) {
   });
 }
 
+// ---------- Approvals tab (Studio Phase 2 reads it) ----------
+// One row per decision, for Graham's Studio Home and each client's "Ready for you" list.
+// Format: Open-Frame docs/approval-items.md. Which loop writes which row: social-assets loops/APPROVALS.md.
+// Loops write id..status (fn 'loops', action 'approval-add'); Studio writes answer, comment, updated.
+// Queue rows (posts, Reels, newsletters) get their rows from syncApprovals_ every hour, both ways:
+// an answer on the old cards shows up here, and an answer Studio writes here moves the Queue row, so the poster keeps working.
+const APPROVAL_HEAD = ['id', 'client', 'kind', 'title', 'detail', 'job', 'preview', 'options', 'due', 'client_ok', 'made_by', 'status', 'answer', 'comment', 'updated'];
+const APPROVAL_KINDS = ['post', 'reel', 'newsletter', 'report', 'pick_one', 'design', 'set', 'launch', 'files', 'brand_deal', 'reply', 'repost', 'ad_spend', 'request', 'hours', 'quote', 'invoice'];
+const APPROVAL_CLIENT_ALWAYS = ['brand_deal', 'ad_spend', 'repost', 'quote'];
+const APPROVAL_DONE = ['approved', 'changes', 'skipped'];
+const MONTHLY_PLANS = ['Care', 'Starter', 'Growth', 'Full Comms'];
+// The sync's memory of what it last saw on each row, so it can tell a Studio answer from its own copy.
+const APPROVAL_SEEN_HEAD = ['id', 'seen', 'at'];
+
+function approvalsTable_() { return hubTab_('Approvals', APPROVAL_HEAD); }
+
+// Checks and fills a row the way approval-items.md says. Throws on a bad kind so a loop can't invent one.
+function approvalRow_(r, clients) {
+  const kind = String(r.kind || '').trim();
+  if (APPROVAL_KINDS.indexOf(kind) < 0) throw new Error('Approvals: unknown kind "' + kind + '". Use one from approval-items.md or ask for a new one.');
+  if (!r.id || !r.title) throw new Error('Approvals: id and title are required');
+  const c = (clients || clients_()).find(x => x.brand === r.client || x.client === r.client);
+  // Left blank, the client's client_approves (Clients tab) decides. Replies are Graham's unless a loop marks one touchy.
+  let ok = r.client_ok == null || r.client_ok === '' ? (kind !== 'reply' && c && c.client_approves ? 'yes' : 'no') : /^(y|yes|true)$/i.test(String(r.client_ok)) ? 'yes' : 'no';
+  if (APPROVAL_CLIENT_ALWAYS.indexOf(kind) >= 0) ok = 'yes';
+  const status = r.status === 'client' && ok === 'yes' ? 'client' : 'draft';
+  // A plain date stays as it is (new Date would read it as UTC midnight, the day before in Chicago).
+  const raw = String(r.due || '').trim(), dd = raw ? new Date(raw) : null;
+  const due = /^\d{4}-\d{2}-\d{2}$/.test(raw) ? raw : dd && !isNaN(dd) ? Utilities.formatDate(dd, TZ, 'yyyy-MM-dd') : '';
+  return {
+    id: String(r.id), client: c ? c.client : String(r.client || ''), kind, title: String(r.title).slice(0, 120), detail: String(r.detail || '').slice(0, 400),
+    job: r.job || 'none', preview: r.preview || '', options: kind === 'pick_one' ? [].concat(r.options || []).join(' | ') : '',
+    due, client_ok: ok, made_by: r.made_by || 'graham', status,
+  };
+}
+
+function approvalAdd_(rows) {
+  const t = approvalsTable_(), clients = clients_();
+  let added = 0;
+  (rows || []).forEach(r => {
+    const row = approvalRow_(r, clients);
+    if (t.rows.some(x => x.id === row.id)) return;
+    t.sh.appendRow(t.head.map(h => safeCell_(row[h])));
+    t.rows.push(row); added++;
+  });
+  return { added };
+}
+
+function approvalList_(b) {
+  const want = b.status ? [].concat(b.status) : null, ids = b.ids ? [].concat(b.ids) : null;
+  return { rows: approvalsTable_().rows.filter(r => r.id && (!b.made_by || r.made_by === b.made_by) && (!want || want.indexOf(r.status) >= 0)
+    && (!ids || ids.indexOf(r.id) >= 0) && (!b.client || r.client === b.client)).map(r => { const o = Object.assign({}, r); delete o._row; return o; }) };
+}
+
+// The client's monthly plan from the Projects tab, for the job column.
+function approvalJob_(brand, projects) {
+  const p = (projects ? projects.rows : []).find(r => r.brand === brand && MONTHLY_PLANS.indexOf(String(r.project).trim()) >= 0 && !/^(hid|done|finished)/i.test(r.status || ''));
+  return p ? String(p.project).trim() : 'none';
+}
+
+// One Approvals row per Queue decision: a post's Instagram and Facebook copies are one decision, a topic (plan) is
+// another, and each revision after a Change is a new one (-r1, -r2), so the history stays readable.
+function queueDecisions_(c, q, projects) {
+  const groups = {};
+  q.rows.filter(r => r.id && r.brand === c.brand).forEach(r => {
+    const base = String(r.id).replace(/-(ig|fb|instagram|facebook)$/i, '');
+    const k = r.publish_at ? [r.publish_at, r.type].join('|') : base;
+    (groups[k] = groups[k] || []).push(r);
+  });
+  const out = [];
+  Object.keys(groups).forEach(k => {
+    const rows = groups[k].sort((a, b) => String(a.id).localeCompare(String(b.id))), r0 = rows[0];
+    const pick = f => (rows.find(r => r[f]) || {})[f] || '';
+    const base = String(r0.id).replace(/-(ig|fb|instagram|facebook)$/i, '');
+    const status = r0.status, rev = Math.max.apply(null, rows.map(r => Number(r.revision) || 0));
+    const order = ['instagram', 'facebook'], plats = uniq_(rows.map(r => r.platform)).sort((x, y) => (order.indexOf(x) + 1 || 9) - (order.indexOf(y) + 1 || 9))
+      .map(p => ({ instagram: 'Instagram', facebook: 'Facebook' }[p] || p));
+    const kind = r0.platform === 'newsletter' ? 'newsletter' : r0.type === 'reel' ? 'reel' : 'post';
+    const media = String(pick('media_url')).split(/\s+/).filter(Boolean);
+    const when = r0.publish_at ? Utilities.formatDate(new Date(r0.publish_at), TZ, 'EEE MMM d') : '';
+    const words = String(pick('hook') || pick('caption') || pick('pillar')).split('\n')[0].slice(0, 90);
+    const plan = status === 'plan';
+    const row = {
+      id: base + (plan ? '-plan' : rev ? '-r' + rev : ''), client: c.client, kind,
+      title: plan ? 'Topic: ' + words : words || (kind === 'newsletter' ? 'Newsletter' : 'Post') + (when ? ' for ' + when : ''),
+      detail: plan ? 'Topic for ' + (when || 'next month') + '. The post gets made after a yes.'
+        : (kind === 'newsletter' ? 'Goes out ' : 'Posts ') + (when || 'when it gets a date') + (kind === 'newsletter' ? '' : ' on ' + plats.join(' and ')) + '.' + (rev ? ' Updated after the last note.' : ''),
+      job: approvalJob_(c.brand, projects), preview: pick('preview_url') || media[0] || '',
+      due: pick('review_deadline'), client_ok: c.client_approves ? 'yes' : 'no',
+      made_by: kind === 'newsletter' ? 'newsletter' : kind === 'reel' ? 'reel-watch' : 'content-plan',
+    };
+    const dec = pick('client_decision'), note = pick('client_note') || pick('review_note');
+    const fromDecision = { 'Approve': 'approved', 'Request change': 'changes', 'Skip': 'skipped' }[dec];
+    if (plan) row.status = fromDecision || (c.client_approves ? 'client' : 'draft');
+    else row.status = { draft: 'draft', in_review: 'client', changes: 'changes', approved: 'approved', phone: 'approved', posted: 'approved', failed: 'approved', skipped: 'skipped' }[status] || '';
+    if (row.status === 'client' && !c.client_approves) row.status = 'draft';
+    if (APPROVAL_DONE.indexOf(row.status) >= 0) {
+      row.answer = { approved: 'Looks good', changes: 'Change', skipped: 'Skip' }[row.status];
+      row.comment = row.status === 'changes' ? note : '';
+      row.updated = pick('decided_at');
+    }
+    row.open = plan ? !dec : ['draft', 'in_review', 'changes'].indexOf(status) >= 0;
+    row.queue = { sheetId: c.sheet_id, ids: rows.map(r => r.id), status, plan };
+    out.push(row);
+  });
+  return out;
+}
+
+function syncApprovalsNow() { return withLock_(syncApprovals_); }
+
+function syncApprovals_() {
+  const t = approvalsTable_(), seenT = hubTab_('Approvals sync', APPROVAL_SEEN_HEAD);
+  const byId = {}, seen = {};
+  t.rows.forEach(r => { if (r.id) byId[r.id] = r; });
+  seenT.rows.forEach(r => { if (r.id) seen[r.id] = r; });
+  const projects = table_(hubId_(), 'Projects'), stamp = r => [r.status, r.answer, r.comment].join('|');
+  const out = { added: 0, mirrored: 0, applied: 0 }, now = new Date().toISOString();
+  let approvedAny = false;
+  clients_().forEach(c => {
+    const q = table_(c.sheet_id, 'Queue');
+    if (!q) return;
+    queueDecisions_(c, q, projects).forEach(d => {
+      const cur = byId[d.id];
+      if (!cur) {
+        if (!d.open) return;   // history (posted, skipped before this existed) stays out
+        const row = Object.assign(approvalRow_(d, [c]), { status: d.status, answer: d.answer || '', comment: d.comment || '', updated: d.updated || '' });
+        t.sh.appendRow(t.head.map(h => safeCell_(row[h])));
+        byId[d.id] = row; out.added++;
+        return remember_(seenT, seen, d.id, stamp(row), now);
+      }
+      // Studio changed the row since the last run: move the Queue row to match, if it's still waiting.
+      // Only Studio edits these rows after they're made, so any change since the last run is Studio's.
+      const studio = seen[d.id] && seen[d.id].seen !== stamp(cur);
+      if (studio && applyStudioAnswer_(d, cur)) { out.applied++; if (cur.status === 'approved') approvedAny = true; return remember_(seenT, seen, d.id, stamp(cur), now); }
+      const want = { status: d.status, title: d.title, detail: d.detail, preview: d.preview, due: approvalRow_(d, [c]).due };
+      if (d.answer) Object.assign(want, { answer: d.answer, comment: d.comment, updated: d.updated || now });
+      const diff = {};
+      Object.keys(want).forEach(k => { if (String(cur[k] || '') !== String(want[k] || '')) diff[k] = want[k]; });
+      if (Object.keys(diff).length) { setCells_(t, cur._row, diff); Object.assign(cur, diff); out.mirrored++; }
+      remember_(seenT, seen, d.id, stamp(cur), now);
+    });
+  });
+  if (approvedAny) phoneReels_();
+  return out;
+}
+
+function remember_(t, seen, id, value, now) {
+  const s = seen[id];
+  if (s && s.seen === value) return;
+  if (s && s._row) setCells_(t, s._row, { seen: value, at: now });
+  else { t.sh.appendRow([id, value, now]); seen[id] = { id, seen: value, _row: t.sh.getLastRow() }; }
+}
+
+// An answer from Studio, written onto the Queue rows the same way the old cards do it. False = the Queue moved on already.
+function applyStudioAnswer_(d, a) {
+  const qs = d.queue, st = qs.status;
+  const q = table_(qs.sheetId, 'Queue'), at = a.updated || new Date().toISOString();
+  const waiting = qs.plan ? d.open : (st === 'draft' || st === 'in_review');
+  if (!waiting) return false;
+  let set;
+  if (a.status === 'client' && st === 'draft') set = { status: 'in_review' };
+  else if (APPROVAL_DONE.indexOf(a.status) >= 0) {
+    const dec = { approved: 'Approve', changes: 'Request change', skipped: 'Skip' }[a.status];
+    set = { client_decision: dec, client_note: a.status === 'changes' ? a.comment || '' : '', answered_by: 'Studio', decided_at: at };
+    if (!qs.plan) set.status = a.status;
+  } else return false;
+  qs.ids.forEach(id => setCells_(q, findRow_(q, 'id', id)._row, set));
+  return true;
+}
+
 // ---------- Reels posted from the phone (Graham, 2026-10-21) ----------
 // Instagram's API can't add music from its library, so an approved IG Reel for a client with reel_music = app
 // (Clients tab; Open Frame defaults to app) never reaches the n8n poster: it moves to status 'phone' and a
@@ -1301,6 +1474,7 @@ function urgentCheck() {
 
 // Hourly. Emails health problems marked email = yes once per check + since + status, and a long Mac outage once.
 function healthCheck() {
+  try { syncApprovalsNow(); } catch (e) { Logger.log('Approvals sync: ' + e.message); }
   const h = health_();
   const items = h.cards.filter(c => c.email).map(c => [c.key, c.text + (c.link ? '\n  Fix it here: ' + c.link : '')]);
   const props = PropertiesService.getScriptProperties();
