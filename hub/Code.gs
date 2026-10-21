@@ -94,6 +94,8 @@ function setup() {
   ScriptApp.newTrigger('triageMail').timeBased().everyMinutes(10).create();
   hubTab_('Mail', MAIL_HEAD);
   hubTab_('Projects', PROJECT_HEAD);
+  hubTab_('Agreements', AGREE_HEAD);
+  hubTab_('Payments', PAY_HEAD);
   Logger.log('Setup done. Now deploy as a web app, then run emailMeMyLinks.');
 }
 
@@ -158,7 +160,7 @@ const STUDIO_CODE_MIN = 15;
 const GOOGLE_CLIENT_ID = '444041586250-vmsnmvs3glhetpoidhb11r4g7ds4rfd8.apps.googleusercontent.com';
 const SESSION_HEAD = ['session', 'email', 'role', 'brand', 'created', 'expires', 'last_used'];
 // What a signed-in admin can run. Each takes the admin key first; the Studio never sees the key, the server adds it.
-const STUDIO_ADMIN_FNS = { getDashboard, adminPost, adminTopic, adminCaption, adminReply, adminEngage, adminLead, adminPhoto, adminNotifyClient, adminGraphic, adminLoop, studioResults, studioReels, studioStatus, adminReelAsk, studioApprovals, adminApproval, adminNudge, studioClients, studioClient, studioLoops, adminClientSet, adminProjectSet, adminApprovalNew };
+const STUDIO_ADMIN_FNS = { getDashboard, adminPost, adminTopic, adminCaption, adminReply, adminEngage, adminLead, adminPhoto, adminNotifyClient, adminGraphic, adminLoop, studioResults, studioReels, studioStatus, adminReelAsk, studioApprovals, adminApproval, adminNudge, studioClients, studioClient, studioLoops, adminClientSet, adminProjectSet, adminApprovalNew, adminAgreementSet, adminPaymentAdd, adminPaymentPaid, studioMoney };
 
 function studioApi_(b) {
   try {
@@ -1425,6 +1427,7 @@ function clientPage_(c) {
   let month = null;
   try { const R = results_(c); if (!R.empty) month = { month: R.month, prevMonth: R.prevMonth, tiles: R.tiles.slice(0, 4), top: R.top.slice(0, 1) }; } catch (e) {}
   return { client: c.client, studio: !!c.studio, approvals: clientApprovals_(c), projects: clientProjects_(c), month,
+    money: clientMoney_(c),
     links: { pay: c.pay_url || '', files: c.files_url || '', report: /^https:\/\//.test(c.report_url) ? c.report_url : '' } };
 }
 
@@ -1454,6 +1457,93 @@ function studioClient(key, client) {
   page.admin = { notes: c.notes, paused: c.paused, brand: c.brand, contact_email: c.contact_email, pay_url: c.pay_url, files_url: c.files_url,
     report_url: c.report_url, client_approves: c.client_approves, kinds: APPROVAL_KINDS.filter(k => k !== 'reply'), stages: PROJECT_STAGES };
   return page;
+}
+
+// ---------- Studio: agreements and payments ----------
+// Agreements tab: one row per plan or project a client agreed to. item = a plan or project name from /pricing
+// (Care, Starter, Growth, Full Comms, Brand kit, Website redesign...). per = month (a plan) or once (a project).
+// includes = what the price covers each month, "posts:12, newsletter:1, report:1"; the client page counts this month's
+// Approvals rows of that kind against it. pdf_url = the signed agreement. status: blank = active, ended, hidden.
+// Payments tab: one row per invoice. pay_url = the payment page (Stripe/PayPal invoice link or similar). status: due, paid.
+const AGREE_HEAD = ['client', 'item', 'price', 'per', 'start', 'end', 'pdf_url', 'includes', 'status', 'updated'];
+const PAY_HEAD = ['id', 'client', 'item', 'amount', 'due', 'status', 'pay_url', 'paid_at', 'note', 'updated'];
+const INCLUDE_KINDS = { posts: 'post', post: 'post', reels: 'reel', reel: 'reel', newsletter: 'newsletter', newsletters: 'newsletter', report: 'report', reports: 'report' };
+const money_ = v => num_(String(v == null ? '' : v).replace(/[$€£\s]/g, ''));
+const INCLUDE_LABEL = { post: 'Social posts', reel: 'Reels', newsletter: 'Newsletter', report: 'Monthly report' };
+
+function clientMoney_(c) {
+  const ss = SpreadsheetApp.openById(hubId_());
+  const ag = ss.getSheetByName('Agreements') ? table_(hubId_(), 'Agreements').rows : [];
+  const pays = ss.getSheetByName('Payments') ? table_(hubId_(), 'Payments').rows : [];
+  const month = Utilities.formatDate(new Date(), TZ, 'yyyy-MM');
+  const rows = approvalsTable_().rows.filter(r => r.id && r.client === c.client && r.status !== 'skipped' && r.status !== 'planned'
+    && (String(r.due).slice(0, 7) === month || (!r.due && String(r.updated).slice(0, 7) === month)));
+  const agreements = ag.filter(a => a.client === c.client && a.item && !/^(ended|hid)/i.test(a.status || '')).map(a => ({
+    item: a.item, price: money_(a.price), per: /^once|one/i.test(a.per || '') ? 'once' : 'month', start: a.start || '',
+    pdf: /^https:\/\//.test(a.pdf_url || '') ? a.pdf_url : '',
+    includes: String(a.includes || '').split(/[,;]/).map(x => x.trim()).filter(Boolean).map(x => {
+      const m = x.match(/^([a-z_ ]+)\s*[:x=]\s*(\d+)$/i), kind = m && INCLUDE_KINDS[m[1].trim().toLowerCase()];
+      return kind ? { label: INCLUDE_LABEL[kind], kind, qty: Number(m[2]), done: rows.filter(r => r.kind === kind).length } : null;
+    }).filter(Boolean),
+  }));
+  const mine = pays.filter(p => p.client === c.client && p.id).map(p => ({ id: p.id, item: p.item, amount: money_(p.amount), due: p.due || '',
+    status: /^paid/i.test(p.status || '') ? 'paid' : 'due', pay_url: /^https:\/\//.test(p.pay_url || '') ? p.pay_url : '', paid_at: p.paid_at || '' }));
+  const due = mine.filter(p => p.status === 'due').sort((a, b) => String(a.due).localeCompare(String(b.due)));
+  const past = mine.filter(p => p.status === 'paid').sort((a, b) => String(b.paid_at || b.due).localeCompare(String(a.paid_at || a.due))).slice(0, 12);
+  return { agreements, next: due[0] || null, due, past };
+}
+
+function adminAgreementSet(key, client, a) {
+  checkKey_(key);
+  const c = clients_().find(x => x.client === client || x.brand === client);
+  if (!c) throw new Error('That client moved or was removed. Refresh the page.');
+  const item = String((a && a.item) || '').trim().slice(0, 80);
+  if (!item) throw new Error('Pick the plan or project.');
+  return withLock_(() => {
+    const t = hubTab_('Agreements', AGREE_HEAD);
+    const row = { client: c.client, item, updated: new Date().toISOString() };
+    ['price', 'per', 'start', 'end', 'pdf_url', 'includes', 'status'].forEach(k => { if (a[k] != null) row[k] = String(a[k]).trim().slice(0, 300); });
+    if (row.pdf_url && !/^https:\/\//.test(row.pdf_url)) throw new Error('Links need to start with https://');
+    const cur = t.rows.find(x => x.client === c.client && x.item === item);
+    if (cur) setCells_(t, cur._row, row); else t.sh.appendRow(t.head.map(h => safeCell_(row[h])));
+    return clientMoney_(c);
+  });
+}
+
+function adminPaymentAdd(key, client, p) {
+  checkKey_(key);
+  const c = clients_().find(x => x.client === client || x.brand === client);
+  if (!c) throw new Error('That client moved or was removed. Refresh the page.');
+  const amount = money_(p.amount);
+  if (!(amount > 0)) throw new Error('Add the amount.');
+  if (p.pay_url && !/^https:\/\//.test(p.pay_url)) throw new Error('Links need to start with https://');
+  return withLock_(() => {
+    const t = hubTab_('Payments', PAY_HEAD), now = new Date().toISOString();
+    const row = { id: c.brand + '-inv-' + Utilities.formatDate(new Date(), TZ, 'yyyyMMdd-HHmmss'), client: c.client, item: String(p.item || '').slice(0, 80),
+      amount, due: String(p.due || '').slice(0, 10), status: 'due', pay_url: p.pay_url || '', note: String(p.note || '').slice(0, 300), updated: now };
+    t.sh.appendRow(t.head.map(h => safeCell_(row[h])));
+    return clientMoney_(c);
+  });
+}
+
+function adminPaymentPaid(key, id) {
+  checkKey_(key);
+  return withLock_(() => {
+    const t = hubTab_('Payments', PAY_HEAD), r = findRow_(t, 'id', id), now = new Date().toISOString();
+    setCells_(t, r._row, { status: 'paid', paid_at: now, updated: now });
+    return { id, status: 'paid', paid_at: now };
+  });
+}
+
+// Home's money line: billed this month (invoices due this month, paid or not) and what's still unpaid.
+function studioMoney(key) {
+  checkKey_(key);
+  const ss = SpreadsheetApp.openById(hubId_());
+  const pays = ss.getSheetByName('Payments') ? table_(hubId_(), 'Payments').rows.filter(p => p.id) : [];
+  const month = Utilities.formatDate(new Date(), TZ, 'yyyy-MM');
+  const sum = list => list.reduce((s, p) => s + (money_(p.amount) || 0), 0);
+  const unpaid = pays.filter(p => !/^paid/i.test(p.status || ''));
+  return { billed: sum(pays.filter(p => String(p.due).slice(0, 7) === month)), unpaid: sum(unpaid), late: unpaid.filter(p => p.due && p.due < Utilities.formatDate(new Date(), TZ, 'yyyy-MM-dd')).length };
 }
 
 // ---------- Studio: Graham's Manage menu on one client ----------
