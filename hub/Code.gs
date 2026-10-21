@@ -627,6 +627,7 @@ function adminLoop(key, id, action, note) {
       setCells_(t, r._row, { status: 'sent', note: action === 'send' ? note : '', updated: new Date().toISOString() });
       return 'ok';
     }
+    if (r.loop === 'phone' && action === 'done') phonePosted_(r.id.replace(/^phone-/, ''));
     if (r.when && action === 'yes') {
       const [a, z] = String(r.when).split('|');
       CalendarApp.getDefaultCalendar().createEvent(r.title, new Date(a), new Date(z || a), { description: [r.body, r.link].filter(Boolean).join('\n\n') });
@@ -793,6 +794,7 @@ function adminPost(key, sheetId, ids, action, note) {
       if (action === 'approve' || action === 'retry') set.review_note = '';
       setCells_(q, r._row, set);
     });
+    if (status === 'approved') phoneReels_();
     return status;
   });
 }
@@ -870,6 +872,7 @@ function adminLead(key, id, action, text) {
 // ---------- email (Mail tab) ----------
 
 function triageMail() {
+  try { withLock_(phoneReels_); } catch (e) { console.error('phoneReels_: ' + e.message); }   // rides this 10-minute trigger, no setup re-run
   withLock_(() => {
     const t = hubTab_('Mail', MAIL_HEAD), now = new Date().toISOString();
     const clientEmails = [].concat.apply([], clients_().map(c => emails_(c.contact_email)));
@@ -1122,10 +1125,62 @@ function clientDecide_(c, ids, decision, note) {
       if (!isPlan) set.status = map[0]; // plan rows keep status plan; the monthly loop reads client_decision
       setCells_(q, r._row, set);
     });
+    if (map[0] === 'approved') phoneReels_();
     if (decision === 'change') {
       MailApp.sendEmail(me_(), c.client + ' asked for a change', c.email + ' wrote: ' + note + '\n\nOpen your dashboard:\n\n' + adminUrl_());
     }
     return map[0];
+  });
+}
+
+// ---------- Reels posted from the phone (Graham, 2026-10-21) ----------
+// Instagram's API can't add music from its library, so an approved IG Reel for a client with reel_music = app
+// (Clients tab; Open Frame defaults to app) never reaches the n8n poster: it moves to status 'phone' and a
+// "Post from your phone" card lands in Needs you with the video, the caption and this week's trending sounds.
+// Got it on the card marks the row posted. Queue column `music` = none on a row lets that one auto-post silent.
+// The Facebook copy still auto-posts. Runs right after an approval and every 10 minutes (triageMail trigger).
+const SOUNDS_URL = 'https://raw.githubusercontent.com/grahamivyco/social-assets/main/loops/state/audio.json';
+
+function phoneReels_() {
+  const byBrand = {};
+  clients_().forEach(c => { byBrand[c.brand] = c; });
+  const loops = hubTab_('Loops', LOOP_HEAD), now = new Date().toISOString();
+  let sounds = null;
+  uniq_(clients_().map(c => c.sheet_id)).forEach(sid => {
+    const q = table_(sid, 'Queue');
+    if (!q) return;
+    q.rows.filter(r => r.id && r.status === 'approved' && !r.posted_at && r.platform === 'instagram' && r.type === 'reel'
+      && String(r.music || '').toLowerCase() !== 'none' && byBrand[r.brand] && byBrand[r.brand].reel_music === 'app').forEach(r => {
+      if (sounds === null) sounds = trendingSounds_();
+      setCells_(q, r._row, { status: 'phone' });
+      const id = 'phone-' + r.id;
+      if (loops.rows.some(x => x.id === id)) return;
+      const video = String(r.media_url || '').split(/\s+/).filter(u => /^https:/.test(u))[0] || '';
+      const row = { id, loop: 'phone', client: r.brand, kind: 'post from phone', status: 'todo',
+        title: 'Post from your phone: ' + (r.hook || r.id), link: video,
+        body: 'Post ' + fmtWhen_(r.publish_at) + '.\n\n' + (sounds.length ? 'Sound (search it in the Reel audio picker, keep it low under your voice):\n' + sounds.join('\n') + '\n\n' : 'Sound: pick one with the trending arrow in the Reel audio picker, kept low under your voice.\n\n') + 'Caption:\n' + (r.caption || ''),
+        ask: 'Open the video on your phone, save it, post it in Instagram with a sound. Got it once it is live.', created: now, updated: now };
+      loops.sh.appendRow(loops.head.map(h => safeCell_(row[h])));
+      loops.rows.push(row);
+    });
+  });
+}
+
+// This week's top sounds from the audio loop (loops/audio.js pushes loops/state/audio.json from the Mac).
+function trendingSounds_() {
+  try {
+    const r = UrlFetchApp.fetch(SOUNDS_URL, { muteHttpExceptions: true });
+    if (r.getResponseCode() !== 200) return [];
+    return (JSON.parse(r.getContentText()).top || []).slice(0, 3).map((x, i) => (i + 1) + '. ' + x.name + (x.artist ? ' · ' + x.artist : ''));
+  } catch (e) { return []; }
+}
+
+function phonePosted_(queueId) {
+  uniq_(clients_().map(c => c.sheet_id)).some(sid => {
+    const q = table_(sid, 'Queue'), r = q && q.rows.find(x => x.id === queueId);
+    if (!r) return false;
+    if (r.status === 'phone') setCells_(q, r._row, { status: 'posted', posted_at: new Date().toISOString() });
+    return true;
   });
 }
 
@@ -1290,6 +1345,7 @@ function clients_() {
   return t.rows.filter(r => r.brand).map(r => ({
     client: r.client || r.brand, brand: r.brand, sheet_id: r.sheet_id || hubId_(),
     contact_email: r.contact_email || '', report_url: r.report_url || '', client_approves: /^(y|yes|true)$/i.test(r.client_approves || ''),
+    reel_music: String(r.reel_music || (r.brand === 'open-frame' ? 'app' : 'auto')).toLowerCase(),
   }));
 }
 
