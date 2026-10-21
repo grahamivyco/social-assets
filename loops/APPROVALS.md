@@ -1,11 +1,12 @@
 # Approval map
 
-Every automation that needs a yes from Graham or a client writes one row in the Hub's **Approvals** tab, in the format in Open-Frame [`docs/approval-items.md`](https://github.com/grahamivyco/Open-Frame/blob/main/docs/approval-items.md): one row per decision, a `kind` from that list, `client_ok` set by its rules. Studio reads the tab (Phase 2, not built yet). Until then the rows are written anyway, and the old cards (Hub dashboard, client review page, Loops cards) keep working.
+Every automation that needs a yes from Graham or a client writes one row in the Hub's **Approvals** tab, in the format in Open-Frame [`docs/approval-items.md`](https://github.com/grahamivyco/Open-Frame/blob/main/docs/approval-items.md): one row per decision, a `kind` from that list, `client_ok` set by its rules. Studio reads and answers the tab (Hub calls `studioApprovals` / `adminApproval` for Graham, `getClientApprovals` / `clientApproval` for clients; the Studio pages that use them ship next). The old cards (Hub dashboard, client review page, Loops cards) keep working alongside.
 
 How to write a row:
 
 - **Loops on the Mac**: `L.approval({...})` in `lib.js`. It checks the kind, sets `client_ok` by the rules, never writes `answer` / `comment` / `updated`, and skips an `id` that's already there.
 - **n8n or anything else**: POST `{ key, fn: 'loops', action: 'approval-add', rows: [...] }` to the Hub.
+- **Coming up**: write the row early with `status: 'planned'` (a Reel being edited, next month's newsletter). It shows on the client's page under Coming up with no buttons. When it's made, `L.approvalSet({ id, status: 'draft', preview })` (or `action: 'approval-set'`) moves it on. Only planned rows can be moved this way.
 - **Read the answer back**: `L.approvals({ made_by, status })` or `action: 'approval-list'`.
 - **Old Loops card with the same `id`**: Graham's answer there (Yes / Send / Got it, Change, Pass) is copied into the row while it waits on him, so both places agree.
 

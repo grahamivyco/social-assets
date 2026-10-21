@@ -158,7 +158,7 @@ const STUDIO_CODE_MIN = 15;
 const GOOGLE_CLIENT_ID = '444041586250-vmsnmvs3glhetpoidhb11r4g7ds4rfd8.apps.googleusercontent.com';
 const SESSION_HEAD = ['session', 'email', 'role', 'brand', 'created', 'expires', 'last_used'];
 // What a signed-in admin can run. Each takes the admin key first; the Studio never sees the key, the server adds it.
-const STUDIO_ADMIN_FNS = { getDashboard, adminPost, adminTopic, adminCaption, adminReply, adminEngage, adminLead, adminPhoto, adminNotifyClient, adminGraphic, adminLoop, studioResults, studioReels, studioStatus, adminReelAsk };
+const STUDIO_ADMIN_FNS = { getDashboard, adminPost, adminTopic, adminCaption, adminReply, adminEngage, adminLead, adminPhoto, adminNotifyClient, adminGraphic, adminLoop, studioResults, studioReels, studioStatus, adminReelAsk, studioApprovals, adminApproval };
 
 function studioApi_(b) {
   try {
@@ -182,6 +182,8 @@ function studioApi_(b) {
       if (b.name === 'getClientPosts') return { out: clientPosts_(c) };
       if (b.name === 'getClientProjects') return { out: clientProjects_(c) };
       if (b.name === 'clientDecide') return { out: clientDecide_(c, (args[0] || []).map(String), args[1], args[2] || '') };
+      if (b.name === 'getClientApprovals') return { out: clientApprovals_(c) };
+      if (b.name === 'clientApproval') return { out: withLock_(() => clientApproval_(c, String(args[0] || ''), String(args[1] || ''), args[2] || '')) };
       throw new Error('Unknown request');
     }
     throw new Error('Unknown request');
@@ -645,6 +647,7 @@ function loopsApi_(b) {
   }
   if (b.action === 'approval-add') return approvalAdd_(b.rows);
   if (b.action === 'approval-list') return approvalList_(b);
+  if (b.action === 'approval-set') return approvalSet_(b.rows);
   if (b.action === 'approval-sync') return syncApprovals_();
   if (b.action === 'mac') return macReport_(b.rows);
   if (b.action === 'results') { const c = clients_().find(x => x.brand === b.client); return c ? results_(c) : { empty: true }; }
@@ -1240,7 +1243,8 @@ function approvalRow_(r, clients) {
   // Left blank, the client's client_approves (Clients tab) decides. Replies are Graham's unless a loop marks one touchy.
   let ok = r.client_ok == null || r.client_ok === '' ? (kind !== 'reply' && c && c.client_approves ? 'yes' : 'no') : /^(y|yes|true)$/i.test(String(r.client_ok)) ? 'yes' : 'no';
   if (APPROVAL_CLIENT_ALWAYS.indexOf(kind) >= 0) ok = 'yes';
-  const status = r.status === 'client' && ok === 'yes' ? 'client' : 'draft';
+  // planned = in the works, nothing to answer yet (the client's Coming up list). The loop moves it on with approval-set.
+  const status = r.status === 'planned' ? 'planned' : r.status === 'client' && ok === 'yes' ? 'client' : 'draft';
   // A plain date stays as it is (new Date would read it as UTC midnight, the day before in Chicago).
   const raw = String(r.due || '').trim(), dd = raw ? new Date(raw) : null;
   const due = /^\d{4}-\d{2}-\d{2}$/.test(raw) ? raw : dd && !isNaN(dd) ? Utilities.formatDate(dd, TZ, 'yyyy-MM-dd') : '';
@@ -1267,6 +1271,113 @@ function approvalList_(b) {
   const want = b.status ? [].concat(b.status) : null, ids = b.ids ? [].concat(b.ids) : null;
   return { rows: approvalsTable_().rows.filter(r => r.id && (!b.made_by || r.made_by === b.made_by) && (!want || want.indexOf(r.status) >= 0)
     && (!ids || ids.indexOf(r.id) >= 0) && (!b.client || r.client === b.client)).map(r => { const o = Object.assign({}, r); delete o._row; return o; }) };
+}
+
+// A loop moves its own planned row on (planned -> draft or client) and fills in the preview, title or due date.
+// Rows that are past planned belong to Studio and the sync, so they're left alone.
+function approvalSet_(rows) {
+  const t = approvalsTable_(), clients = clients_();
+  let moved = 0;
+  (rows || []).forEach(r => {
+    const cur = t.rows.find(x => x.id && x.id === String(r.id));
+    if (!cur || cur.status !== 'planned') return;
+    const row = approvalRow_(Object.assign({}, cur, r), clients), diff = {};
+    ['title', 'detail', 'job', 'preview', 'options', 'due', 'client_ok', 'status'].forEach(k => { if (String(cur[k] || '') !== String(row[k] || '')) diff[k] = row[k]; });
+    if (Object.keys(diff).length) { setCells_(t, cur._row, diff); Object.assign(cur, diff); moved++; }
+  });
+  return { moved };
+}
+
+// ---------- Studio v1: reading and answering Approvals rows ----------
+// The buttons Studio draws for each kind (approval-items.md). What a button does:
+// ok = approved (Graham's ok on a client_ok row sends it to the client instead), change = changes + their note,
+// skip = skipped, later = answer noted, still waiting, open = just opens the preview link (the page there does the rest).
+const APPROVAL_BUTTONS = {
+  post: [['Looks good', 'ok'], ['Change', 'change'], ['Skip', 'skip']],
+  reel: [['Looks good', 'ok'], ['Change', 'change'], ['Skip', 'skip']],
+  newsletter: [['Open draft', 'open'], ['Looks good', 'ok'], ['Change', 'change']],
+  report: [['Mark read', 'ok'], ['Ask a question', 'change']],
+  pick_one: [['Comment', 'change']],
+  design: [['Looks good', 'ok'], ['Change', 'change']],
+  set: [['Approve set', 'ok'], ['Change one', 'change']],
+  launch: [['Approve to launch', 'ok'], ['Not yet', 'change']],
+  files: [['Approve and download', 'ok']],
+  brand_deal: [['Yes, go ahead', 'ok'], ['Not for us', 'skip'], ['Ask a question', 'change']],
+  reply: [['Send as is', 'ok'], ['Change', 'change'], ["I'll handle it", 'skip']],
+  repost: [['Approve', 'ok'], ['Skip', 'skip']],
+  ad_spend: [['Approve spend', 'ok'], ['No', 'skip']],
+  request: [['Upload', 'open'], ['Not yet', 'later']],
+  hours: [['Approve hours', 'ok'], ['Question', 'change']],
+  quote: [['Sign', 'open']],
+  invoice: [['Pay now', 'open']],
+};
+// Rows the loops that read Queue and Inbox sheets made: an answer here has to reach those sheets right away.
+const APPROVAL_SYNCED = ['content-plan', 'reel-watch', 'newsletter', 'replies'];
+
+function approvalButtons_(r) {
+  const b = APPROVAL_BUTTONS[r.kind] || [];
+  if (r.kind !== 'pick_one') return b;
+  return String(r.options || '').split('|').map(o => o.trim()).filter(Boolean).map(o => [o, 'ok']).concat(b);
+}
+
+// What Studio gets for one row: the row without its sheet position, plus its buttons.
+function approvalView_(r) {
+  const o = Object.assign({}, r);
+  delete o._row;
+  o.buttons = approvalButtons_(r).map(b => ({ label: b[0], act: b[1] }));
+  return o;
+}
+
+const byDue_ = (a, b) => String(a.due || '9999').localeCompare(String(b.due || '9999'));
+const recent_ = (r, days) => APPROVAL_DONE.indexOf(r.status) >= 0 && within_(r.updated, days);
+
+// Graham's Home: what needs him first (draft), what waits on a client, what's being redone or in the works, and the last week's answers.
+function studioApprovals(key) {
+  checkKey_(key);
+  const rows = approvalsTable_().rows.filter(r => r.id), pick = st => rows.filter(r => r.status === st).sort(byDue_).map(approvalView_);
+  return { needs: pick('draft'), waiting: pick('client'), changing: pick('changes'), planned: pick('planned'),
+    done: rows.filter(r => recent_(r, 7)).sort((a, b) => String(b.updated).localeCompare(String(a.updated))).map(approvalView_) };
+}
+
+function adminApproval(key, id, label, comment) {
+  checkKey_(key);
+  return withLock_(() => {
+    const t = approvalsTable_(), r = findRow_(t, 'id', id);
+    if (r.status !== 'draft') throw new Error('Someone already answered this one. Refresh the page.');
+    return answerApproval_(t, r, label, comment, true);
+  });
+}
+
+// A client's page: Ready for you (waiting on them), Coming up (in the works or being redone), and the last month's answers.
+function clientApprovals_(c) {
+  const rows = approvalsTable_().rows.filter(r => r.id && r.client === c.client);
+  const view = r => { const o = approvalView_(r); if (r.status !== 'client') o.buttons = []; return o; };
+  return { ready: rows.filter(r => r.status === 'client').sort(byDue_).map(view),
+    coming: rows.filter(r => r.status === 'planned' || r.status === 'changes').sort(byDue_).map(view),
+    done: rows.filter(r => recent_(r, 30)).sort((a, b) => String(b.updated).localeCompare(String(a.updated))).map(view) };
+}
+
+function clientApproval_(c, id, label, comment) {
+  const t = approvalsTable_(), r = findRow_(t, 'id', id);
+  if (r.client !== c.client) throw new Error('That item moved or was removed. Refresh the page.');
+  if (r.status !== 'client') throw new Error('This one was already answered. Refresh the page.');
+  return answerApproval_(t, r, label, comment, false);
+}
+
+// Writes the answer (status, answer, comment, updated), then runs the sync for Queue and Inbox rows so the post or reply moves now, not at the next hourly run.
+function answerApproval_(t, r, label, comment, byGraham) {
+  const btn = approvalButtons_(r).find(b => b[0] === label);
+  if (!btn) throw new Error('That button does not fit this item. Refresh the page.');
+  const act = btn[1], note = String(comment || '').trim().slice(0, 1000);
+  if (act === 'open') return approvalView_(r);
+  if (act === 'change' && !note) throw new Error('Add a short note first, so the change is clear.');
+  let set = { status: { ok: 'approved', change: 'changes', skip: 'skipped', later: r.status }[act], answer: label, comment: act === 'change' ? note : '', updated: new Date().toISOString() };
+  // Graham's ok on something the client signs off on hands it to them; the answer stays theirs to give.
+  if (byGraham && act === 'ok' && r.client_ok === 'yes') set = { status: 'client', answer: '', comment: '', updated: set.updated };
+  setCells_(t, r._row, set);
+  Object.assign(r, set);
+  if (APPROVAL_SYNCED.indexOf(r.made_by) >= 0) try { syncApprovals_(); } catch (e) { console.error('Approvals sync after answer: ' + e.message); }
+  return approvalView_(r);
 }
 
 let approvalProjectsCache_;
