@@ -46,3 +46,8 @@ Use the hook bank and rules in `/mnt/project-files/lessons/ad-attention-videos.m
 
 ## Presets (2026-10-21)
 - `"preset": "one-take"` in edit.json (or `"preset"` in the Mac watcher's config.json): one take with only head and tail trimmed, no punch-ins, graphics, cut-out, sound effects or end card, small white one-word captions 55.6% down, static title on a white rounded box for 4 s. Frame with the face in the top third or set `caption_y`.
+
+## Keywords (Graham, 2026-10-21)
+- Every Reel gets 15 search keywords from the local AI: the main one in the hook and the first caption sentence, 1 or 2 more worked into the caption, and all 15 as one plain line above the call to action.
+- On screen: the top 3 as a small but readable line where the captions sit, while the hook is up (edit.json `topic_line`). Never hidden or unreadable text. Instagram reads on-screen text it can actually see, and text made to be invisible is a spam pattern that can get a Reel held back.
+- Alt text: one plain sentence with the main keyword, saved in caption.md. Instagram's API takes alt text on photos, not on Reels, so for a Reel Graham pastes it in the app (Advanced settings) if he wants it.
