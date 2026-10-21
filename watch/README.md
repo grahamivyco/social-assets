@@ -3,7 +3,7 @@
 Lets Claude watch any Instagram Reel, TikTok, YouTube or Shorts link (or a screen recording) and break it down: hook, pacing, captions, sound, message. Free tools only, all on the Mac.
 
 ## What you get
-One folder per video in `~/Downloads/Open Frame/Watched/<date>-<creator>-<id>/`:
+One folder per video in `~/Downloads/Open Frame LLC & Clients/Watched/<date>-<creator>-<id>/`:
 - `report.md`: creator, caption, views/likes/comments, audio track, length, cut pace, words per minute, the hook, a shot list (time, on-screen text, what's said) and the full transcript. Claude adds the breakdown at the end.
 - `contact-sheet.jpg`: one frame per shot, with its time and on-screen text.
 - `frames/`, `words.json` (every word with its time), `info.json`, `video.mp4`, `thumbnail.jpg`.

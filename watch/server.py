@@ -5,7 +5,7 @@
 
 n8n's "Video watch" workflow forwards links shared from the iPhone here. Jobs run one at a time,
 in order. The token must match WATCH_TOKEN (env) or ~/.config/video-watch/token.
-Log: ~/Downloads/Open Frame/Watched/server.log
+Log: ~/Downloads/Open Frame LLC & Clients/Watched/server.log
 """
 import json, os, queue, subprocess, sys, threading, time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -15,7 +15,7 @@ HERE = Path(__file__).resolve().parent
 PORT = int(os.environ.get("WATCH_PORT", 5680))
 TOKEN_FILE = Path.home() / ".config" / "video-watch" / "token"
 TOKEN = os.environ.get("WATCH_TOKEN") or (TOKEN_FILE.read_text().strip() if TOKEN_FILE.exists() else "")
-OUT = Path(os.environ.get("WATCH_OUT", Path.home() / "Downloads" / "Open Frame" / "Watched"))
+OUT = Path(os.environ.get("WATCH_OUT", Path.home() / "Downloads" / "Open Frame LLC & Clients" / "Watched"))
 COOKIES = os.environ.get("WATCH_COOKIES", "")  # e.g. "chrome" if Instagram asks for a login
 jobs = queue.Queue()
 
