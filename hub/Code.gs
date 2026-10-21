@@ -104,7 +104,7 @@ function onOpen() {
 
 function emailMeMyLinks() {
   if (!/\/exec$/.test(baseUrl_())) throw new Error('Paste the Web app URL (ends in /exec) into WEB_APP_URL at the top, save, then run this again.');
-  const lines = ['Your check-in page. Bookmark it:', '', adminUrl_(), '',
+  const lines = ['Your check-in page. Bookmark it:', '', adminUrl_(), '', 'Or sign in from your site, on any device:', '', STUDIO_URL, '',
     'Clients get their own private review link by email. Send one from the check-in page (Clients > Send review email), or it goes out on its own at each check-in when they have posts waiting.'];
   MailApp.sendEmail(me_(), 'Your Open Frame Check-in link', lines.join('\n'));
 }
@@ -132,12 +132,269 @@ function doPost(e) {
   try {
     const b = JSON.parse((e && e.postData && e.postData.contents) || '{}');
     if (b.fn === 'check') return ContentService.createTextOutput(JSON.stringify(withLock_(() => checkRequest_(b)))).setMimeType(ContentService.MimeType.JSON);
+    if (b.fn === 'studio') return ContentService.createTextOutput(JSON.stringify(studioApi_(b))).setMimeType(ContentService.MimeType.JSON);
     checkKey_(b.key);
     if (b.fn === 'graphics') out = withLock_(() => graphicsApi_(b));
     else if (b.fn === 'loops') out = withLock_(() => loopsApi_(b));
     else throw new Error('Unknown request');
   } catch (x) { out = { error: x.message || String(x) }; }
   return ContentService.createTextOutput(JSON.stringify(out)).setMimeType(ContentService.MimeType.JSON);
+}
+
+// ---------- Studio: the private sign-in page on openframe.design/studio ----------
+// Sign in with a 6-digit code (or the button) emailed to an address on the list. Nothing to install, no password.
+// Admins (the account that owns this script, plus STUDIO_ADMINS) get the check-in cards and Results.
+// A client contact (any contact_email in the Clients tab) gets their own review cards and results.
+// Each sign-in lasts STUDIO_DAYS on that device, renewed while it's used. The "Studio sessions" tab keeps only a hash of each one:
+// delete a row to sign that device out. Removing someone from contact_email cuts them off on their next tap.
+
+const STUDIO_URL = 'https://openframe.design/studio/';
+const STUDIO_ADMINS = [];   // extra admin emails, e.g. a VA. The script owner is always an admin.
+const STUDIO_DAYS = 30;
+const STUDIO_CODE_MIN = 15;
+// Sign in with Google on the Studio page: the OAuth Web client ID (public, not a secret). Or a GOOGLE_CLIENT_ID Script Property.
+const GOOGLE_CLIENT_ID = '444041586250-vmsnmvs3glhetpoidhb11r4g7ds4rfd8.apps.googleusercontent.com';
+const SESSION_HEAD = ['session', 'email', 'role', 'brand', 'created', 'expires', 'last_used'];
+// What a signed-in admin can run. Each takes the admin key first; the Studio never sees the key, the server adds it.
+const STUDIO_ADMIN_FNS = { getDashboard, adminPost, adminTopic, adminCaption, adminReply, adminEngage, adminLead, adminPhoto, adminNotifyClient, adminGraphic, adminLoop, studioResults, studioReels, studioStatus, adminReelAsk };
+
+function studioApi_(b) {
+  try {
+    const email = String(b.email || '').trim().toLowerCase();
+    if (b.op === 'ask') return studioAsk_(email);
+    if (b.op === 'code') return studioCode_(email, String(b.code || '').replace(/\D/g, ''));
+    if (b.op === 'link') return studioLink_(String(b.token || ''));
+    if (b.op === 'config') return { google: GOOGLE_CLIENT_ID || PropertiesService.getScriptProperties().getProperty('GOOGLE_CLIENT_ID') || '' };
+    if (b.op === 'google') return studioGoogle_(String(b.credential || ''));
+    const s = studioSession_(String(b.s || ''));
+    if (b.op === 'me') return { who: s.who };
+    if (b.op === 'out') { withLock_(() => setCells_(s.t, s.r._row, { expires: new Date().toISOString() })); return { ok: true }; }
+    if (b.op === 'call') {
+      const args = Array.isArray(b.args) ? b.args : [];
+      if (s.who.role === 'admin') {
+        const fn = STUDIO_ADMIN_FNS[b.name];
+        if (!fn) throw new Error('Unknown request');
+        return { out: fn(adminKey_(), ...args) };
+      }
+      const c = Object.assign({ email: s.who.email }, clients_().find(x => x.brand === s.who.brand));
+      if (b.name === 'getClientPosts') return { out: clientPosts_(c) };
+      if (b.name === 'clientDecide') return { out: clientDecide_(c, (args[0] || []).map(String), args[1], args[2] || '') };
+      throw new Error('Unknown request');
+    }
+    throw new Error('Unknown request');
+  } catch (x) {
+    return { error: x.message || String(x), signedOut: !!x.signedOut };
+  }
+}
+
+// Who an email is right now: admin, a client contact, or nobody.
+function studioWho_(email) {
+  const extra = String(PropertiesService.getScriptProperties().getProperty('STUDIO_ADMINS') || '');
+  const admins = emails_([me_()].concat(STUDIO_ADMINS).join(',') + ',' + extra);
+  if (admins.indexOf(email) >= 0) return { role: 'admin', email, name: 'Open Frame' };
+  const c = email && clients_().find(x => emails_(x.contact_email).indexOf(email) >= 0);
+  return c ? { role: 'client', email, brand: c.brand, name: c.client } : null;
+}
+
+// Always answers the same way, so the page never tells anyone which emails are on the list.
+// At most one code a minute and five an hour per address.
+function studioAsk_(email) {
+  const cache = CacheService.getScriptCache();
+  if (!/^[^@\s]+@[^@\s]+\.[a-z]{2,}$/.test(email)) return { error: 'Please check your email address.' };
+  const who = studioWho_(email);
+  const n = Number(cache.get('studio-n:' + email) || 0);
+  if (!who || cache.get('studio-wait:' + email) || n >= 5) return { ok: true };
+  const code = String(Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, Utilities.getUuid())
+    .slice(0, 4).reduce((a, x) => a * 256 + ((x + 256) % 256), 0) % 1e6).padStart(6, '0');
+  const token = hex_(Utilities.getUuid() + Utilities.getUuid() + Date.now());
+  cache.put('studio-code:' + email, JSON.stringify({ code, tries: 0 }), STUDIO_CODE_MIN * 60);
+  cache.put('studio-link:' + token, email, STUDIO_CODE_MIN * 60);
+  cache.put('studio-wait:' + email, '1', 60);
+  cache.put('studio-n:' + email, String(n + 1), 3600);
+  sendStudioCode_(email, code, STUDIO_URL + '#t=' + token);
+  return { ok: true };
+}
+
+function studioCode_(email, code) {
+  const cache = CacheService.getScriptCache(), key = 'studio-code:' + email;
+  const saved = JSON.parse(cache.get(key) || 'null');
+  if (!saved) return { error: 'That code expired. Ask for a new one.' };
+  if (saved.code !== code) {
+    saved.tries++;
+    if (saved.tries >= 5) cache.remove(key); else cache.put(key, JSON.stringify(saved), STUDIO_CODE_MIN * 60);
+    return { error: saved.tries >= 5 ? 'Too many tries. Ask for a new code.' : 'That code doesn\'t match. Check the newest email.' };
+  }
+  cache.remove(key);
+  return studioStart_(email);
+}
+
+function studioLink_(token) {
+  const cache = CacheService.getScriptCache(), email = token && cache.get('studio-link:' + token);
+  if (!email) return { error: 'That sign-in link expired. Ask for a new code.' };
+  cache.remove('studio-link:' + token);
+  cache.remove('studio-code:' + email);
+  return studioStart_(email);
+}
+
+// Google's button hands the page a signed ID token. Google checks the signature for us (tokeninfo); we check it was made
+// for this site's client ID and the email is verified, then it's the same as a code sign-in.
+function studioGoogle_(credential) {
+  const id = GOOGLE_CLIENT_ID || PropertiesService.getScriptProperties().getProperty('GOOGLE_CLIENT_ID');
+  if (!id || !credential) return { error: 'Google sign-in isn\'t set up yet. Use the email code.' };
+  const r = UrlFetchApp.fetch('https://oauth2.googleapis.com/tokeninfo?id_token=' + encodeURIComponent(credential), { muteHttpExceptions: true });
+  if (r.getResponseCode() !== 200) return { error: 'Google sign-in didn\'t go through. Try again.' };
+  const t = JSON.parse(r.getContentText());
+  if (t.aud !== id || String(t.email_verified) !== 'true' || !/accounts\.google\.com$/.test(t.iss || '')) return { error: 'Google sign-in didn\'t go through. Try again.' };
+  return studioStart_(String(t.email || '').toLowerCase());
+}
+
+function studioStart_(email) {
+  const who = studioWho_(email);
+  if (!who) return { error: 'This email doesn\'t have access.' };
+  const session = hex_(Utilities.getUuid() + Utilities.getUuid() + Date.now() + email);
+  withLock_(() => {
+    const t = hubTab_('Studio sessions', SESSION_HEAD), now = new Date();
+    t.rows.filter(r => !(new Date(r.expires) > now)).map(r => r._row).sort((a, b) => b - a).forEach(n => t.sh.deleteRow(n));
+    t.sh.appendRow([hex_(session), email, who.role, who.brand || '', now.toISOString(), new Date(now.getTime() + STUDIO_DAYS * 864e5).toISOString(), now.toISOString()]);
+  });
+  return { session, who };
+}
+
+// A live session whose email still has access. Renews the 30 days at most once an hour.
+function studioSession_(session) {
+  const out = () => { const e = new Error('Please sign in again.'); e.signedOut = true; return e; };
+  if (!/^[0-9a-f]{64}$/.test(session)) throw out();
+  const t = hubTab_('Studio sessions', SESSION_HEAD), h = hex_(session);
+  const r = t.rows.find(x => x.session === h);
+  if (!r || !(new Date(r.expires) > new Date())) throw out();
+  const who = studioWho_(r.email);
+  if (!who) throw out();
+  if (!within_(r.last_used, 1 / 24)) {
+    const now = new Date();
+    setCells_(t, r._row, { last_used: now.toISOString(), expires: new Date(now.getTime() + STUDIO_DAYS * 864e5).toISOString() });
+  }
+  return { t, r, who };
+}
+
+function hex_(s) {
+  return Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, s).map(b => ((b + 256) % 256).toString(16).padStart(2, '0')).join('');
+}
+
+function sendStudioCode_(email, code, link) {
+  const esc = v => String(v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  const html = '<div style="background:#f3f1ea;padding:32px 16px;font-family:Inter,Helvetica,Arial,sans-serif;color:#111110">'
+    + '<div style="max-width:480px;margin:0 auto;background:#fff;border:1px solid #e2ded2;border-radius:20px;padding:36px 32px;text-align:center">'
+    + '<img src="https://openframe.design/icon-192.png" width="44" height="44" alt="Open Frame" style="display:block;margin:0 auto 20px">'
+    + '<p style="font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:#4b4a46;margin:0 0 8px">Studio sign-in</p>'
+    + '<p style="font-family:Georgia,serif;font-size:40px;letter-spacing:.18em;margin:6px 0 20px">' + esc(code) + '</p>'
+    + '<a href="' + esc(link) + '" style="display:inline-block;background:#111110;color:#f3f1ea;text-decoration:none;font-weight:600;font-size:16px;padding:15px 30px;border-radius:100px">Sign in</a>'
+    + '<p style="color:#84827b;font-size:13px;line-height:1.5;margin:26px 0 0">Type the code or tap the button. It works for ' + STUDIO_CODE_MIN + ' minutes. Didn\'t ask for this? Ignore it, nothing happens.</p>'
+    + '</div></div>';
+  MailApp.sendEmail({
+    to: email, name: FROM_NAME, replyTo: REPLY_TO,
+    subject: 'Your Open Frame sign-in code: ' + code,
+    body: 'Your sign-in code: ' + code + '\n\nOr tap to sign in:\n\n' + link + '\n\nIt works for ' + STUDIO_CODE_MIN + ' minutes. Didn\'t ask for this? Ignore it, nothing happens.',
+    htmlBody: html,
+  });
+}
+
+// The Results view: each client's month so far, what every loop made in the last 7 days, and what you said yes to.
+function studioResults(key) {
+  checkKey_(key);
+  const since = Date.now() - 7 * 864e5;
+  const clients = clients_().map(c => { try { return { client: c.client, brand: c.brand, results: results_(c) }; } catch (e) { return { client: c.client, brand: c.brand, results: { empty: true } }; } });
+  const ss = SpreadsheetApp.openById(hubId_());
+  const runs = {};
+  if (ss.getSheetByName('Loop runs')) table_(hubId_(), 'Loop runs').rows.filter(r => r.loop && new Date(r.at).getTime() > since).forEach(r => {
+    const x = runs[r.loop] || (runs[r.loop] = { loop: r.loop, runs: 0, made: 0, kept: 0, cards: 0, failed: 0, last: '', note: '' });
+    x.runs++; x.made += num_(r.made) || 0; x.kept += num_(r.kept) || 0; x.cards += num_(r.cards) || 0;
+    if (/fail|error/i.test(r.status)) x.failed++;
+    if (String(r.at) > x.last) { x.last = String(r.at); x.note = r.note || ''; }
+  });
+  const yes = ss.getSheetByName('Loops') ? table_(hubId_(), 'Loops').rows
+    .filter(r => r.id && ['yes', 'sent', 'change'].indexOf(r.status) >= 0 && new Date(r.updated).getTime() > since)
+    .sort((a, b) => String(b.updated).localeCompare(String(a.updated))).slice(0, 12)
+    .map(r => ({ title: r.title, loop: r.loop, client: r.client, status: r.status, link: r.link, when: fmtWhen_(r.updated) })) : [];
+  return { clients, runs: Object.keys(runs).map(k => runs[k]).sort((a, b) => b.last.localeCompare(a.last)).map(x => Object.assign(x, { last: fmtWhen_(x.last) })), yes };
+}
+
+// ---------- Reels: the Reels tab in the Studio ----------
+// Script cards by type (Loops rows with loop 'scripts': kind of | personal | viral), a "new scripts" button per type
+// (adds a 'reel-ask' row the Mac's loops/asks.js answers with the local AI), the Reel drafts waiting for a yes,
+// and the Mac's own status (the 'Mac status' tab, written every 2 minutes by mac/keeper.js).
+const REEL_TYPES = { of: 'Open Frame', personal: 'Personal', viral: 'Viral in my niche' };
+const MAC_HEAD = ['check', 'label', 'status', 'detail', 'since', 'updated_at', 'fix'];
+const MAC_STALE_MIN = 15;     // no word from the Mac helper for this long = the Mac is off, asleep or the helper stopped
+const MAC_FAIL_MIN = 10;      // something down this long (the helper couldn't fix it) = Heads up card + one email
+
+function studioReels(key) {
+  checkKey_(key);
+  const ss = SpreadsheetApp.openById(hubId_());
+  const lp = ss.getSheetByName('Loops') ? table_(hubId_(), 'Loops').rows : [];
+  const scripts = lp.filter(r => r.id && r.loop === 'scripts' && ['ready', 'todo', 'change'].indexOf(r.status) >= 0)
+    .sort((a, b) => String(b.created).localeCompare(String(a.created)))
+    .map(r => ({ id: r.id, type: REEL_TYPES[r.kind] ? r.kind : 'of', title: String(r.title || '').replace(/^Film this: /, ''),
+      body: r.body, why: r.why, status: r.status, note: r.note, when: fmtWhen_(r.created) }));
+  const asks = uniq_(lp.filter(r => r.loop === 'reel-ask' && r.status === 'new').map(r => r.kind));
+  const drafts = [];
+  uniq_(clients_().map(c => c.sheet_id)).forEach(sid => {
+    const q = table_(sid, 'Queue');
+    if (!q) return;
+    const byBrand = {};
+    clients_().forEach(c => { byBrand[c.brand] = c; });
+    groupPosts_(q.rows.filter(r => r.id && r.type === 'reel' && ['draft', 'in_review', 'changes'].indexOf(r.status) >= 0), sid, byBrand)
+      .forEach(g => drafts.push(Object.assign(g, { media: g.media.filter(u => /\.mp4($|\?)/i.test(u)) })));
+  });
+  drafts.sort((a, b) => String(a.publish_at).localeCompare(String(b.publish_at)));
+  return { types: REEL_TYPES, scripts, asks, drafts, mac: macStatus_() };
+}
+
+// "New scripts" button. One waiting ask per type is enough; the Mac answers it within a few minutes.
+function adminReelAsk(key, type, note) {
+  checkKey_(key);
+  if (!REEL_TYPES[type]) throw new Error('Unknown script type');
+  return withLock_(() => {
+    const t = hubTab_('Loops', LOOP_HEAD), now = new Date().toISOString();
+    if (t.rows.some(r => r.loop === 'reel-ask' && r.kind === type && r.status === 'new')) return 'waiting';
+    const row = { id: 'reel-ask-' + type + '-' + Date.now(), loop: 'reel-ask', client: 'open-frame', kind: type,
+      title: 'New ' + REEL_TYPES[type] + ' scripts', body: String(note || '').slice(0, 500), status: 'new', created: now, updated: now };
+    t.sh.appendRow(t.head.map(h => safeCell_(row[h])));
+    return 'asked';
+  });
+}
+
+// Status tab: what the Mac keeper sees right now, plus the n8n health check's rows (workflows, Meta token).
+function studioStatus(key) {
+  checkKey_(key);
+  const t = table_(hubId_(), 'Health');
+  const hb = t && t.rows.find(r => r.check === 'heartbeat');
+  const n8n = t ? t.rows.filter(r => r.check && r.check !== 'heartbeat').map(r => ({ label: r.label || r.check, status: String(r.status).toLowerCase(),
+    detail: r.detail, link: /^https:/.test(r.link || '') ? r.link : '', when: fmtWhen_(r.updated_at) })) : [];
+  return { mac: macStatus_(), n8n, n8nLast: hb ? fmtWhen_(hb.updated_at) : '', n8nStale: !hb || !within_(hb.updated_at, 2 / 24) };
+}
+
+function macStatus_() {
+  const ss = SpreadsheetApp.openById(hubId_());
+  if (!ss.getSheetByName('Mac status')) return { rows: [], updated: '', stale: true, never: true };
+  const rows = table_(hubId_(), 'Mac status').rows.filter(r => r.check);
+  const last = rows.map(r => String(r.updated_at)).sort().pop() || '';
+  const t = last ? new Date(last).getTime() : 0;
+  return { rows: rows.map(r => ({ check: r.check, label: r.label, status: r.status, detail: r.detail, fix: r.fix, since: fmtWhen_(r.since) })),
+    updated: fmtWhen_(last), stale: !t || Date.now() - t > MAC_STALE_MIN * 6e4, never: !t };
+}
+
+// The Mac helper reports here: rows of { check, label, status: ok | fixing | fail, detail, fix }. 'since' moves only when the status changes.
+function macReport_(rows) {
+  const t = hubTab_('Mac status', MAC_HEAD), now = new Date().toISOString();
+  (rows || []).forEach(x => {
+    if (!x || !x.check) return;
+    const r = t.rows.find(y => y.check === x.check);
+    const row = { check: x.check, label: x.label || x.check, status: x.status || 'ok', detail: x.detail || '', fix: x.fix || '', updated_at: now };
+    if (!r) { row.since = now; t.sh.appendRow(t.head.map(h => safeCell_(row[h]))); t.rows.push(row); return; }
+    if (r.status !== row.status) row.since = now;
+    setCells_(t, r._row, row);
+  });
+  return { ok: true };
 }
 
 function graphicsTable_() {
@@ -324,6 +581,7 @@ function loopsApi_(b) {
       .map(r => ({ handle: h(r.username || r.sender), kind: r.kind || 'dm', text: String(r.text || '').slice(0, 200), at: String(r.received_at || r.timestamp) }));
     return { accounts, touches };
   }
+  if (b.action === 'mac') return macReport_(b.rows);
   if (b.action === 'results') { const c = clients_().find(x => x.brand === b.client); return c ? results_(c) : { empty: true }; }
   if (b.action === 'funnel') {
     // Last 7 days of the pipeline (Engage + Leads tabs) and where every lead sits now.
@@ -396,6 +654,7 @@ function adminGraphic(key, id, action, note) {
 
 // JSON for the review page on openframe.design. GET only, so the browser needs no preflight.
 function api_(p) {
+  if (p.api === 'studio_js') return ContentService.createTextOutput(HELPERS_JS + (p.r === 'client' ? CLIENT_JS : ADMIN_JS)).setMimeType(ContentService.MimeType.JAVASCRIPT);
   let out;
   try {
     if (p.api === 'client') out = getClientPosts(p.c);
@@ -750,8 +1009,8 @@ function resendLink_(code) {
 
 // ---------- client page ----------
 
-function getClientPosts(token) {
-  const c = clientByLink_(token);
+function getClientPosts(token) { return clientPosts_(clientByLink_(token)); }
+function clientPosts_(c) {
   const q = table_(c.sheet_id, 'Queue');
   const rows = q.rows.filter(r => r.brand === c.brand && (r.status === 'in_review' || (r.status === 'plan' && !r.client_decision) || (r.decided_at && within_(r.decided_at, 3))));
   const groups = groupPosts_(rows, c.sheet_id, { [c.brand]: c }).map(g => ({
@@ -844,8 +1103,9 @@ function score_(p) {
   return r == null ? null : (num_(p.saves) || 0) * 3 + (num_(p.shares) || 0) * 3 + (num_(p.comments) || 0) * 2 + (num_(p.likes) || 0) + r / 1e6;
 }
 
-function clientDecide(token, ids, decision, note) {
-  const c = clientByLink_(token, true);
+function clientDecide(token, ids, decision, note) { return clientDecide_(clientByLink_(token, true), ids, decision, note); }
+// c.email is who answered: the review link's address, or the signed-in Studio email.
+function clientDecide_(c, ids, decision, note) {
   const map = { approve: ['approved', 'Approve'], change: ['changes', 'Request change'], skip: ['skipped', 'Skip'] }[decision];
   if (!map) throw new Error('Unknown choice');
   if (decision === 'change' && !String(note || '').trim()) throw new Error('Tell us what to change.');
@@ -944,14 +1204,16 @@ function healthCheck() {
 
 // Current non-ok rows from the latest run, plus a card when the run itself stopped (Mac off or asleep).
 function health_() {
-  const out = { cards: [] };
+  const out = { cards: macCards_() };
   const t = table_(hubId_(), 'Health');
   if (!t || !t.rows.length) return out;
   const hb = t.rows.find(r => r.check === 'heartbeat');
   if (!hb) return out;
   const ran = new Date(hb.updated_at).getTime();
   const yes = v => /^(y|yes|true)$/i.test(String(v || ''));
-  t.rows.filter(r => r.check && r.check !== 'heartbeat' && r.updated_at === hb.updated_at && /^(warn|fail)$/i.test(r.status))
+  // Rows from the hourly run, plus problems other tools write on their own (e.g. reel-drafts from the Mac) in the last 2 days.
+  t.rows.filter(r => r.check && r.check !== 'heartbeat' && /^(warn|fail)$/i.test(r.status)
+      && (r.updated_at === hb.updated_at || (r.updated_at > hb.updated_at && within_(r.updated_at, 2))))
     .forEach(r => out.cards.push({
       key: [r.check, r.since, r.status].join('|'), text: r.detail || (r.label || r.check) + ' needs a look.', link: r.link || '', email: yes(r.email),
     }));
@@ -961,6 +1223,17 @@ function health_() {
     text: "n8n on your Mac hasn't checked in since " + fmtWhen_(hb.updated_at) + '. The Mac may be off or asleep, so nothing posts or gets pulled.',
   });
   return out;
+}
+
+// Things the Mac helper couldn't fix on its own for MAC_FAIL_MIN minutes: one card and one email each.
+function macCards_() {
+  const ss = SpreadsheetApp.openById(hubId_());
+  if (!ss.getSheetByName('Mac status')) return [];
+  const m = macStatus_();
+  if (m.stale) return [];   // Mac off or asleep: the n8n heartbeat card covers that
+  return table_(hubId_(), 'Mac status').rows.filter(r => r.check && r.status === 'fail' && !within_(r.since, MAC_FAIL_MIN / 1440))
+    .map(r => ({ key: ['mac', r.check, r.since].join('|'), text: (r.label || r.check) + ': ' + (r.detail || 'stopped') + (r.fix ? ' ' + r.fix : ''),
+      link: STUDIO_URL + '?tab=status', email: true }));
 }
 
 function leadLine_(l) {
@@ -1122,10 +1395,9 @@ textarea{width:100%;min-height:96px;font:inherit;font-size:15px;padding:10px;bor
 .tile b{display:block;font-size:22px}.row{display:flex;justify-content:space-between;gap:10px;padding:8px 0;border-top:1px solid var(--line)}
 `;
 
-const SHARED_JS = `
-const BOOT = __BOOT__;
+// Card helpers shared by both pages here and by the Studio page on openframe.design (served by api=studio_js).
+const HELPERS_JS = `
 const $ = (t, a = {}, ...kids) => { const e = document.createElement(t); Object.entries(a).forEach(([k, v]) => k === 'on' ? Object.entries(v).forEach(([n, f]) => e.addEventListener(n, f)) : k === 'text' ? e.textContent = v : e.setAttribute(k, v)); kids.flat().forEach(c => c && e.append(c)); return e; };
-const call = (fn, ...args) => new Promise((ok, no) => google.script.run.withSuccessHandler(ok).withFailureHandler(e => { alert(e.message || e); no(e); })[fn](...args));
 // Caption text with any https link made clickable (a newsletter's "Full email" link).
 function textEl(t) {
   return $('p', { class: 'text' }, String(t || '').split(/(https?:\\/\\/[^\\s<>"]+)/).map((x, i) => i % 2
@@ -1174,11 +1446,14 @@ const plural = (n, one, many) => n + ' ' + (n === 1 ? one : many);
 const pct = (a, b) => (a == null || b == null || b === 0) ? '' : ' (' + (a >= b ? 'up ' : 'down ') + Math.abs(Math.round((a - b) / b * 100)) + '%)';
 `;
 
-const ADMIN_HTML = `<!doctype html><html><head><meta charset="utf-8"><style>${BASE_CSS}</style></head><body><div class="wrap">
-<div class="top"><h1>Check-in</h1><span class="count" id="count">Loading...</span></div>
-<div id="box"></div><div class="more" id="more"></div></div>
-<script>${SHARED_JS}
-const K = BOOT.key;
+// Inside Apps Script pages: BOOT comes from the server and call() goes through google.script.run.
+const SHARED_JS = `
+const BOOT = __BOOT__;
+const call = (fn, ...args) => new Promise((ok, no) => google.script.run.withSuccessHandler(ok).withFailureHandler(e => { alert(e.message || e); no(e); })[fn](...args));
+` + HELPERS_JS;
+
+// Your check-in cards. Same code runs here (?k=) and on openframe.design/studio, which brings its own call() and an empty K.
+const ADMIN_JS = `
 const nothing = () => Promise.resolve();
 function postLabel(g, what) { return [$('b', { text: g.clientName }), ' · ' + (isNews(g) && what === g.type ? 'newsletter' : what) + ' · ' + g.when]; }
 function postBody(g) {
@@ -1288,18 +1563,18 @@ function summary(d) {
       : $('span', { class: 'mute', text: 'Add an email in the Clients tab' }))));
   more.append($('a', { class: 'link', href: '#', text: 'Clients', on: { click: e => { e.preventDefault(); links.style.display = links.style.display ? '' : 'none'; } } }), links);
 }
-call('getDashboard', K).then(d => {
-  summary(d);
-  const box = document.getElementById('box');
-  runQueue(build(d), box, document.getElementById('count'), () =>
-    box.append($('div', { class: 'card done' }, $('h2', { text: 'All done' }), $('p', { class: 'mute', text: 'Nothing else needs you right now.' }))));
-});
-</script></body></html>`;
+function startAdmin() {
+  call('getDashboard', K).then(d => {
+    summary(d);
+    const box = document.getElementById('box');
+    runQueue(build(d), box, document.getElementById('count'), () =>
+      box.append($('div', { class: 'card done' }, $('h2', { text: 'All done' }), $('p', { class: 'mute', text: 'Nothing else needs you right now.' }))));
+  });
+}
+`;
 
-const CLIENT_HTML = `<!doctype html><html><head><meta charset="utf-8"><style>${BASE_CSS}</style></head><body><div class="wrap">
-<div class="top"><h1 id="h"></h1><span class="count" id="count"></span></div>
-<div id="box"><p class="mute">Loading...</p></div><div class="more" id="more"></div></div>
-<script>${SHARED_JS}
+// A client's review cards. Same code runs here (?c=) and on openframe.design/studio for a signed-in client.
+const CLIENT_JS = `
 document.getElementById('h').textContent = BOOT.client;
 function results(R) {
   const more = document.getElementById('more'); more.innerHTML = '';
@@ -1318,25 +1593,44 @@ function results(R) {
     R.report_url ? $('p', {}, $('a', { class: 'link', href: R.report_url, target: '_blank', text: 'Monthly report (PDF)' })) : '');
   more.append($('a', { class: 'link', href: '#', text: 'See more', on: { click: e => { e.preventDefault(); detail.style.display = detail.style.display ? '' : 'none'; } } }), detail);
 }
-call('getClientPosts', BOOT.token).then(d => {
-  results(d.results);
-  const open = d.posts.filter(p => p.status === 'in_review' || p.status === 'plan');
-  const box = document.getElementById('box');
-  const items = open.map(p => {
-    const caps = p.posts.filter((x, i, a) => a.findIndex(y => y.caption === x.caption) === i);
-    const plan = p.status === 'plan';
-    return {
-      label: [$('b', { text: plan ? 'Idea for a post' : isNews(p) ? 'Newsletter' : 'Post' }), ' · ' + p.when],
-      body: [mediaEl(p.media, p.preview), ...caps.map(x => textEl(x.caption)),
-        p.deadline ? $('p', { class: 'mute', text: 'Please answer by ' + p.deadline + '.' }) : ''],
-      ask: plan ? 'Good idea?' : isNews(p) ? 'Good to send?' : 'Good to post?',
-      yes: ['Looks good', () => call('clientDecide', BOOT.token, p.ids, 'approve', '')],
-      change: ['Change something', 'What should we change?', n => call('clientDecide', BOOT.token, p.ids, 'change', n)],
-      skip: ['Skip this one', () => call('clientDecide', BOOT.token, p.ids, 'skip', '')],
-    };
+function startClient() {
+  call('getClientPosts', BOOT.token).then(d => {
+    results(d.results);
+    const open = d.posts.filter(p => p.status === 'in_review' || p.status === 'plan');
+    const box = document.getElementById('box');
+    const items = open.map(p => {
+      const caps = p.posts.filter((x, i, a) => a.findIndex(y => y.caption === x.caption) === i);
+      const plan = p.status === 'plan';
+      return {
+        label: [$('b', { text: plan ? 'Idea for a post' : isNews(p) ? 'Newsletter' : 'Post' }), ' · ' + p.when],
+        body: [mediaEl(p.media, p.preview), ...caps.map(x => textEl(x.caption)),
+          p.deadline ? $('p', { class: 'mute', text: 'Please answer by ' + p.deadline + '.' }) : ''],
+        ask: plan ? 'Good idea?' : isNews(p) ? 'Good to send?' : 'Good to post?',
+        yes: ['Looks good', () => call('clientDecide', BOOT.token, p.ids, 'approve', '')],
+        change: ['Change something', 'What should we change?', n => call('clientDecide', BOOT.token, p.ids, 'change', n)],
+        skip: ['Skip this one', () => call('clientDecide', BOOT.token, p.ids, 'skip', '')],
+      };
+    });
+    runQueue(items, box, document.getElementById('count'), () => box.append($('div', { class: 'card done' },
+      $('h2', { text: items.length ? 'All done, thank you!' : 'All caught up' }),
+      $('p', { class: 'mute', text: 'We will email you when new posts are ready.' }))));
   });
-  runQueue(items, box, document.getElementById('count'), () => box.append($('div', { class: 'card done' },
-    $('h2', { text: items.length ? 'All done, thank you!' : 'All caught up' }),
-    $('p', { class: 'mute', text: 'We will email you when new posts are ready.' }))));
-});
+}
+`;
+
+const ADMIN_HTML = `<!doctype html><html><head><meta charset="utf-8"><style>${BASE_CSS}</style></head><body><div class="wrap">
+<div class="top"><h1>Check-in</h1><span class="count" id="count">Loading...</span></div>
+<div id="box"></div><div class="more" id="more"></div></div>
+<script>${SHARED_JS}
+const K = BOOT.key;
+${ADMIN_JS}
+startAdmin();
+</script></body></html>`;
+
+const CLIENT_HTML = `<!doctype html><html><head><meta charset="utf-8"><style>${BASE_CSS}</style></head><body><div class="wrap">
+<div class="top"><h1 id="h"></h1><span class="count" id="count"></span></div>
+<div id="box"><p class="mute">Loading...</p></div><div class="more" id="more"></div></div>
+<script>${SHARED_JS}
+${CLIENT_JS}
+startClient();
 </script></body></html>`;

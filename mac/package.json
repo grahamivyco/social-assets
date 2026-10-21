@@ -1,0 +1,9 @@
+{
+  "name": "open-frame-mac",
+  "private": true,
+  "description": "Keeps the Open Frame system running on the Mac: pm2, LM Studio, n8n, Hub auto-deploy.",
+  "dependencies": {
+    "@google/clasp": "3.4.1",
+    "pm2": "7.0.4"
+  }
+}

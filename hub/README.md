@@ -23,6 +23,22 @@ Cards from the `Leads` tab of the outreach Sheet (n8n "Open Frame lead follow-up
 ## Health alerts
 The n8n health-check workflow (/mnt/project-files/automation/health/) writes a `Health` tab hourly. Problems from its latest run show as Heads up cards (with a "Fix it here" link), and `healthCheck` (hourly trigger) emails rows marked `email = yes` once per problem. If n8n hasn't checked in for 3 hours you get a card; after 20 hours, one email. No Health tab = nothing happens.
 
+## Studio: sign in from openframe.design
+`https://openframe.design/studio/` (source: `studio/index.html` in grahamivyco/Open-Frame) is the same check-in, behind a sign-in, on any device.
+- Sign in: type your email, get a 6-digit code (or tap the button in that email). No password, nothing to set up. Each device stays signed in 30 days, renewed while you use it.
+- Who gets in: the Google account that owns this script, anyone in `STUDIO_ADMINS` (top of the Studio section in `Code.gs`, or a `STUDIO_ADMINS` Script Property, comma separated), and every `contact_email` in the Clients tab. Clients only see their own review cards and results.
+- Admins see two tabs: **Needs you** (the same cards as the check-in page, same code) and **Results** (each client's month so far, what every loop made in the last 7 days, what you said yes to).
+- The page never holds the admin key. It sends its session to the Hub, which checks it and adds the key itself.
+- Sign a device out: delete its row in the `Studio sessions` tab (only a hash of each session is stored). Remove a client's address from `contact_email` and they're out on their next tap.
+- The card code is served by the Hub (`?api=studio_js`), so new card types show up in the Studio after you deploy a new version. Nothing to change on the site.
+- Selling the system: a new owner deploys their own copy and changes `STUDIO_URL` and the site page's `API`. The owner becomes the admin automatically.
+
+## Studio: Reels and Status tabs
+- **Reels** (`studioReels`): Reel drafts waiting for a yes (Queue rows, type `reel`, status draft / in_review / changes) with the video, Post it / Change / Don't post. Below, scripts to film by type: Open Frame, Personal, Viral in my niche (`Loops` rows, loop `scripts`, kind `of` | `personal` | `viral`, status `ready`). Filmed it = done, Change = the Mac rewrites it with your note (`loops/asks.js`), Pass. "Write 3 new scripts" adds a `reel-ask` row (`adminReelAsk`); the Mac's local AI answers in a few minutes and the page refreshes itself.
+- **Status** (`studioStatus`): the Mac keeper's checks (`Mac status` tab, written every 2 minutes by `mac/keeper.js` through `fn: 'loops', action: 'mac'`) and the n8n health rows. Something still failing after `MAC_FAIL_MIN` (10) minutes = Heads up card + one email. No word from the Mac for `MAC_STALE_MIN` (15) = shown as off or asleep.
+- **Sign in with Google**: `GOOGLE_CLIENT_ID` (OAuth Web client, origin https://openframe.design). The page asks the Hub for it (`op: 'config'`) and shows Google's button; the Hub checks the token with Google (`tokeninfo`) and starts the same 30-day session as a code. While the Google app is in Testing, only its test users can use the button; everyone else uses the code.
+- Health also now shows problems tools write on their own between hourly runs (e.g. `reel-drafts` from the Mac) for 2 days.
+
 ## Clients tab
 `client | brand | sheet_id | contact_email | client_approves | report_url` (an old `token` column is ignored)
 - `brand` matches the brand column in Queue
@@ -40,7 +56,7 @@ Follows the shared schema: /mnt/project-files/automation/queue-schema.md
 - Extra column only the hub uses: review_note (Graham's own change note).
 
 ## Updating the code
-Paste the new `Code.gs`, then Deploy > Manage deployments > edit > Version: New version. The links stay the same.
+Once the Mac keeper is signed in to clasp (`mac/install.sh`), a merged change to `hub/Code.gs` deploys itself within 10 minutes. Without it: paste the new `Code.gs`, then Deploy > Manage deployments > edit > Version: New version. The links stay the same.
 Before pasting, `node hub/check-pages.js hub/Code.gs` checks the page scripts (a broken one leaves the check-in page stuck on "Loading...").
 
 ## Check-in timing

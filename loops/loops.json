@@ -88,7 +88,23 @@
    "trigger": "Every 5 min, on each idea you said yes to",
    "work": "One-take script + caption",
    "check": "75-110 words, rules, full https link, AI judge, one retry",
-   "card": "Film this (Got it)",
+   "card": "Script card on the Studio Reels tab (Filmed it / Change / Pass)",
+   "feeds": [
+    "reel-watch"
+   ],
+   "status": "new"
+  },
+  {
+   "id": "reel-ask",
+   "name": "Scripts on demand",
+   "layer": "runtime",
+   "where": "pm2 loops (loops/asks.js)",
+   "run": "reel-ask",
+   "every": 2,
+   "trigger": "New scripts button on openframe.design/studio Reels tab (per type: Open Frame, Personal, Viral in my niche), or Change on a script",
+   "work": "3 talking head scripts of that type with LM Studio; viral ones rebuild a format from the pattern report + hook bank",
+   "check": "40-100 words, rules, full https link, 'I have ADHD', no b-roll, private copy rules, AI judge, one retry",
+   "card": "Script cards on the Reels tab",
    "feeds": [
     "reel-watch"
    ],
@@ -528,6 +544,21 @@
    "feeds": [
     "ideas",
     "scripts"
+   ],
+   "status": "new"
+  },
+  {
+   "id": "keeper",
+   "name": "Mac keeper",
+   "layer": "runtime",
+   "where": "pm2 keeper (mac/keeper.js) + login agent (mac/boot.sh)",
+   "every": 2,
+   "trigger": "Every 2 min, and at login",
+   "work": "Restarts stopped pm2 apps, n8n and ngrok; starts the LM Studio server and loads the model; pulls the repo; deploys hub/Code.gs when it changes",
+   "check": "Each check reports ok / fixing / fail to the Hub 'Mac status' tab",
+   "card": "Status lights on the Reels tab; Heads up card + one email when something stays down 10 min",
+   "feeds": [
+    "health"
    ],
    "status": "new"
   }

@@ -1,6 +1,6 @@
 // Scripts loop (every few minutes). Each idea you said Yes (or Change) to -> local AI writes a one-take script + caption
 // -> self-check (rules, length, AI judge, one retry) -> saved to Scripts/ on the Mac and loops/state/scripts/
-// -> Hub "Film this" card with the script. Filming + AirDrop hands off to reel-watch (reels/), which makes the draft.
+// -> script card on the Studio Reels tab (openframe.design/studio, Reels). Filming + AirDrop hands off to reel-watch (reels/), which makes the draft.
 // Also keeps state/<client>/backlog.md: every approved idea, which the monthly content plan reads.
 const fs = require('fs'), path = require('path');
 const L = require('./lib');
@@ -57,7 +57,7 @@ async function tick() {
     for (const dir of [path.join(L.C.scripts, client.name), path.join(L.STATE, client.id, 'scripts')]) {
       try { fs.mkdirSync(dir, { recursive: true }); fs.writeFileSync(path.join(dir, name), md); } catch (e) { L.log('save failed:', e.message); }
     }
-    await L.hub('add', { rows: [{ id: card.id.replace(/^ideas-/, 'script-'), loop: 'scripts', client: client.id, kind: 'script', status: 'todo',
+    await L.hub('add', { rows: [{ id: card.id.replace(/^ideas-/, 'script-'), loop: 'scripts', client: client.id, kind: 'of', status: 'ready',
       title: 'Film this: ' + card.title, body: `${s.script}\n\nCaption:\n${s.caption}\n\n${audio}`,
       ask: 'Film it in one take and AirDrop it. The Reel draft makes itself.' }] });
     await L.logRun({ loop: 'scripts', client: client.id, status: 'ok', made: 1, kept: 1, cards: 1, note: card.title });
