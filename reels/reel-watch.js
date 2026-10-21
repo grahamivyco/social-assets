@@ -143,6 +143,9 @@ async function makeReel(file) {
   run(C.python, [thedit, 'transcribe', file, work], { env: editorEnv() });
   const words = readJSON(path.join(work, 'words.json'), []);
   if (words.length < C.minWords) { log('skip (not enough speech):', file, words.length, 'words'); return 'skipped'; }
+  // Graphics idea loop (graphics/README.md): pitch new graphics to the Hub. Never blocks the Reel.
+  try { run('node', [path.join(HERE, 'graphics', 'loop.js'), 'pitch', work, path.basename(file)]); }
+  catch (e) { log('graphics pitch skipped:', e.message); }
 
   const copy = await writeCopy(fs.readFileSync(path.join(work, 'transcript.md'), 'utf8'));
   const day = new Date().toISOString().slice(0, 10);
