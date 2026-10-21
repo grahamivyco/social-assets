@@ -5,6 +5,7 @@ Every automation that needs a yes from Graham or a client writes one row in the 
 How to write a row:
 
 - **Loops on the Mac**: `L.approval({...})` in `lib.js`. It checks the kind, sets `client_ok` by the rules, never writes `answer` / `comment` / `updated`, and skips an `id` that's already there.
+- **A builder run by hand or by Claude** (brand kits, kits): `node loops/tools/approval.js --id ... --client ... --kind ... --title ...`. On the Mac it posts to the Hub; elsewhere it prints the checked row to append to `Approvals!A:O`.
 - **n8n or anything else**: POST `{ key, fn: 'loops', action: 'approval-add', rows: [...] }` to the Hub.
 - **Read the answer back**: `L.approvals({ made_by, status })` or `action: 'approval-list'`.
 - **Old Loops card with the same `id`**: Graham's answer there (Yes / Send / Got it, Change, Pass) is copied into the row while it waits on him, so both places agree.
@@ -23,8 +24,8 @@ How to write a row:
 | 2 | Reels | `reel` | client's `client_approves` | Queue sync (Reel drafts from AirDrop write the Queue) | Reel draft lands | Looks good: `approved` (IG goes to the phone card when `reel_music` = app, FB auto-posts). Change: re-edit. Skip. |
 | 3 | Newsletters | `newsletter` | yes | Queue sync (newsletter builder writes `platform = newsletter`; paused) | Issue built | Looks good: n8n Client newsletters sends at `publish_at`. Change: rebuild. |
 | 4 | Monthly reports, site and SEO checks | `report` | yes | Hub sync: a new `report_url` in the Clients tab, which the report run on the 2nd sets | Report PDF ready | Mark read: closed. Ask a question: Got it card for Graham with the question. |
-| 5 | Brand kit rounds | `pick_one` (directions), `design` (colours and type), `files` (final files) | yes | `brand-kit/build-brand-kit.js` when it renders a round | Each round | Pick: next round built from the pick. Comment: revise this round. Final files: handoff. |
-| 6 | Website launches | `launch` | yes | Projects tab row for a website job reaches "staging ready" | Staging link ready | Approve to launch: Got it card for Graham to go live. Not yet: their note goes on a Graham card. |
+| 5 | Brand kit rounds | `pick_one` (directions), `design` (colours and type), `files` (final files) | yes | The brand kit run: `loops/tools/approval.js` after each round (steps in the brand-kit README) | Each round | Pick: next round built from the pick. Comment: revise this round. Final files: handoff. |
+| 6 | Website launches | `launch` | yes | **Projects sync** in the Hub: a Projects row at stage Launch with an https staging link | Staging link ready | Approve to launch: Got it card for Graham to go live. Not yet: their note goes on a Graham card. |
 | 7 | Brand deals | `brand_deal` | yes, always | `triageMail` in the Hub: a reply from a brand in the Brands tab, or an email about sponsorship, collabs or UGC (a client forwarding one = their deal) | Offer arrives | Yes: acceptance email card for Graham. Not for us: polite no draft. Ask: Graham card. |
 | 8 | Sensitive replies | `reply` | yes for touchy (upset, press, donor, sponsor, refund) when the client approves their own posts, no for everyday | **Inbox sync** in the Hub (rows the n8n comment replies + DM inbox write with `needs_reply`) | A comment or DM gets flagged | Send as is: n8n sends it. Change: edited, then sent. I'll handle it: closed, nothing sent. |
 | 9 | Reposts | `repost` | yes, always | **Photo submissions sync** in the Hub (members' photos from the n8n content submissions workflow) | A photo comes in | Graham's Use = his yes, then the client's. Approve: `to_post`, it goes into a post (with credit). Skip: `skip`. |
@@ -33,7 +34,7 @@ How to write a row:
 | 12 | Hours | `hours` | yes | Money loop (n8n, business ops) on the 1st | Month end | Approve hours: invoice row. Question: Graham card. |
 | 13 | Quotes and agreements | `quote` | yes, always | `proposal.js` after a consult | Proposal page made | Sign: lead `won`, onboarding starts. No answer in 7 days: follow-up card. |
 | 14 | Invoices | `invoice` | yes | Money loop on the billing day | Invoice made | Pay now: paid, receipt. 7 days late: reminder card. |
-| 15 | Kits (Giving Tuesday, event promo) | `set` | yes | The kit builders | Kit built | Approve set: Queue rows. Change one: that piece is revised. |
+| 15 | Kits (Giving Tuesday, event promo) | `set` | yes | The kit run: `loops/tools/approval.js` with `--kind set` | Kit built | Approve set: Queue rows. Change one: that piece is revised. |
 
 ## Not in the Approvals tab (yet)
 
@@ -49,5 +50,5 @@ Graham-only planning cards have no kind in the list: weekly ideas, scripts, tren
 6. Brand deals (Hub `triageMail` writes the row, `deals.js` drafts the yes or no reply). **Built.**
 7. Reposts (Hub sync of the Photo submissions tab). **Built.**
 8. Ad spend (`boost.js`, 2nd at 10:00, clients with `boost_budget` only). **Built.**
-9. Brand kit rounds, launches, kits.
+9. Launches (Hub sync of the Projects tab: stage Launch + staging link). **Built.** Brand kit rounds and kits: `loops/tools/approval.js` from the builder run (brand-kit README). **Built.**
 10. Hours and invoices (with the business ops money loop).

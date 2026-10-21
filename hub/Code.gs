@@ -1370,6 +1370,7 @@ function syncApprovals_() {
   });
   loopCardAnswers_(t, out);
   reportRows_(t, byId, out);
+  launchRows_(t, byId, out);
   if (approvedAny) phoneReels_();
   return out;
 }
@@ -1397,6 +1398,38 @@ function reportRows_(t, byId, out) {
     if (lt.rows.some(x => x.id === id)) return;
     const card = { id, loop: 'report', client: r.client, kind: 'report question', status: 'todo', title: r.client + ' asked about their report',
       body: r.comment, link: r.preview, created: now, updated: now };
+    lt.sh.appendRow(lt.head.map(h => safeCell_(card[h])));
+    lt.rows.push(card); out.added++;
+  });
+}
+
+// Website launches: a Projects row at stage Launch with an https staging link = one launch row (Approve to launch / Not yet).
+// Approve = a Got it card for Graham to go live. Not yet = a card with their note.
+function launchRows_(t, byId, out) {
+  const pj = approvalProjects_();
+  if (!pj) return;
+  const cs = clients_(), last = PROJECT_STAGES.length - 1;
+  pj.rows.filter(r => r.brand && r.project && /^https:\/\//.test(r.link || '') && !/^(hid|done|finished|complete)/i.test(r.status || '')
+      && (String(r.stage).trim() === String(last + 1) || String(r.stage).trim().toLowerCase() === PROJECT_STAGES[last].toLowerCase())).forEach(r => {
+    const c = cs.find(x => x.brand === r.brand);
+    const id = 'launch-' + r.brand + '-' + hex_(String(r.project)).slice(0, 8);
+    if (!c || byId[id]) return;
+    const row = Object.assign(approvalRow_({ id, client: c.client, kind: 'launch', title: r.project + ' is ready to go live',
+      detail: r.next || 'Have a look at the staging site. Approve it and it goes live.', job: r.project, preview: r.link, due: r.due,
+      client_ok: c.client_approves ? 'yes' : 'no', made_by: 'projects', status: c.client_approves ? 'client' : 'draft' }, [c]), { answer: '', comment: '', updated: '' });
+    t.sh.appendRow(t.head.map(h => safeCell_(row[h])));
+    byId[id] = row; out.added++;
+  });
+  const done = t.rows.filter(r => /^launch-/.test(r.id) && APPROVAL_DONE.indexOf(r.status) >= 0);
+  if (!done.length) return;
+  const lt = hubTab_('Loops', LOOP_HEAD), now = new Date().toISOString();
+  done.forEach(r => {
+    const id = r.id + '-' + r.status;
+    if (lt.rows.some(x => x.id === id)) return;
+    const go = r.status === 'approved';
+    const card = { id, loop: 'projects', client: r.client, kind: 'launch', status: 'todo', link: r.preview, created: now, updated: now,
+      title: go ? r.client + ' approved: ' + r.title.replace(/ is ready to go live$/, '') + ' goes live' : r.client + ' said not yet on ' + r.title.replace(/ is ready to go live$/, ''),
+      body: go ? 'Point the domain at the new site and check it on a phone.' + (r.comment ? ' Their note: ' + r.comment : '') : (r.comment || 'No note left.') };
     lt.sh.appendRow(lt.head.map(h => safeCell_(card[h])));
     lt.rows.push(card); out.added++;
   });
