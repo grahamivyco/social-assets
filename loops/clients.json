@@ -1,15 +1,38 @@
 {
-  "_how": "One entry per brand. Every loop runs for each client with enabled: true. To add a client, copy a block, change the slug (must match the Hub Clients tab brand and brands/<slug>/), and fill in who they talk to.",
+  "_how": "One entry per brand. Every loop runs for each client with enabled: true. To add a client, copy a block, change the slug (must match the Hub Clients tab brand and brands/<slug>/), and fill in who they talk to. Optional: site (monthly site + AI search check), ai_prompts (3 asked per month, rotating), engage (true = daily comment drafts from the outreach Sheet; Open Frame only for now).",
   "open-frame": {
     "enabled": true,
     "name": "Open Frame",
     "audience": "Mission-driven organizations and small brands (nonprofits, guilds, local businesses) who find design and marketing hard to keep up with",
     "promise": "Makes design and marketing easy and attainable for mission-driven organizations, so they stand out while staying true to who they are",
-    "pillars": ["Mon brand tip", "Tue work in progress", "Wed declutter / before-after", "Thu mission-driven spotlight", "Fri automation"],
-    "formats": ["talking head Reel", "carousel", "photo post"],
+    "pillars": [
+      "Mon brand tip",
+      "Tue work in progress",
+      "Wed declutter / before-after",
+      "Thu mission-driven spotlight",
+      "Fri automation"
+    ],
+    "formats": [
+      "talking head Reel",
+      "carousel",
+      "photo post"
+    ],
     "cta": "Book a free consult: https://calendly.com/grahamivy-co/30min",
     "voice": "Short, warm, plain. A person talking, not a brand announcing. Concrete examples over claims.",
-    "first_person_ok": true
+    "first_person_ok": true,
+    "site": "https://openframe.design",
+    "ai_prompts": [
+      "What is Open Frame?",
+      "Is Open Frame a good fit for nonprofits and mission-driven brands?",
+      "Best branding agency for nonprofits and mission-driven brands in Minneapolis",
+      "Best website designer for nonprofits and mission-driven brands in Minneapolis",
+      "Best social media marketing help for nonprofits and mission-driven brands in Minneapolis",
+      "Who are the best design and marketing studios for nonprofits and mission-driven brands?",
+      "How can a small nonprofit get better at marketing without hiring staff?",
+      "Affordable branding and website help for a small nonprofit",
+      "Who can manage social media for a small nonprofit on a tight budget?"
+    ],
+    "engage": true
   },
   "ngm": {
     "enabled": false,
@@ -17,10 +40,21 @@
     "name": "Needlework Guild of Minnesota",
     "audience": "Minnesota stitchers of every level, and people curious to learn needlework",
     "promise": "A welcoming community to learn, share and stitch together",
-    "pillars": ["member work", "come and stitch (events)", "technique tip", "guild history", "retreats and programs"],
-    "formats": ["photo carousel", "photo post", "short Reel"],
+    "pillars": [
+      "member work",
+      "come and stitch (events)",
+      "technique tip",
+      "guild history",
+      "retreats and programs"
+    ],
+    "formats": [
+      "photo carousel",
+      "photo post",
+      "short Reel"
+    ],
     "cta": "Join a meeting: https://needleworkguildmn.org",
     "voice": "Friendly, welcoming, a little old-fashioned warmth. Credits members by first name only when they OK it.",
-    "first_person_ok": true
+    "first_person_ok": true,
+    "site": "https://needleworkguildmn.org"
   }
 }

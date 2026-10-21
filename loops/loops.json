@@ -1,19 +1,274 @@
 {
-  "_how": "Every loop in the system, one contract: trigger -> work -> self-check -> card (only if needed) -> feeds. layer runtime = runs on Graham's Mac (n8n, pm2, LM Studio). layer improve = Claude scheduled review in the Marketing project. run = the module runner.js calls; loops without it run elsewhere and are listed so the map and the weekly review see the whole system. status: live | built (needs a Mac step) | new | planned.",
-  "loops": [
-    { "id": "analytics", "name": "Stats pull", "layer": "runtime", "where": "n8n Social analytics", "trigger": "daily 06:00", "work": "Pull IG + FB account and post stats", "check": "Health check flags a stale or failed run", "card": "none", "feeds": ["ideas", "report"], "status": "built" },
-    { "id": "viral-scout", "name": "Viral scout", "layer": "runtime", "where": "n8n Open Frame viral scout + pm2 video-watch", "trigger": "Mon 07:30", "work": "Find outlier posts from big creators, watch each one", "check": "Outlier = 3x creator median", "card": "none", "feeds": ["patterns"], "status": "built" },
-    { "id": "patterns", "name": "Pattern report", "layer": "runtime", "where": "pm2 viral-patterns (watch/patterns.py)", "trigger": "Mon 12:00", "work": "What the outliers share + hook bank", "check": "Numbers computed, AI only summarises", "card": "none", "feeds": ["ideas"], "status": "live" },
-    { "id": "ideas", "name": "Weekly ideas", "layer": "runtime", "where": "pm2 loops (loops/ideas.js)", "run": "ideas", "schedule": "mon 13:00", "trigger": "Mon 13:00, after the pattern report", "work": "Pitch 8 ideas per client from own stats + viral patterns + past yes/pass", "check": "Banned words, em dash, question opener, past passes, AI judge 3.5/5, one retry", "card": "Yes / Change / Pass, best 5", "feeds": ["scripts", "content-plan"], "status": "new" },
-    { "id": "scripts", "name": "Scripts", "layer": "runtime", "where": "pm2 loops (loops/scripts.js)", "run": "scripts", "every": 5, "trigger": "Every 5 min, on each idea you said yes to", "work": "One-take script + caption", "check": "75-110 words, rules, full https link, AI judge, one retry", "card": "Film this (Got it)", "feeds": ["reel-watch"], "status": "new" },
-    { "id": "reel-watch", "name": "Reel drafts", "layer": "runtime", "where": "pm2 reel-watch + n8n Reel drafts", "trigger": "You AirDrop a video", "work": "Transcribe, edit, cover, caption, queue rows", "check": "Skips <8s, >3min, <12 words", "card": "Post this? (Hub)", "feeds": ["graphics", "poster"], "status": "live" },
-    { "id": "graphics", "name": "Graphics ideas", "layer": "runtime", "where": "pm2 graphics-loop", "trigger": "After each transcript", "work": "Pitch a graphic, 3 stills, animate the pick", "check": "Text overflow, empty render", "card": "Yes / Pass, then A / B / C", "feeds": ["library"], "status": "built" },
-    { "id": "content-plan", "name": "Monthly plan", "layer": "improve", "where": "Claude scheduled task (10th, 18th)", "trigger": "10th: plan, 18th: make", "work": "Plan next month's posts from learnings + approved ideas backlog", "check": "Empty slot if no real material", "card": "One card per post (Hub)", "feeds": ["poster"], "status": "live" },
-    { "id": "poster", "name": "Poster", "layer": "runtime", "where": "n8n social poster", "trigger": "Every 15 min", "work": "Post approved, due rows to IG + FB", "check": "Meta response, failed -> urgent card", "card": "Retry (only on failure)", "feeds": ["analytics"], "status": "live" },
-    { "id": "replies", "name": "Comment + DM replies", "layer": "runtime", "where": "n8n comment replies + DM inbox", "trigger": "New comment or DM", "work": "Reply in voice ~5 min later", "check": "No I/we, no prices, upset -> flag", "card": "Only when flagged", "feeds": ["analytics"], "status": "live" },
-    { "id": "brand-scout", "name": "Brand deals scout", "layer": "runtime", "where": "n8n brand scout + contacts", "trigger": "Mon 06:00 / 07:00", "work": "Find brands similar creators work with, then contacts", "check": "AI labels fit, caption markers", "card": "Pitch / Skip", "feeds": ["outreach"], "status": "live" },
-    { "id": "health", "name": "Health check", "layer": "runtime", "where": "n8n health check + Hub", "trigger": "Hourly", "work": "Workflow failures, token expiry, Mac heartbeat", "check": "Is the check itself stale", "card": "Heads up (only when broken)", "feeds": ["review"], "status": "live" },
-    { "id": "report", "name": "Monthly report", "layer": "improve", "where": "Claude scheduled task (2nd)", "trigger": "2nd of the month", "work": "Branded report + learnings file per client", "check": "Numbers only from rows", "card": "none", "feeds": ["content-plan"], "status": "live" },
-    { "id": "review", "name": "Weekly improvement review", "layer": "improve", "where": "Claude scheduled task (Sun)", "trigger": "Sunday 18:00 CT", "work": "Read every loop's runs, yes/pass rates and post results, write lessons, fix prompts and rules", "check": "Only changes loops/ prompts, lessons, rules; opens a PR", "card": "Short summary every 2 weeks", "feeds": ["ideas", "scripts"], "status": "new" }
-  ]
+ "_how": "Every loop in the system, one contract: trigger -> work -> self-check -> card (only if needed) -> feeds. layer runtime = runs on Graham's Mac (n8n, pm2, LM Studio). layer improve = Claude scheduled review in the Marketing project. run = the module runner.js calls; loops without it run elsewhere and are listed so the map and the weekly review see the whole system. status: live | built (needs a Mac step) | new | planned.",
+ "loops": [
+  {
+   "id": "analytics",
+   "name": "Stats pull",
+   "layer": "runtime",
+   "where": "n8n Social analytics",
+   "trigger": "daily 06:00",
+   "work": "Pull IG + FB account and post stats",
+   "check": "Health check flags a stale or failed run",
+   "card": "none",
+   "feeds": [
+    "ideas",
+    "report"
+   ],
+   "status": "built"
+  },
+  {
+   "id": "viral-scout",
+   "name": "Viral scout",
+   "layer": "runtime",
+   "where": "n8n Open Frame viral scout + pm2 video-watch",
+   "trigger": "Mon 07:30",
+   "work": "Find outlier posts from big creators, watch each one",
+   "check": "Outlier = 3x creator median",
+   "card": "none",
+   "feeds": [
+    "patterns"
+   ],
+   "status": "built"
+  },
+  {
+   "id": "patterns",
+   "name": "Pattern report",
+   "layer": "runtime",
+   "where": "pm2 viral-patterns (watch/patterns.py)",
+   "trigger": "Mon 12:00",
+   "work": "What the outliers share + hook bank",
+   "check": "Numbers computed, AI only summarises",
+   "card": "none",
+   "feeds": [
+    "ideas"
+   ],
+   "status": "live"
+  },
+  {
+   "id": "ideas",
+   "name": "Weekly ideas",
+   "layer": "runtime",
+   "where": "pm2 loops (loops/ideas.js)",
+   "run": "ideas",
+   "schedule": "mon 13:00",
+   "trigger": "Mon 13:00, after the pattern report",
+   "work": "Pitch 8 ideas per client from own stats + viral patterns + past yes/pass",
+   "check": "Banned words, em dash, question opener, past passes, AI judge 3.5/5, one retry",
+   "card": "Yes / Change / Pass, best 5",
+   "feeds": [
+    "scripts",
+    "content-plan"
+   ],
+   "status": "new"
+  },
+  {
+   "id": "scripts",
+   "name": "Scripts",
+   "layer": "runtime",
+   "where": "pm2 loops (loops/scripts.js)",
+   "run": "scripts",
+   "every": 5,
+   "trigger": "Every 5 min, on each idea you said yes to",
+   "work": "One-take script + caption",
+   "check": "75-110 words, rules, full https link, AI judge, one retry",
+   "card": "Film this (Got it)",
+   "feeds": [
+    "reel-watch"
+   ],
+   "status": "new"
+  },
+  {
+   "id": "reel-watch",
+   "name": "Reel drafts",
+   "layer": "runtime",
+   "where": "pm2 reel-watch + n8n Reel drafts",
+   "trigger": "You AirDrop a video",
+   "work": "Transcribe, edit, cover, caption, queue rows",
+   "check": "Skips <8s, >3min, <12 words",
+   "card": "Post this? (Hub)",
+   "feeds": [
+    "graphics",
+    "poster"
+   ],
+   "status": "live"
+  },
+  {
+   "id": "graphics",
+   "name": "Graphics ideas",
+   "layer": "runtime",
+   "where": "pm2 graphics-loop",
+   "trigger": "After each transcript",
+   "work": "Pitch a graphic, 3 stills, animate the pick",
+   "check": "Text overflow, empty render",
+   "card": "Yes / Pass, then A / B / C",
+   "feeds": [
+    "library"
+   ],
+   "status": "built"
+  },
+  {
+   "id": "content-plan",
+   "name": "Monthly plan",
+   "layer": "improve",
+   "where": "Claude scheduled task (10th, 18th)",
+   "trigger": "10th: plan, 18th: make",
+   "work": "Plan next month's posts from learnings + approved ideas backlog",
+   "check": "Empty slot if no real material",
+   "card": "One card per post (Hub)",
+   "feeds": [
+    "poster"
+   ],
+   "status": "live"
+  },
+  {
+   "id": "engage",
+   "name": "Engagement",
+   "layer": "runtime",
+   "where": "pm2 loops (loops/engage.js)",
+   "run": "engage",
+   "schedule": "weekdays 07:20",
+   "trigger": "Weekdays 7:20, after the outreach scout",
+   "work": "Draft comments on prospect posts, learning from your edits; DM draft when someone is warm",
+   "check": "2 sentences, no links/hashtags/pitch, 1 emoji max, sensitive posts skipped, one retry",
+   "card": "Copy and open (existing Engage cards), warm lead card",
+   "feeds": [
+    "leads"
+   ],
+   "status": "new"
+  },
+  {
+   "id": "leads",
+   "name": "Pipeline",
+   "layer": "runtime",
+   "where": "pm2 loops (loops/leads.js) + n8n lead follow-up",
+   "run": "leads",
+   "schedule": "mon 08:00",
+   "trigger": "Mon 8:00",
+   "work": "Last week's comments, leads, consults, wins vs the $4k plan; tunes how many comments engage drafts",
+   "check": "Never drafts more than you send",
+   "card": "Pipeline this week (Got it)",
+   "feeds": [
+    "engage"
+   ],
+   "status": "new"
+  },
+  {
+   "id": "site",
+   "name": "Site + AI search",
+   "layer": "runtime",
+   "where": "pm2 loops (loops/site.js)",
+   "run": "site",
+   "schedule": "1 09:00",
+   "trigger": "1st of the month 9:00",
+   "work": "Site check vs last month, 3 rotating ChatGPT prompt checks",
+   "check": "Diff vs last month, only new problems flagged",
+   "card": "Site check (Got it), Does ChatGPT name you? (Yes/Pass)",
+   "feeds": [
+    "report",
+    "review"
+   ],
+   "status": "new"
+  },
+  {
+   "id": "site-collect",
+   "name": "AI search answers",
+   "layer": "runtime",
+   "where": "pm2 loops (loops/site.js)",
+   "run": "site-collect",
+   "every": 60,
+   "trigger": "Hourly",
+   "work": "Answered prompt cards to ai-search.csv",
+   "check": "Only answered cards",
+   "card": "none",
+   "feeds": [
+    "report"
+   ],
+   "status": "new"
+  },
+  {
+   "id": "poster",
+   "name": "Poster",
+   "layer": "runtime",
+   "where": "n8n social poster",
+   "trigger": "Every 15 min",
+   "work": "Post approved, due rows to IG + FB",
+   "check": "Meta response, failed -> urgent card",
+   "card": "Retry (only on failure)",
+   "feeds": [
+    "analytics"
+   ],
+   "status": "live"
+  },
+  {
+   "id": "replies",
+   "name": "Comment + DM replies",
+   "layer": "runtime",
+   "where": "n8n comment replies + DM inbox",
+   "trigger": "New comment or DM",
+   "work": "Reply in voice ~5 min later",
+   "check": "No I/we, no prices, upset -> flag",
+   "card": "Only when flagged",
+   "feeds": [
+    "analytics"
+   ],
+   "status": "live"
+  },
+  {
+   "id": "brand-scout",
+   "name": "Brand deals scout",
+   "layer": "runtime",
+   "where": "n8n brand scout + contacts",
+   "trigger": "Mon 06:00 / 07:00",
+   "work": "Find brands similar creators work with, then contacts",
+   "check": "AI labels fit, caption markers",
+   "card": "Pitch / Skip",
+   "feeds": [
+    "outreach"
+   ],
+   "status": "live"
+  },
+  {
+   "id": "health",
+   "name": "Health check",
+   "layer": "runtime",
+   "where": "n8n health check + Hub",
+   "trigger": "Hourly",
+   "work": "Workflow failures, token expiry, Mac heartbeat",
+   "check": "Is the check itself stale",
+   "card": "Heads up (only when broken)",
+   "feeds": [
+    "review"
+   ],
+   "status": "live"
+  },
+  {
+   "id": "report",
+   "name": "Monthly report",
+   "layer": "improve",
+   "where": "Claude scheduled task (2nd)",
+   "trigger": "2nd of the month",
+   "work": "Branded report + learnings file per client",
+   "check": "Numbers only from rows",
+   "card": "none",
+   "feeds": [
+    "content-plan"
+   ],
+   "status": "live"
+  },
+  {
+   "id": "review",
+   "name": "Weekly improvement review",
+   "layer": "improve",
+   "where": "Claude scheduled task (Sun)",
+   "trigger": "Sunday 18:00 CT",
+   "work": "Read every loop's runs, yes/pass rates and post results, write lessons, fix prompts and rules",
+   "check": "Only changes loops/ prompts, lessons, rules; opens a PR",
+   "card": "Short summary every 2 weeks",
+   "feeds": [
+    "ideas",
+    "scripts"
+   ],
+   "status": "new"
+  }
+ ]
 }
