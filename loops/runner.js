@@ -1,12 +1,16 @@
 // Loop runner. Runs on Graham's Mac under pm2 ("loops"). Free tools only.
 //   node runner.js daemon          check every minute: run scheduled loops (loops.json "schedule") and "every N min" loops
 //   node runner.js ideas [client]  run the weekly ideas loop now (all enabled clients, or one)
-//   node runner.js scripts         turn approved ideas into scripts now
+//   node runner.js <loop> [client] run any loop in MODS now (ideas, scripts, engage, leads, site, site-collect)
 // Schedules use this Mac's clock. Last runs are kept in state/last-run.json so a restart never runs a loop twice.
 const fs = require('fs'), path = require('path');
 const L = require('./lib');
 
-const MODS = { ideas: () => require('./ideas').run, scripts: () => require('./scripts').tick };
+const MODS = {
+  ideas: () => require('./ideas').run, scripts: () => require('./scripts').tick,
+  engage: () => require('./engage').run, leads: () => require('./leads').run,
+  site: () => require('./site').run, 'site-collect': () => require('./site').collect,
+};
 const LAST = path.join(L.STATE, 'last-run.json');
 const DAYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
 
@@ -16,7 +20,8 @@ function due(loop, last, now) {
   if (!hm) return false;
   const [h, m] = hm.split(':').map(Number);
   const at = new Date(now); at.setHours(h, m, 0, 0);
-  const dayOk = day === 'daily' || DAYS[now.getDay()] === day;
+  const dayOk = day === 'daily' || DAYS[now.getDay()] === day || (day === 'weekdays' && now.getDay() % 6 !== 0)
+    || (/^\d+$/.test(day) && now.getDate() === Number(day));   // "1 09:00" = 1st of the month
   return dayOk && now >= at && (!last || new Date(last) < at);
 }
 
@@ -38,4 +43,4 @@ async function tick() {
 const [cmd, arg] = process.argv.slice(2);
 if (cmd === 'daemon') { L.log('loops runner started'); tick(); setInterval(tick, 60000); }
 else if (MODS[cmd]) MODS[cmd]()(arg).catch(e => { console.error(e.message); process.exit(1); });
-else { console.log('Use: node runner.js daemon | ideas [client] | scripts'); process.exit(1); }
+else { console.log('Use: node runner.js daemon | ' + Object.keys(MODS).join(' | ')); process.exit(1); }

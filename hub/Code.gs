@@ -190,6 +190,37 @@ function loopsApi_(b) {
         reach: num_(p.reach), likes: num_(p.likes), comments: num_(p.comments), saves: num_(p.saves), shares: num_(p.shares), score: Math.round(score_(p)) }));
     return { posts: rows.length, top: rows.slice(0, 5), weakest: rows.length > 5 ? rows.slice(-3) : [] };
   }
+  if (b.action === 'engage-list') {
+    // New posts the scout found (Engage tab, outreach Sheet) + comments sent per handle in the last 14 days + Targets stage.
+    const e = table_(OUTREACH_SHEET_ID, 'Engage'), tg = table_(OUTREACH_SHEET_ID, 'Targets');
+    const since = new Date(Date.now() - 14 * 864e5).toISOString();
+    const sent = {};
+    (e ? e.rows : []).filter(r => r.status === 'sent' && String(r.sent_at) >= since).forEach(r => { sent[r.handle] = (sent[r.handle] || 0) + 1; });
+    const stage = {};
+    (tg ? tg.rows : []).forEach(r => { if (r.handle) stage[String(r.handle).replace(/^@/, '')] = r.stage || ''; });
+    const pick = r => ({ post_id: String(r.post_id), handle: r.handle, post_url: r.post_url, caption: String(r.caption || '').slice(0, 400) });
+    return { fresh: (e ? e.rows : []).filter(r => r.post_id && r.status === 'new').slice(0, Number(b.limit) || 15).map(pick),
+      edits: (e ? e.rows : []).filter(r => r.status === 'sent' && r.ai_comment && String(r.sent_at) >= since && r.ai_comment !== r.draft_comment)
+        .slice(-10).map(r => ({ ai: r.ai_comment, sent: r.draft_comment })),
+      sent, stage, sentToday: (e ? e.rows : []).filter(r => r.status === 'sent' && String(r.sent_at).slice(0, 10) === new Date().toISOString().slice(0, 10)).length };
+  }
+  if (b.action === 'engage-set') {
+    const e = table_(OUTREACH_SHEET_ID, 'Engage'), r = findRow_(e, 'post_id', b.post_id);
+    setCells_(e, r._row, b.fields || {});
+    return { ok: true };
+  }
+  if (b.action === 'funnel') {
+    // Last 7 days of the pipeline (Engage + Leads tabs) and where every lead sits now.
+    const e = table_(OUTREACH_SHEET_ID, 'Engage'), l = table_(OUTREACH_SHEET_ID, 'Leads');
+    const since = new Date(Date.now() - 7 * 864e5).toISOString(), leads = l ? l.rows.filter(r => r.id) : [];
+    const stages = {};
+    leads.forEach(r => { const st = r.stage || 'talking'; stages[st] = (stages[st] || 0) + 1; });
+    const inWeek = v => v && String(v instanceof Date ? v.toISOString() : v) >= since;
+    return { comments: (e ? e.rows : []).filter(r => r.status === 'sent' && inWeek(r.sent_at)).length,
+      newLeads: leads.filter(r => inWeek(r.added)).length,
+      consults: leads.filter(r => inWeek(r.consult_at)).length,
+      won: leads.filter(r => r.stage === 'won' && inWeek(r.updated_at)).length, stages };
+  }
   const t = hubTab_('Loops', LOOP_HEAD);
   if (b.action === 'list') return { rows: t.rows.filter(r => r.id && (!b.loop || r.loop === b.loop) && (!b.status || [].concat(b.status).indexOf(r.status) >= 0)) };
   if (b.action === 'add') {
