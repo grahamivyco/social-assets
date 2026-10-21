@@ -11,7 +11,7 @@ const HOME = os.homedir();
 const C = {
   downloads: `${HOME}/Downloads`,
   work: `${HOME}/open-frame/reels/work`,
-  deliver: `${HOME}/Downloads/Open Frame/Reels`,
+  deliver: `${HOME}/Downloads/Open Frame LLC & Clients/Reels`,   // outside "Open Frame", which the Downloads sorter sweeps
   repo: `${HOME}/social-assets`,          // git clone of grahamivyco/social-assets with push access
   pages: 'https://grahamivyco.github.io/social-assets',
   brands: `${HERE}/../brands`,             // brand.json per client (repo mirror)

@@ -8,7 +8,7 @@ Film a talking head on the iPhone, AirDrop it to the Mac, and a finished Reel dr
 3. `editor/thedit.py transcribe` cuts ums, dead air, stutters and restarted lines.
 4. LM Studio on the Mac (`google/gemma-4-e4b`) writes the hook (one *accent* word), the cover headline and a caption that ends with the CTA and the full https:// link on its own line. It also plans 2 to 4 graphics, one per idea, each on its spoken word (pass 4).
 5. `editor/thedit.py render` makes the IG Reel (1080x1920) and the FB square (2160x2160) with brand captions, title, graphics, cover and end card, following `editor/REEL-RULES.md`. It cuts you out of the background so graphics sit behind your head (pass 2) and adds sound effects made in code under the voice (pass 5). Voice only, so trending audio can be added in the IG app.
-6. Voice-only copies at about 7 Mbps (under 25 MB) go to `~/Downloads/Open Frame/Reels/<id>/` with the covers and `caption.md`.
+6. Voice-only copies at about 7 Mbps (under 25 MB) go to `~/Downloads/Open Frame LLC & Clients/Reels/<id>/` with the covers and `caption.md`.
 7. The same copies are pushed to `reels/media/<id>/` in this repo, so GitHub Pages hosts them for the poster.
 8. The n8n workflow "Reel drafts" (`n8n-reel-drafts.json`, webhook `/webhook/reel-draft`) adds two Queue rows (IG and FB), status `in_review`, `sensitive` = yes so they never post without a yes. Slot: the next weekday from tomorrow at 17:00 Chicago without another Reel.
 9. The Hub shows the card. Yes = `approved`, then the poster posts it when it's due. Change = tell Claude in the Reels thread what to fix.

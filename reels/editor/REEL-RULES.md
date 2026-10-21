@@ -29,6 +29,9 @@ These apply to every talking head Reel, for Open Frame and for every client. Gra
 
 - "Top N" list Reels (2026-10-21): numbered list cards (from `open-frame/list-cards/`) via edit.json `"list": {"spec": "spec.json"}`. Card N slides up when its number or name is said and stays until the next one, behind the speaker cut-out. The list title shows before card 1.
 
+- Split screen (2026-10-21, from Graham's inspo): edit.json `"split": {"screen": "screen.mov"}` hard-cuts every 1.5 to 3 s between the full face and a split view. The screen recording is on top and the face on the bottom, with captions on the seam.
+- Numbered items (2026-10-21): `"items": ["Firecrawl", ...]` shows a white "#N Name" pill when item N comes up.
+
 ## Deliver
 - An IG Reel at 1080x1920 and a Facebook square at 2160x2160, plus an end card with the CTA.
 - Each Reel comes with a ready-to-paste caption that has a CTA. Put the full https:// link on its own line, after a blank line.

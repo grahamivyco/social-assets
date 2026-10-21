@@ -70,12 +70,16 @@ def ass_color(hexrgb, alpha="00"):
 def load_model():
     if not (MODEL_DIR / "tokens.txt").exists():
         MODEL_DIR.parent.mkdir(parents=True, exist_ok=True)
-        tar = MODEL_DIR.parent / (MODEL_NAME + ".tar.bz2")
+        tar = MODEL_DIR.parent / (MODEL_NAME + f".{os.getpid()}.tar.bz2")
+        tmp = MODEL_DIR.parent / f".{MODEL_NAME}.{os.getpid()}"
         print("downloading speech model (once, about 640 MB)...")
         urllib.request.urlretrieve(MODEL_URL, tar)
+        # unpack beside it and rename, so another run never reads a half-written model
         with tarfile.open(tar) as t:
-            t.extractall(MODEL_DIR.parent)
+            t.extractall(tmp)
         tar.unlink()
+        if not (MODEL_DIR / "tokens.txt").exists():
+            (tmp / MODEL_NAME).replace(MODEL_DIR)
     import sherpa_onnx
     d = MODEL_DIR
     return sherpa_onnx.OfflineRecognizer.from_transducer(
@@ -347,6 +351,8 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
     if edit.get("hook") and not edit.get("pop"):  # with pop on, pop.js draws the title on a shape
         ev.append(f"Dialogue: 1,{ts(0)},{ts(edit['hook_seconds'])},Hook,,0,0,0,,{{\\fad(0,200)}}{ass_text(edit['hook'].replace('*', ''))}")
     pos = f"{{\\an5\\pos({W // 2},{round(H * cap_y)})}}"
+    seam = f"{{\\an5\\pos({W // 2},{H // 2})}}"
+    on_split = lambda t: any(a <= t < b for a, b in edit.get("_split", []))
     # Graham, 2026-10-20: one word at a time, just the word being said, plain letters in the brand accent
     per = edit.get("caption_words", 1)
     # single-word captions are white (Graham, 2026-10-20); "caption_color" overrides, as sRGB hex
@@ -363,11 +369,11 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                 continue  # the hook title owns the screen while it's up
             if per == 1:
                 ev.append(f"Dialogue: 0,{ts(max(a, edit['hook_seconds'] if edit.get('hook') else 0))},{ts(b)},Cap,,0,0,0,,"
-                          f"{pos}{{\\c{ass_color(WORD)}}}{ass_text(clean(w['w']))}")
+                          f"{seam if on_split(a) else pos}{{\\c{ass_color(WORD)}}}{ass_text(clean(w['w']))}")
                 continue
             parts = [(f"{{\\i1\\c{ass_color(YELLOW)}}}" if j == k else "") + ass_text(clean(x["w"])) +
                      (f"{{\\i0\\c{ass_color(CREAM)}}}" if j == k else "") for j, x in enumerate(ch)]
-            ev.append(f"Dialogue: 0,{ts(max(a, edit['hook_seconds'] if edit.get('hook') else 0))},{ts(b)},Cap,,0,0,0,,{pos}{' '.join(parts)}")
+            ev.append(f"Dialogue: 0,{ts(max(a, edit['hook_seconds'] if edit.get('hook') else 0))},{ts(b)},Cap,,0,0,0,,{seam if on_split(a) else pos}{' '.join(parts)}")
     Path(path).write_text(hdr + "\n".join(ev) + "\n")
 
 
@@ -449,6 +455,64 @@ def list_chain(cards, first, inp, outp, W, H, conv):
     return ";".join(g)
 
 
+def split_segments(sp, words, dur, start):
+    """edit.json "split": hard cuts between full face and split screen every 1.5 to 3 s (Graham's inspo,
+    2026-10-21). "segments": [[a, b], ...] in output seconds overrides. Cuts snap to the nearest word start."""
+    if sp.get("segments"):
+        return [(float(a), float(b)) for a, b in sp["segments"]]
+    starts = [w["start"] for w in words]
+    snap = lambda t: min(starts, key=lambda x: abs(x - t)) if starts and min(abs(x - t) for x in starts) < 0.4 else t
+    face, split = sp.get("face", [2.2, 1.6, 2.6]), sp.get("split", [2.8, 2.0, 3.0, 2.4])
+    segs, t, k = [], start, 0
+    while True:
+        a = snap(t + face[k % len(face)])
+        b = snap(a + split[k % len(split)])
+        if b > dur - 0.4:
+            break
+        segs.append((a, b)); t, k = b, k + 1
+    return segs
+
+
+def split_chain(segs, si, inp, outp, W, H, PF, hdr, face_y):
+    """Split view: screen recording on the top half, the face (cropped from the full shot) on the bottom."""
+    on = "+".join(f"between(t,{a:.3f},{b:.3f})" for a, b in segs)
+    sconv = ("zscale=tin=bt709:pin=bt709:min=bt709:t=arib-std-b67:p=bt2020:m=bt2020nc:npl=203,format=yuv420p10le"
+             if hdr else "format=yuv420p")
+    h2 = H // 2 // 2 * 2
+    return (f"[{inp}]format={PF},split[sx1][sx2];[sx2]crop={W}:{h2}:0:{round(H * face_y) // 2 * 2},setsar=1[sxf];"
+            f"[{si}:v]scale={W}:{h2}:force_original_aspect_ratio=increase,crop={W}:{h2},setsar=1,fps={FPS},{sconv}[sxs];"
+            f"[sxs][sxf]vstack,format={PF}[sxv];[sx1][sxv]overlay=enable='{on}':shortest=1,format={PF}[{outp}]")
+
+
+def item_pills(work, items, words, dur, W, H, font, hdr):
+    """edit.json "items": ["Firecrawl", ...] -> a white "#N Name" pill when item N comes up (its number or
+    name is said). Returns [(png, start, end)]."""
+    from PIL import Image, ImageDraw, ImageFont
+    key = lambda s: re.sub(r"[^a-z0-9]", "", str(s).lower())
+    ws = [(key(w["w"]), w["start"]) for w in words]
+    f = ImageFont.truetype(str(font), round(W * 0.046))
+    out, after = [], 0.0
+    for i, name in enumerate(items, 1):
+        keys = {str(i), NUMS[i] if i < len(NUMS) else "", ORDS[i] if i < len(ORDS) else "", key(str(name).split()[0])} - {""}
+        t = next((st for k, st in ws if st > after + 0.2 and k in keys), None)
+        if t is None:
+            continue
+        txt = f"#{i} {name}"
+        tw_ = f.getbbox(txt)[2]
+        im = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+        d = ImageDraw.Draw(im)
+        px, py, ph = round(W * .035), round(H * .14), round(W * .095)
+        x0 = (W - tw_) // 2 - px
+        d.rounded_rectangle((x0, py, x0 + tw_ + 2 * px, py + ph), radius=ph // 2, fill=(255, 255, 255, 255))
+        d.text((W // 2, py + ph // 2), txt, font=f, fill=(17, 17, 16, 255), anchor="mm")
+        png = work / f"pill-{W}x{H}-{i:02d}.png"
+        im.save(png)
+        if hdr:
+            hlg_rgba(png)
+        out.append((png, t, min(dur, t + 1.6))); after = t
+    return out
+
+
 def load_parts(work, edit):
     """One take, or an edit.json "parts" list mixing lines from several takes:
     [{"take": "../work2", "from": 30, "to": 44}, ...] (word numbers from that take's transcript.md)."""
@@ -515,7 +579,7 @@ def cmd_render(work):
     cut = work / "cut.mkv"
     (work / "cut.filter").write_text(";".join(graph))
     run(["ffmpeg", "-v", "error", "-y", *inputs,
-         "-filter_complex_script", str(work / "cut.filter"), "-map", "[v]", "-map", "[a]",
+         "-filter_complex", ";".join(graph), "-map", "[v]", "-map", "[a]",
          "-c:v", "libx264", "-preset", "veryfast", "-crf", "14", "-c:a", "pcm_s16le", str(cut)])
     probe = json.loads(subprocess.run(["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries",
                                        "stream=width,height", "-of", "json", str(cut)],
@@ -537,6 +601,8 @@ def cmd_render(work):
         print("cutting the speaker out...")
         mat = matte(cut, work / "matte.mp4", sw, sh)
     cards = list_cards(work, edit["list"], tw, dur, hdr) if edit.get("list") else []
+    sp = edit.get("split")
+    edit["_split"] = split_segments(sp, tw, dur, edit["hook_seconds"] if edit.get("hook") else 1.0) if sp else []
     # stills and graphics are drawn in standard color; in HDR they are converted into the footage's HLG
     to_pf = (f"scale=out_color_matrix=bt2020:out_range=tv,format={PF}" if hdr else f"format={PF}")
     for name in edit["formats"]:
@@ -553,6 +619,14 @@ def cmd_render(work):
         cconv = ("scale=out_color_matrix=bt2020:out_range=tv,format=yuva420p10le" if hdr else "format=rgba")
         li = (3 if edit.get("endcard") else 1) + (1 if edit.get("pop") else 0) + (1 if mat else 0)
         lchain = lambda a, b: list_chain(cards, li, a, b, W, H, cconv)
+        pills = item_pills(work, edit["items"], tw, dur, W, H, FONTS / "Inter-SemiBold.otf", hdr) if edit.get("items") else []
+        pi = li + len(cards)
+        si = pi + len(pills)
+        tail = f";{list_chain(pills, pi, 'comp', 'compp', W, H, cconv)}"
+        if edit["_split"]:
+            tail += f";{split_chain(edit['_split'], si, 'compp', 'comps', W, H, PF, hdr, sp.get('face_y', 0.3))};[comps]{subs},format={PF}[main]"
+        else:
+            tail += f";[compp]{subs},format={PF}[main]"
         if edit.get("pop"):
             fx = Pop(W, H, tw, pieces, part_starts, dur, brand, edit.get("hook", ""),
                      edit["hook_seconds"] if edit.get("hook") else 0, edit.get("keywords"))
@@ -568,13 +642,12 @@ def cmd_render(work):
                        f"scale={W}:{H}:flags=bicubic,setsar=1,{zp},format=gray[mm];"
                        f"[fg][mm]alphamerge,format={AF}[person];[{gi}:v]{gconv}[gfx];"
                        f"[bg][gfx]overlay=eof_action=pass:format=auto[back0];{lchain('back0', 'back')};"
-                       f"[back][person]overlay=format=auto,{subs},format={PF}[main]")
+                       f"[back][person]overlay=format=auto[comp]{tail}")
             else:
-                vf += (f"{zp},{subs},format={PF}[base];[{gi}:v]{gconv}[gfx];"
-                       f"[base][gfx]overlay=eof_action=pass:format=auto[main0];{lchain('main0', 'main1')};"
-                       f"[main1]format={PF}[main]")
+                vf += (f"{zp},format={PF}[base];[{gi}:v]{gconv}[gfx];"
+                       f"[base][gfx]overlay=eof_action=pass:format=auto[main0];{lchain('main0', 'comp')}{tail}")
         else:
-            vf += f"{subs}[main0];{lchain('main0', 'main1')};[main1]format={PF}[main]"
+            vf += f"format={PF}[main0];{lchain('main0', 'comp')}{tail}"
         if edit.get("endcard"):
             png = work / f"endcard-{name}.png"
             sb = sdr_brand["hex"]
@@ -589,8 +662,10 @@ def cmd_render(work):
             inputs += ["-i", str(gfx)]
             if mat:
                 inputs += ["-i", str(mat)]
-        for png, _, _ in cards:
+        for png, _, _ in cards + pills:
             inputs += ["-loop", "1", "-framerate", str(FPS), "-t", f"{dur:.3f}", "-i", str(png)]
+        if edit["_split"]:
+            inputs += ["-stream_loop", "-1", "-i", str((work / sp["screen"]).resolve())]
         if covers:
             ci, one = inputs.count("-i"), f"{1 / FPS:.4f}"
             inputs += ["-loop", "1", "-framerate", str(FPS), "-t", one, "-i", str(covers[name]),
@@ -604,6 +679,7 @@ def cmd_render(work):
             if edit.get("pop"):
                 cues += [(lead + s["t"], "tap") for s in fx.scenes]
                 cues += [(lead + w["t"] - 0.25, "whoosh") for w in fx.wipes if w["t"] < dur - 0.1]
+            cues += [(lead + a, "tap") for _, a, _ in pills]
             if edit.get("endcard"):
                 cues.append((lead + dur, "chime"))
             wav = sfx_track(work / f"sfx-{name}.wav", lead + dur + (2.5 if edit.get("endcard") else 0) + 0.5, cues)
