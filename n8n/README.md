@@ -36,3 +36,9 @@ Import from URL: https://raw.githubusercontent.com/grahamivyco/social-assets/mai
 `comment-replies.json`: every 2 minutes reads comments on Open Frame's own IG + FB posts, hides spam, auto-replies to praise after a random 1 to 3 minute delay, and sends questions/leads to the Hub as cards. Max 10 replies an hour, never the same wording twice. Setup and modes: /mnt/project-files/comment-replies/README.md (source: build-workflow.py + code/).
 
 Import from URL: https://raw.githubusercontent.com/grahamivyco/social-assets/main/n8n/comment-replies.json
+
+# Inbox sorter
+
+`inbox-sorter.json`: new inbox mail (IMAP) is typed by LM Studio on the Mac (free, local) and written to the `Mail` tab of NGM social queue; the Hub's `triageMail` applies Gmail labels, saves reply drafts and shows lead/client replies as Send cards. Setup: /mnt/project-files/business-ops/inbox-sorter/README.md
+
+Import from URL: https://raw.githubusercontent.com/grahamivyco/social-assets/main/n8n/inbox-sorter.json
