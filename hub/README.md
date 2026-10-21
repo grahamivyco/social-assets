@@ -33,6 +33,13 @@ The n8n health-check workflow (/mnt/project-files/automation/health/) writes a `
 - The card code is served by the Hub (`?api=studio_js`), so new card types show up in the Studio after you deploy a new version. Nothing to change on the site.
 - Selling the system: a new owner deploys their own copy and changes `STUDIO_URL` and the site page's `API`. The owner becomes the admin automatically.
 
+## Studio: Project cards for clients
+A signed-in client sees one card per project above their review cards: a 5-step bar (Discover, Define, Design, Build, Launch), your note, what's next from you and what you need from them. Design clients with no social posts see only these cards.
+- Add a project: a row in the `Projects` tab (`setup` makes it): `brand | project | stage | next | need | due | note | link | status | updated`
+- `brand` matches the client's brand in the Clients tab. `stage` = a step name or its number (1-5). `link` = optional https link to the latest work.
+- `status`: blank = in progress, `done` = shows as Done, `hidden` = not shown.
+- To see what a client sees, add a test client row with a + address of yours (e.g. you+test@gmail.com) as `contact_email` and sign in with it.
+
 ## Studio: Reels and Status tabs
 - **Reels** (`studioReels`): Reel drafts waiting for a yes (Queue rows, type `reel`, status draft / in_review / changes) with the video, Post it / Change / Don't post. Below, scripts to film by type: Open Frame, Personal, Viral in my niche (`Loops` rows, loop `scripts`, kind `of` | `personal` | `viral`, status `ready`). Filmed it = done, Change = the Mac rewrites it with your note (`loops/asks.js`), Pass. "Write 3 new scripts" adds a `reel-ask` row (`adminReelAsk`); the Mac's local AI answers in a few minutes and the page refreshes itself.
 - **Status** (`studioStatus`): the Mac keeper's checks (`Mac status` tab, written every 2 minutes by `mac/keeper.js` through `fn: 'loops', action: 'mac'`) and the n8n health rows. Something still failing after `MAC_FAIL_MIN` (10) minutes = Heads up card + one email. No word from the Mac for `MAC_STALE_MIN` (15) = shown as off or asleep.
