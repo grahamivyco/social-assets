@@ -60,7 +60,7 @@ add('Local AI: brand fit', 'n8n-nodes-base.httpRequest',
 js('Brand rows', 'brand-rows.js', 2420, 420)
 js('Brands to save', 'brands-to-save.js', 2640, 320)
 sheet('Save Brands', 'Brands', 2860, 320, 'appendOrUpdate',
-      ['handle', 'status', 'fit', 'why', 'creators_seen', 'creator_handles', 'deal_posts', 'followers', 'website',
+      ['handle', 'name', 'status', 'fit', 'why', 'creators_seen', 'creator_handles', 'deal_posts', 'followers', 'website',
        'example_post', 'last_seen', 'bio', 'handle_check', 'last_checked'])
 js('New creators', 'new-creators.js', 2640, 540)
 sheet('Add suggested creators', 'Creators', 2860, 540, 'append', ['handle', 'status', 'source'])
