@@ -49,7 +49,7 @@ A signed-in client sees one card per project above their review cards: a 5-step 
 ## Approvals tab (for Studio Phase 2)
 One row per decision for Graham or a client, in the format of Open-Frame `docs/approval-items.md`. Studio's reader isn't built yet; the rows are written now so the data is ready.
 - Loops add rows with `fn: 'loops'`, `action: 'approval-add'` (`L.approval` in `loops/lib.js`) and read answers with `approval-list`. The Hub refuses a kind that isn't in the list, forces `client_ok = yes` for brand deals, ad spend, reposts and quotes, defaults replies to `no`, and never takes `answer` / `comment` / `updated` from a loop.
-- `syncApprovals_` runs inside the hourly `healthCheck`: every open Queue decision (topic, post, Reel, newsletter, each revision) gets a row, answers on the old cards are copied in, and an answer Studio writes is copied back to the Queue so the poster and the monthly loop keep working. Its memory is the `Approvals sync` tab. Run `syncApprovalsNow` from the editor to run it at once.
+- `syncApprovals_` runs inside the hourly `healthCheck`: every open Queue decision (topic, post, Reel, newsletter, each revision) gets a row, answers on the old cards are copied in, and an answer Studio writes is copied back to the Queue so the poster and the monthly loop keep working. Inbox rows waiting on a reply (`needs_reply`) get `reply` rows the same way: Send as is -> `approved`, I'll handle it -> `handled`, a Change note -> Inbox `review_note`. Its memory is the `Approvals sync` tab. Run `syncApprovalsNow` from the editor to run it at once.
 - Which loop writes which kind: `loops/APPROVALS.md`.
 
 ## Clients tab
