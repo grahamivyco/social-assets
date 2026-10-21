@@ -505,6 +505,21 @@
    "status": "new"
   },
   {
+   "id": "approvals",
+   "name": "Approvals sync",
+   "layer": "runtime",
+   "where": "Hub (hub/Code.gs syncApprovals_, inside the hourly healthCheck trigger)",
+   "trigger": "Hourly",
+   "work": "One Approvals row per Queue decision (posts, Reels, newsletters, topics) for Studio; answers flow both ways between the Queue and the Approvals tab",
+   "check": "Kind from approval-items.md only, client_ok rules enforced, history rows left out",
+   "card": "none (the Approvals rows are the cards Studio will show)",
+   "feeds": [
+    "poster",
+    "content-plan"
+   ],
+   "status": "new"
+  },
+  {
    "id": "health",
    "name": "Health check",
    "layer": "runtime",

@@ -42,6 +42,7 @@ Sunday: weekly review -> lessons + prompt fixes -> next run
 | `grow.js` | Directories (3rd), local events (Mon, Yes adds to calendar), Google Business post (Thu), template saver (Fri). |
 | `key.js` | Key accounts: `key-radar` (weekdays 12:00, DM draft when a Targets account engages) and `spotlight` (Wed 10:00, one mission-driven org a week, asks their OK first). Measures key accounts reached, not followers. |
 | `deals.js` | Brand + UGC deals (weekdays 10:30): Brands tab rows -> pitch with 3 video ideas linking the UGC page (social-assets `ugc/`), email or Apply card, one follow-up after 7 days. No prices in writing. |
+| `APPROVALS.md` | Every situation that needs a yes, which loop writes its row in the Hub's Approvals tab, and what happens after the answer. |
 | `later.js` | Built but `off` until there's data: proof posts, warm-up DMs, client health, trend Reels. |
 | `data/directories.json`, `tools/audit.js` | Free listings list; copy of the SEO thread's site check. |
 | `prompts/*.md` | What the local AI is told. The weekly review edits these. |
@@ -67,3 +68,4 @@ Free check form: https://grahamivyco.github.io/social-assets/check/ (link it fro
 1. Write `loops/<name>.js` exporting a function. Use `L.ask`, `L.rules` + `L.judge`, `L.hub('add', ...)`, `L.logRun(...)`.
 2. Add it to `MODS` in `runner.js` and to `loops.json` with `run` and `schedule` ("mon 13:00", "daily 08:00") or `every` (minutes).
 3. Cards: `kind` and `ask` decide the wording; `status: 'todo'` makes a Got it card instead of Yes / Change / Pass.
+4. Needs a yes from Graham or a client? Also write one Approvals row with `L.approval({...})` (rules in `APPROVALS.md` and Open-Frame `docs/approval-items.md`), and read the answer back with `L.approvals({ made_by })`.

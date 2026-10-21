@@ -53,6 +53,14 @@ async function hub(action, data = {}) {
   return out;
 }
 
+// Every decision a person has to make also goes in the Hub's Approvals tab, for Studio (format: Open-Frame docs/approval-items.md,
+// map of who writes what: loops/APPROVALS.md). The Hub checks the kind and the client_ok rules and skips an id it already has.
+// row: { id, client (brand or name), kind, title, detail, job, preview, options, due, client_ok, made_by, status: 'draft' | 'client' }
+// Leave client_ok out and the Hub uses the client's client_approves from the Clients tab.
+const approval = rows => hub('approval-add', { rows: [].concat(rows) });
+// The answers come back here: { made_by, status, ids, client } -> rows with status, answer, comment, updated (Studio writes those).
+const approvals = (filter = {}) => hub('approval-list', filter).then(o => o.rows);
+
 // The rule half of the self-check. Same bans as Graham's copy rules (memory + brands/design-notes.md).
 const BANNED = ['leverage', 'seamless', 'robust', 'elevate', 'unlock', 'empower', 'transform', 'game-changer', 'game changer',
   'landscape', 'journey', 'delve', 'dive in', 'testament', "in today's world", 'next level', 'synergy', 'cutting-edge'];
@@ -133,4 +141,4 @@ h1{font-size:clamp(32px,5vw,48px)}h1 i{color:var(--red)}h2{font-size:24px}.logo{
 <body><main><img class="logo" src="${PAGES}/brands/open-frame/open-frame-wordmark-horizontal.svg" alt="Open Frame">${inner}</main></body></html>`;
 }
 
-module.exports = { PAGES, publish, token, esc, page, C, HERE, STATE, readJSON, log, slug, today, clients, fill, ask, hub, rules, judge, logRun, pull, pushState };
+module.exports = { approval, approvals, PAGES, publish, token, esc, page, C, HERE, STATE, readJSON, log, slug, today, clients, fill, ask, hub, rules, judge, logRun, pull, pushState };
