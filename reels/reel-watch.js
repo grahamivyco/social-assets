@@ -101,8 +101,19 @@ Write:
   const out = JSON.parse((await res.json()).choices[0].message.content);
   // House rules the model can miss: one accent word, link on its own line after a blank line, no em dashes.
   const oneAccent = s => { let n = 0; return String(s).replace(/\*([^*]+)\*/g, (m, w) => (n++ ? w : m)); };
-  out.hook = oneAccent(out.hook.replace(/—/g, ',').trim());
-  out.headline = oneAccent(out.headline.replace(/\\n/g, '\n').replace(/—/g, ',').trim()) || out.hook;
+  // Also: straight apostrophes everywhere, and a headline the model left without an accent gets one.
+  const tidy = s => String(s).replace(/[\u2018\u2019]/g, "'").replace(/[\u201c\u201d]/g, '"');
+  const accent = s => {
+    if (/\*[^*]+\*/.test(s)) return s;
+    const long = (s.match(/[A-Za-z']+/g) || []).reduce((a, b) => (b.length > a.length ? b : a), '');
+    let done = false;
+    return s.replace(/[A-Za-z']+/g, w => (!done && w === long ? (done = true, `*${w}*`) : w));
+  };
+  out.hook = oneAccent(tidy(out.hook).replace(/—/g, ',').trim());
+  let head = oneAccent(tidy(out.headline).replace(/\\n/g, '\n').replace(/—/g, ',').trim());
+  if (!head || head.replace(/\*/g, '').split(/\s+/).length > 5) head = out.hook.replace(/\*/g, '').split(/\s+/).length <= 5 ? out.hook : head;
+  out.headline = accent(head || out.hook);
+  out.caption = tidy(out.caption);
   let cap = out.caption.replace(/\s*—\s*/g, ', ').replace(/https?:\/\/\S+/g, '').replace(/\n{3,}/g, '\n\n').trim();
   if (!/consult/i.test(cap)) cap += '\n\nBook a free 30-min consult:';
   out.caption = cap.replace(/:?\s*$/, ':') + `\n\n${C.link}`;

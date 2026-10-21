@@ -61,6 +61,7 @@ class Pop:
         self.W, self.H, self.dur, self.brand = W, H, dur, brand
         # edit.json "keywords" adds or overrides triggers per video, e.g. {"stitch": ["design", "Stitch"]}
         self.keywords = {**KEYWORDS, **{k.lower(): tuple(v) for k, v in (keywords or {}).items()}}
+        self.title_until = title_until if title else 0
         self.scenes = self._scenes(words)
         self.wipes = [{"t": t, "shape": s, "color": c} for t, (s, c) in
                       zip(part_starts[1:], WIPES * 10)] + [{"t": dur, "shape": "circle", "color": "cream"}]
@@ -78,6 +79,8 @@ class Pop:
             key = re.sub(r"[^a-z]", "", w["w"].lower())
             prev = re.sub(r"[^a-z']", "", out_prev.lower()) if (out_prev := w.get("_prev")) else ""
             if key == "talk" and prev not in ("let's", "lets"):  # only "let's talk", not "I talk to"
+                continue
+            if w["start"] < self.title_until + 0.2:  # never stack a graphic under the hook title
                 continue
             if key in self.keywords and self.keywords[key][0] not in seen:
                 seen.add(self.keywords[key][0])
