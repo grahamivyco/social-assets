@@ -1158,8 +1158,8 @@ function phoneReels_() {
       const video = String(r.media_url || '').split(/\s+/).filter(u => /^https:/.test(u))[0] || '';
       const row = { id, loop: 'phone', client: r.brand, kind: 'post from phone', status: 'todo',
         title: 'Post from your phone: ' + (r.hook || r.id), link: video,
-        body: 'Post ' + fmtWhen_(r.publish_at) + '.\n\n' + (sounds.length ? 'Sound (search it in the Reel audio picker, keep it low under your voice):\n' + sounds.join('\n') + '\n\n' : 'Sound: pick one with the trending arrow in the Reel audio picker, kept low under your voice.\n\n') + 'Caption:\n' + (r.caption || ''),
-        ask: 'Open the video on your phone, save it, post it in Instagram with a sound. Got it once it is live.', created: now, updated: now };
+        body: 'Post ' + fmtWhen_(r.publish_at) + '.\n\n' + (/^y(es)?$/i.test(String(r.trial || '')) ? 'Trial Reel: on the share screen turn on Trial, so it shows to non-followers first.\n\n' : '') + (sounds.length ? 'Sound (search it in the Reel audio picker, keep it low under your voice):\n' + sounds.join('\n') + '\n\n' : 'Sound: pick one with the trending arrow in the Reel audio picker, kept low under your voice.\n\n') + 'Caption:\n' + (r.caption || ''),
+        ask: 'Open the video on your phone, save it, post it in Instagram with a sound' + (/^y(es)?$/i.test(String(r.trial || '')) ? ' and Trial on' : '') + '. Got it once it is live.', created: now, updated: now };
       loops.sh.appendRow(loops.head.map(h => safeCell_(row[h])));
       loops.rows.push(row);
     });
