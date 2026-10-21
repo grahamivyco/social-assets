@@ -31,6 +31,9 @@ On its first start the watcher marks everything already in Downloads as seen, so
 ## Other clients
 Set `"brand": "ngm"` (or another slug) in `config.json`. Today the watcher makes Open Frame Reels by default. A client Reel also needs that client's fonts in `brands/<slug>/fonts/` on the Mac, and its own Reel graphics from `brands/design-notes.md`.
 
+## Private copy rules
+Put `"copyRules": "..."` in `config.json` (not in git) for things the AI must never write, such as personal topics to keep out of captions.
+
 ## Presets
 Set `"preset": "one-take"` in `config.json` for the plain one-take look (no cuts beyond head and tail, no graphics or sound effects, static title box, small white captions). Leave it out for the full edit. See `editor/REEL-RULES.md`.
 
