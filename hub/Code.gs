@@ -158,7 +158,7 @@ const STUDIO_CODE_MIN = 15;
 const GOOGLE_CLIENT_ID = '444041586250-vmsnmvs3glhetpoidhb11r4g7ds4rfd8.apps.googleusercontent.com';
 const SESSION_HEAD = ['session', 'email', 'role', 'brand', 'created', 'expires', 'last_used'];
 // What a signed-in admin can run. Each takes the admin key first; the Studio never sees the key, the server adds it.
-const STUDIO_ADMIN_FNS = { getDashboard, adminPost, adminTopic, adminCaption, adminReply, adminEngage, adminLead, adminPhoto, adminNotifyClient, adminGraphic, adminLoop, studioResults, studioReels, studioStatus, adminReelAsk, studioApprovals, adminApproval, adminNudge, studioClients, studioClient };
+const STUDIO_ADMIN_FNS = { getDashboard, adminPost, adminTopic, adminCaption, adminReply, adminEngage, adminLead, adminPhoto, adminNotifyClient, adminGraphic, adminLoop, studioResults, studioReels, studioStatus, adminReelAsk, studioApprovals, adminApproval, adminNudge, studioClients, studioClient, studioLoops };
 
 function studioApi_(b) {
   try {
@@ -430,6 +430,40 @@ function studioStatus(key) {
   const n8n = t ? t.rows.filter(r => r.check && r.check !== 'heartbeat').map(r => ({ label: r.label || r.check, status: String(r.status).toLowerCase(),
     detail: r.detail, link: /^https:/.test(r.link || '') ? r.link : '', when: fmtWhen_(r.updated_at) })) : [];
   return { mac: macStatus_(), n8n, n8nLast: hb ? fmtWhen_(hb.updated_at) : '', n8nStale: !hb || !within_(hb.updated_at, 2 / 24) };
+}
+
+// Studio v1 Loops page: one tile per loop and client from the Loop runs tab (last 30 days), with a square per day for
+// the last 7 (0 = didn't run, 1 = ok, 2 = check, 3 = failed), the last run's output, and what went wrong if it broke.
+// n8n workflows from the Health tab come along as tiles too (no squares, they only report their current state).
+function studioLoops(key) {
+  checkKey_(key);
+  const names = {}, sh = SpreadsheetApp.openById(hubId_()).getSheetByName('Loop runs');
+  clients_().forEach(c => { names[c.brand] = c.client; });
+  const day = d => Utilities.formatDate(new Date(d), TZ, 'yyyy-MM-dd');
+  const days = [6, 5, 4, 3, 2, 1, 0].map(i => day(Date.now() - i * 864e5));
+  const lev = s => /fail|error/i.test(s) ? 3 : /check|warn/i.test(s) ? 2 : 1;
+  const loops = {};
+  if (sh) table_(hubId_(), 'Loop runs').rows.filter(r => r.loop && within_(r.at, 30)).forEach(r => {
+    const k = r.loop + '|' + (r.client || '');
+    const x = loops[k] || (loops[k] = { loop: r.loop, client: names[r.client] || r.client || '', days: days.map(() => 0), runs: [] });
+    const i = days.indexOf(day(r.at));
+    if (i >= 0) x.days[i] = Math.max(x.days[i], lev(r.status));
+    x.runs.push({ at: String(r.at), state: lev(r.status), made: num_(r.made) || 0, kept: num_(r.kept) || 0, cards: num_(r.cards) || 0, note: String(r.note || '') });
+  });
+  const out = Object.keys(loops).map(k => {
+    const x = loops[k];
+    x.runs.sort((a, b) => b.at.localeCompare(a.at));
+    const last = x.runs[0];
+    const line = [last.made && last.made + ' made', last.kept && last.kept + ' kept', last.cards && last.cards + ' to look at'].filter(Boolean).join(' · ') || last.note.slice(0, 70);
+    return { loop: x.loop, client: x.client, days: x.days, state: last.state, last: fmtWhen_(last.at), line, wrong: last.state > 1 ? last.note : '',
+      runs: x.runs.slice(0, 6).map(r => ({ at: fmtWhen_(r.at), state: r.state, note: r.note || [r.made + ' made', r.kept + ' kept'].join(', ') })) };
+  });
+  const st = studioStatus(key);
+  st.n8n.forEach(r => out.push({ loop: r.label, client: 'Workflow (n8n)', days: null, state: r.status === 'ok' ? 1 : r.status === 'warn' ? 2 : 3,
+    last: r.when, line: r.status === 'ok' ? '' : r.detail, wrong: r.status === 'ok' ? '' : r.detail, link: r.link, runs: [] }));
+  out.sort((a, b) => b.state - a.state || a.client.localeCompare(b.client) || a.loop.localeCompare(b.loop));
+  return { loops: out, mac: st.mac, n8nLast: st.n8nLast, n8nStale: st.n8nStale,
+    log: sh ? 'https://docs.google.com/spreadsheets/d/' + hubId_() + '/edit#gid=' + sh.getSheetId() : '' };
 }
 
 function macStatus_() {
