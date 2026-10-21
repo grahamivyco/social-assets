@@ -158,7 +158,7 @@ const STUDIO_CODE_MIN = 15;
 const GOOGLE_CLIENT_ID = '444041586250-vmsnmvs3glhetpoidhb11r4g7ds4rfd8.apps.googleusercontent.com';
 const SESSION_HEAD = ['session', 'email', 'role', 'brand', 'created', 'expires', 'last_used'];
 // What a signed-in admin can run. Each takes the admin key first; the Studio never sees the key, the server adds it.
-const STUDIO_ADMIN_FNS = { getDashboard, adminPost, adminTopic, adminCaption, adminReply, adminEngage, adminLead, adminPhoto, adminNotifyClient, adminGraphic, adminLoop, studioResults, studioReels, studioStatus, adminReelAsk, studioApprovals, adminApproval, adminNudge };
+const STUDIO_ADMIN_FNS = { getDashboard, adminPost, adminTopic, adminCaption, adminReply, adminEngage, adminLead, adminPhoto, adminNotifyClient, adminGraphic, adminLoop, studioResults, studioReels, studioStatus, adminReelAsk, studioApprovals, adminApproval, adminNudge, studioClients, studioClient };
 
 function studioApi_(b) {
   try {
@@ -184,6 +184,7 @@ function studioApi_(b) {
       if (b.name === 'getClientProjects') return { out: clientProjects_(c) };
       if (b.name === 'clientDecide') return { out: clientDecide_(c, (args[0] || []).map(String), args[1], args[2] || '') };
       if (b.name === 'getClientApprovals') return { out: clientApprovals_(c) };
+      if (b.name === 'getClientPage') return { out: clientPage_(c) };
       if (b.name === 'clientApproval') return { out: withLock_(() => clientApproval_(c, String(args[0] || ''), String(args[1] || ''), args[2] || '')) };
       throw new Error('Unknown request');
     }
@@ -1344,6 +1345,12 @@ function studioApprovals(key) {
     done: rows.filter(r => recent_(r, 7)).sort((a, b) => String(b.updated).localeCompare(String(a.updated))).map(view) };
 }
 
+// The same for one client, straight from their Queue sheet.
+function clientExtras_(c) {
+  const q = c.sheet_id && table_(c.sheet_id, 'Queue');
+  return q ? extras_(queueDecisions_(c, q, approvalProjects_()).map(d => [c, d])) : {};
+}
+
 // id -> { text, media } for rows that come from a Queue sheet.
 function extras_(ds) {
   const out = {};
@@ -1363,7 +1370,7 @@ function adminApproval(key, id, label, comment) {
 // A client's page: Ready for you (waiting on them), Coming up (in the works or being redone), and the last month's answers.
 function clientApprovals_(c) {
   const rows = approvalsTable_().rows.filter(r => r.id && r.client === c.client);
-  const q = c.sheet_id && table_(c.sheet_id, 'Queue'), ex = q ? extras_(queueDecisions_(c, q, approvalProjects_()).map(d => [c, d])) : {};
+  const ex = clientExtras_(c);
   const view = r => { const o = approvalView_(r, ex); if (r.status !== 'client') o.buttons = []; return o; };
   return { ready: rows.filter(r => r.status === 'client').sort(byDue_).map(view),
     coming: rows.filter(r => r.status === 'planned' || r.status === 'changes').sort(byDue_).map(view),
@@ -1375,6 +1382,37 @@ function clientApproval_(c, id, label, comment) {
   if (r.client !== c.client) throw new Error('That item moved or was removed. Refresh the page.');
   if (r.status !== 'client') throw new Error('This one was already answered. Refresh the page.');
   return answerApproval_(t, r, label, comment, false);
+}
+
+// ---------- Studio v1: the client page and Graham's Clients list ----------
+// Clients tab link columns (all optional, https only): pay_url (the invoice or payment page), files_url (their Drive
+// "Finished" folder), report_url (the monthly report, set by the report run). Each shows as a button on the client page.
+function clientPage_(c) {
+  return { client: c.client, studio: !!c.studio, approvals: clientApprovals_(c), projects: clientProjects_(c),
+    links: { pay: c.pay_url || '', files: c.files_url || '', report: /^https:\/\//.test(c.report_url) ? c.report_url : '' } };
+}
+
+// One tile per client: what waits on them, what waits on Graham, where their main project is.
+function studioClients(key) {
+  checkKey_(key);
+  const rows = approvalsTable_().rows.filter(r => r.id);
+  return clients_().map(c => {
+    const P = clientProjects_(c), p = P.projects.find(x => !x.done);
+    return { client: c.client, brand: c.brand, studio: c.studio, contact: !!c.contact_email,
+      waiting: rows.filter(r => r.client === c.client && r.status === 'client').length,
+      needs: rows.filter(r => r.client === c.client && r.status === 'draft' && r.kind !== 'reply').length,
+      project: p ? { name: p.project, stage: p.stage >= 0 ? P.stages[p.stage] : '' } : null };
+  });
+}
+
+// Graham's view of one client: their page exactly as they see it, plus what of theirs waits on him.
+function studioClient(key, client) {
+  checkKey_(key);
+  const c = clients_().find(x => x.client === client || x.brand === client);
+  if (!c) throw new Error('That client moved or was removed. Refresh the page.');
+  const page = clientPage_(c), ex = clientExtras_(c);
+  page.needs = approvalsTable_().rows.filter(r => r.id && r.client === c.client && r.status === 'draft' && r.kind !== 'reply').sort(byDue_).map(r => approvalView_(r, ex));
+  return page;
 }
 
 // Writes the answer (status, answer, comment, updated), then runs the sync for Queue and Inbox rows so the post or reply moves now, not at the next hourly run.
@@ -1970,6 +2008,7 @@ function clients_() {
   return t.rows.filter(r => r.brand).map(r => ({
     client: r.client || r.brand, brand: r.brand, sheet_id: r.sheet_id || hubId_(),
     contact_email: r.contact_email || '', report_url: r.report_url || '', client_approves: /^(y|yes|true)$/i.test(r.client_approves || ''), studio: /^(y|yes|true)$/i.test(r.studio || ''),
+    pay_url: /^https:\/\//.test(r.pay_url || '') ? r.pay_url : '', files_url: /^https:\/\//.test(r.files_url || '') ? r.files_url : '',
     reel_music: String(r.reel_music || (r.brand === 'open-frame' ? 'app' : 'auto')).toLowerCase(),
   }));
 }
