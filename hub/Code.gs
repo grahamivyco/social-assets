@@ -187,7 +187,14 @@ function studioApi_(b) {
       if (b.name === 'clientDecide') return { out: clientDecide_(c, (args[0] || []).map(String), args[1], args[2] || '') };
       if (b.name === 'getClientApprovals') return { out: clientApprovals_(c) };
       if (b.name === 'getClientPage') return { out: clientPage_(c) };
-      if (b.name === 'getClientCalendar') return { out: calendar_(c.client, String(args[0] || '')) };
+      if (b.name === 'getClientCalendar') {
+        // Clients see what's coming and what went out, not Graham's private drafts: Graham-only drafts and replies are left out,
+        // and drafts read as planned.
+        const cal = calendar_(c.client, String(args[0] || ''));
+        const ok = {}; approvalsTable_().rows.forEach(r => { ok[r.id] = /^y/i.test(r.client_ok || ''); });
+        cal.items = cal.items.filter(i => ok[i.id] || (i.kind !== 'reply' && (i.status === 'planned' || i.status === 'approved'))).map(i => Object.assign({}, i, { status: i.status === 'draft' ? 'planned' : i.status }));
+        return { out: cal };
+      }
       if (b.name === 'clientApproval') return { out: withLock_(() => clientApproval_(c, String(args[0] || ''), String(args[1] || ''), args[2] || '')) };
       throw new Error('Unknown request');
     }
