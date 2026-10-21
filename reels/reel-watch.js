@@ -87,10 +87,12 @@ Write:
 - alt_text: one plain sentence describing what is on screen and what it is about, for screen readers, using the main keyword (e.g. "Graham from Open Frame talking to the camera about nonprofit marketing.").
 - topic: 2 to 4 words naming the video, for a file name.
 - scenes: 2 to 4 small animated graphics, one per idea in the video, each fired on a word that is actually spoken (copy it exactly from the transcript, one word, no ~~struck~~ words). kind is one of: marketing (a screen going off), design (an artboard), brand (a swatch fan), website (a browser window), social (a phone with likes), send (a paper airplane landing on "Done", for a call to talk). Use each kind once. label: 1 or 2 words shown with it.`;
+  // config "copyRules": private house rules for the words (e.g. topics never to mention). Kept in config.json, not in git.
+  const rules = `\n\nHouse rules for everything you write: don't lead with AI, say "systems". Only use facts that are in the transcript.${C.copyRules ? '\n' + C.copyRules : ''}`;
   const res = await fetch(C.llm, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      model: C.model, temperature: 0.4, messages: [{ role: 'user', content: prompt }],
+      model: C.model, temperature: 0.4, messages: [{ role: 'user', content: prompt + rules }],
       response_format: { type: 'json_schema', json_schema: { name: 'reel', strict: true, schema: {
         type: 'object', additionalProperties: false, required: ['hook', 'headline', 'caption', 'keywords', 'alt_text', 'topic', 'scenes'],
         properties: { hook: { type: 'string' }, headline: { type: 'string' }, caption: { type: 'string' }, topic: { type: 'string' },
