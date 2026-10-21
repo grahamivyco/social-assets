@@ -10,6 +10,8 @@ const HERE = __dirname;
 const HOME = os.homedir();
 const C = {
   downloads: `${HOME}/Downloads`,
+  // Graham's Downloads sorter moves videos into Downloads/Video within a minute, so watch both.
+  also: [`${HOME}/Downloads/Video`],
   work: `${HOME}/open-frame/reels/work`,
   deliver: `${HOME}/Downloads/Open Frame LLC & Clients/Reels`,   // outside "Open Frame", which the Downloads sorter sweeps
   repo: `${HOME}/social-assets`,          // git clone of grahamivyco/social-assets with push access
@@ -38,13 +40,28 @@ const slug = s => String(s).toLowerCase().replace(/\*/g, '').replace(/[^a-z0-9]+
 const state = readJSON(STATE, null) || { seen: {}, started: false };
 function save() { fs.writeFileSync(STATE, JSON.stringify(state, null, 1)); }
 
-function listVideos() {
-  return fs.readdirSync(C.downloads).filter(f => VIDEO.test(f) && !f.startsWith('.'))
-    .map(f => path.join(C.downloads, f)).filter(p => { try { return fs.statSync(p).isFile(); } catch { return false; } });
+const DIRS = [C.downloads, ...(C.also || [])];
+function listVideos(dirs = DIRS) {
+  return dirs.filter(d => fs.existsSync(d)).flatMap(d => fs.readdirSync(d).filter(f => VIDEO.test(f) && !f.startsWith('.'))
+    .map(f => path.join(d, f))).filter(p => { try { return fs.statSync(p).isFile(); } catch { return false; } });
 }
+// A clip is the same clip after the sorter moves it, so it's remembered by name and size, not path.
+const key = (file, size) => `${path.basename(file)}:${size}`;
 
-// First run: everything already in Downloads counts as seen, so only new AirDrops become Reels.
-if (!state.started) { for (const p of listVideos()) state.seen[p] = 'old'; state.started = true; save(); }
+// First run in each folder: what's already there counts as seen, so only new AirDrops become Reels.
+// Clips from the last 6 hours still count as new (the sorter may have moved one before the watcher saw it).
+state.dirs = state.dirs || {};
+if (!state.started) { state.dirs[C.downloads] = true; }
+for (const d of DIRS) {
+  if (state.dirs[d] || !fs.existsSync(d)) continue;
+  for (const p of listVideos([d])) {
+    const st = fs.statSync(p);
+    if (!state.started || Date.now() - Math.max(st.mtimeMs, st.ctimeMs) > 6 * 3600e3) state.seen[key(p, st.size)] = 'old';
+  }
+  state.dirs[d] = true;
+}
+if (!state.started) for (const p of listVideos([C.downloads])) state.seen[key(p, fs.statSync(p).size)] = 'old';
+state.started = true; save();
 
 function probe(file) {
   const j = JSON.parse(execFileSync('ffprobe', ['-v', 'error', '-show_entries', 'format=duration:stream=codec_type',
@@ -231,14 +248,23 @@ async function tick() {
   busy = true;
   try {
     for (const file of listVideos()) {
-      if (state.seen[file]) continue;
-      const st = fs.statSync(file);
+      let st;
+      try { st = fs.statSync(file); } catch { continue; }  // moved away mid-scan
+      const k = key(file, st.size);
+      if (state.seen[k] || (state.seen[file] && state.seen[file] !== 'failed')) continue;
       // AirDrop writes the file over a few seconds: wait until its size holds still for one poll.
       if (sizes[file] !== st.size || Date.now() - st.mtimeMs < 20000) { sizes[file] = st.size; continue; }
-      state.seen[file] = 'working'; save();
-      try { state.seen[file] = await makeReel(file); }
+      state.seen[k] = 'working'; save();
+      // Work from a private copy, so the sorter moving the original mid-edit can't break it.
+      const copy = path.join(C.work, 'incoming', path.basename(file));
+      try {
+        fs.mkdirSync(path.dirname(copy), { recursive: true });
+        fs.copyFileSync(file, copy);
+        state.seen[k] = await makeReel(copy);
+        fs.rmSync(copy, { force: true });
+      }
       catch (e) {
-        state.seen[file] = 'failed';
+        state.seen[k] = 'failed';
         log('FAILED', file, e.message);
         await tell({ kind: 'error', source: path.basename(file), detail: e.message }).catch(err => log('could not tell n8n:', err.message));
       }
@@ -247,6 +273,6 @@ async function tick() {
   } finally { busy = false; }
 }
 
-log('watching', C.downloads);
+log('watching', DIRS.join(', '));
 setInterval(() => tick().catch(e => log('tick error', e.message)), C.pollSeconds * 1000);
 tick();
