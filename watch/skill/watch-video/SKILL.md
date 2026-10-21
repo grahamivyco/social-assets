@@ -8,7 +8,7 @@ description: Watch, transcribe and break down any video link (Instagram Reel, Ti
 Free tools on Graham's Mac: yt-dlp, ffmpeg, Parakeet speech model, Apple Vision OCR. Code: `~/social-assets/watch/`.
 
 ## 1. Get the watch folder
-- Link or file: run `python3 ~/social-assets/watch/watch.py "<link or path>" --note "<why he saved it>"`.
+- Link or file: run `python3.13 ~/social-assets/watch/watch.py "<link or path>" --note "<why he saved it>"`.
   - If it says the download needs a login, run it again with `--cookies chrome`.
 - Already watched (shared from his phone): look in `~/Downloads/Open Frame LLC & Clients/Watched/` (newest folder, or `index.md`).
 - From a cloud thread: request folder access to `~/Downloads/Open Frame LLC & Clients/Watched` on his Mac and stage `report.md` + `contact-sheet.jpg`.
@@ -18,7 +18,7 @@ Free tools on Graham's Mac: yt-dlp, ffmpeg, Parakeet speech model, Apple Vision 
 2. `contact-sheet.jpg` once: every shot in one image.
 3. For edit questions (transitions, motion, zooms, graphics, text timing, spacing, color, sound sync): `edit.md`, then `timeline.jpg` (frames over cut, motion, text, caption, speech and audio-hit bars) and `transitions.jpg` (each transition frame by frame, 0.3 s either side). Trust the pictures over the labels: the machine labels are a first guess.
 4. Open single files in `frames/` only to check a detail. Never read `video.mp4`.
-- Older folder without `edit.md`: run `python3 ~/social-assets/watch/edit.py "<folder>"`.
+- Older folder without `edit.md`: run `python3.13 ~/social-assets/watch/edit.py "<folder>"`.
 
 ## 3. Write the breakdown
 Replace the `## Analysis` section of `report.md` with these headings, short bullets, no hype words:
