@@ -22,8 +22,12 @@ def sheet(name, tab, x, y, op='read', cols=None, **extra):
          'sheetName': {'__rl': True, 'mode': 'name', 'value': tab}, 'options': {}, 'authentication': 'serviceAccount'}
     if op != 'read':
         p['operation'] = op
+        # n8n needs the column schema on write nodes, or it fails with 'Could not get parameter "columns.schema"'
+        schema = [{'id': c, 'displayName': c, 'required': False, 'defaultMatch': False, 'display': True,
+                   'type': 'string', 'canBeUsedToMatch': True, 'removed': False} for c in cols]
         p['columns'] = {'mappingMode': 'defineBelow', 'value': {c: '={{ $json.%s }}' % c for c in cols},
-                        'matchingColumns': ['handle'] if op == 'appendOrUpdate' else []}
+                        'matchingColumns': ['handle'] if op == 'appendOrUpdate' else [], 'schema': schema,
+                        'attemptToConvertTypes': False, 'convertFieldsToString': False}
     add(name, 'n8n-nodes-base.googleSheets', p, x, y, credentials=GOOGLE, **extra)
 
 def ig(name, x, y, query, **extra):
