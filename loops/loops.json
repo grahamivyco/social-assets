@@ -520,6 +520,22 @@
    "status": "new"
   },
   {
+   "id": "boost",
+   "name": "Boost check",
+   "layer": "runtime",
+   "where": "pm2 loops (loops/boost.js)",
+   "run": "boost",
+   "schedule": "2 10:00",
+   "trigger": "2nd of the month 10:00, after the report",
+   "work": "Find a post that did 3x the client's usual this month",
+   "check": "6+ posts, 3x the median, only clients with boost_budget, never the same post twice",
+   "card": "ad_spend row in Approvals (client signs off), then a Got it card to set up the boost",
+   "feeds": [
+    "analytics"
+   ],
+   "status": "new"
+  },
+  {
    "id": "health",
    "name": "Health check",
    "layer": "runtime",
