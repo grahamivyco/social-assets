@@ -160,7 +160,7 @@ const STUDIO_CODE_MIN = 15;
 const GOOGLE_CLIENT_ID = '444041586250-vmsnmvs3glhetpoidhb11r4g7ds4rfd8.apps.googleusercontent.com';
 const SESSION_HEAD = ['session', 'email', 'role', 'brand', 'created', 'expires', 'last_used'];
 // What a signed-in admin can run. Each takes the admin key first; the Studio never sees the key, the server adds it.
-const STUDIO_ADMIN_FNS = { getDashboard, adminPost, adminTopic, adminCaption, adminReply, adminEngage, adminLead, adminPhoto, adminNotifyClient, adminGraphic, adminLoop, studioResults, studioReels, studioStatus, adminReelAsk, studioApprovals, adminApproval, adminNudge, studioClients, studioClient, studioLoops, adminClientSet, adminProjectSet, adminApprovalNew, adminAgreementSet, adminPaymentAdd, adminPaymentPaid, studioMoney };
+const STUDIO_ADMIN_FNS = { getDashboard, adminPost, adminTopic, adminCaption, adminReply, adminEngage, adminLead, adminPhoto, adminNotifyClient, adminGraphic, adminLoop, studioResults, studioReels, studioStatus, adminReelAsk, studioApprovals, adminApproval, adminNudge, studioClients, studioClient, studioLoops, adminClientSet, adminProjectSet, adminApprovalNew, adminAgreementSet, adminPaymentAdd, adminPaymentPaid, studioMoney, studioCalendar };
 
 function studioApi_(b) {
   try {
@@ -187,6 +187,7 @@ function studioApi_(b) {
       if (b.name === 'clientDecide') return { out: clientDecide_(c, (args[0] || []).map(String), args[1], args[2] || '') };
       if (b.name === 'getClientApprovals') return { out: clientApprovals_(c) };
       if (b.name === 'getClientPage') return { out: clientPage_(c) };
+      if (b.name === 'getClientCalendar') return { out: calendar_(c.client, String(args[0] || '')) };
       if (b.name === 'clientApproval') return { out: withLock_(() => clientApproval_(c, String(args[0] || ''), String(args[1] || ''), args[2] || '')) };
       throw new Error('Unknown request');
     }
@@ -1466,6 +1467,17 @@ function studioClient(key, client) {
     report_url: c.report_url, client_approves: c.client_approves, kinds: APPROVAL_KINDS.filter(k => k !== 'reply'), stages: PROJECT_STAGES };
   return page;
 }
+
+// ---------- Studio: content calendar ----------
+// Everything with a date in the Approvals tab for one month (yyyy-MM): planned, drafts, waiting, approved.
+// Skipped items are left out. client '' = every client (Graham only).
+function calendar_(client, month) {
+  if (!/^\d{4}-\d{2}$/.test(month)) month = Utilities.formatDate(new Date(), TZ, 'yyyy-MM');
+  const items = approvalsTable_().rows.filter(r => r.id && (!client || r.client === client) && r.status !== 'skipped' && String(r.due).slice(0, 7) === month)
+    .sort(byDue_).map(r => ({ id: r.id, client: r.client, kind: r.kind, title: r.title, due: String(r.due).slice(0, 10), status: r.status }));
+  return { month, items };
+}
+function studioCalendar(key, client, month) { checkKey_(key); return calendar_(String(client || ''), String(month || '')); }
 
 // ---------- Studio: agreements and payments ----------
 // Agreements tab: one row per plan or project a client agreed to. item = a plan or project name from /pricing
