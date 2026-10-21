@@ -169,7 +169,9 @@ async function makeReel(file) {
     const w = String(sc.word).toLowerCase().replace(/[^a-z]/g, '');
     if (w && spoken.has(w)) keywords[w] = [sc.kind, String(sc.label).slice(0, 18)];
   }
-  Object.assign(edit, { brand: C.brand, name: id, hook: copy.hook, pop: true, cutout: true, sfx: true, keywords,
+  // config "preset" (e.g. "one-take") picks an editor preset; the preset turns graphics, cut-out and sound off itself.
+  const look = C.preset ? { preset: C.preset } : { pop: true, cutout: true, sfx: true, keywords };
+  Object.assign(edit, { brand: C.brand, name: id, hook: copy.hook, ...look,
     cover: { ...(edit.cover || {}), headline: copy.headline } });
   fs.writeFileSync(path.join(work, 'edit.json'), JSON.stringify(edit, null, 2));
   run(C.python, [thedit, 'render', work], { env: editorEnv() });
