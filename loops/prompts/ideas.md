@@ -17,6 +17,9 @@ What is working for big creators right now (viral pattern report):
 Recent hooks from viral videos:
 {{hooks}}
 
+Saved templates (formats that won before, reuse their shape):
+{{winners}}
+
 The owner said YES to these past ideas:
 {{liked}}
 

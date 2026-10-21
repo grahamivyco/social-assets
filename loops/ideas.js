@@ -29,10 +29,11 @@ async function runClient(client) {
   const liked = past.filter(r => ['yes', 'change', 'scripted'].includes(r.status)).slice(-15).map(r => r.title + (r.note ? ` (note: ${r.note})` : ''));
   const passed = past.filter(r => r.status === 'pass').slice(-15).map(r => r.title);
   const lessons = fs.readFileSync(path.join(L.STATE, 'lessons.md'), 'utf8').split('\n').filter(l => l.startsWith('- ')).slice(-15).map(l => l.slice(2));
+  const winners = L.readJSON(path.join(L.STATE, client.id, 'winners.json'), []).filter(w => w.status === 'saved').slice(-8).map(w => `${w.type}: "${w.caption.slice(0, 120)}"`);
   const p = patterns();
   const vars = { ...client, pillars: client.pillars.join(', '), formats: client.formats.join(', '), count: PITCH,
     top: (stats.top || []).map(postLine), weakest: (stats.weakest || []).map(postLine),
-    patterns: p.report, hooks: p.hooks, liked, passed, lessons };
+    patterns: p.report, hooks: p.hooks, liked, passed, lessons, winners };
 
   let made = 0, kept = [];
   for (let attempt = 0; attempt < 2 && kept.length < KEEP; attempt++) {

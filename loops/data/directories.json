@@ -1,0 +1,22 @@
+{
+  "_how": "Free listings only. for: agency (Open Frame and other service businesses), local (any business with a city), nonprofit (client orgs). The directories loop suggests 2 a month per client that hasn't done or skipped them.",
+  "list": [
+    { "id": "google-business", "name": "Google Business Profile", "url": "https://business.google.com/", "for": ["agency", "local", "nonprofit"], "why": "Shows you in Google Maps and local search, and feeds Google's AI answers." },
+    { "id": "bing-places", "name": "Bing Places", "url": "https://www.bingplaces.com/", "for": ["agency", "local", "nonprofit"], "why": "ChatGPT search and Copilot lean on Bing. You can import from Google in one click." },
+    { "id": "apple-business", "name": "Apple Business Connect", "url": "https://businessconnect.apple.com/", "for": ["agency", "local", "nonprofit"], "why": "Shows you in Apple Maps and Siri answers on iPhones." },
+    { "id": "linkedin-page", "name": "LinkedIn company page", "url": "https://www.linkedin.com/company/setup/new/", "for": ["agency", "nonprofit"], "why": "Where nonprofit staff and boards check who you are." },
+    { "id": "clutch", "name": "Clutch", "url": "https://clutch.co/", "for": ["agency"], "why": "Agency directory AI tools often cite for 'best agency for X' questions. Free profile." },
+    { "id": "designrush", "name": "DesignRush", "url": "https://www.designrush.com/", "for": ["agency"], "why": "Agency directory with free listings, often cited in AI answers." },
+    { "id": "goodfirms", "name": "GoodFirms", "url": "https://www.goodfirms.co/", "for": ["agency"], "why": "Another agency directory with a free profile." },
+    { "id": "sortlist", "name": "Sortlist", "url": "https://www.sortlist.com/", "for": ["agency"], "why": "Agency directory strong in Europe, useful for Barcelona." },
+    { "id": "behance", "name": "Behance", "url": "https://www.behance.net/", "for": ["agency"], "why": "Portfolio site that ranks well for design searches." },
+    { "id": "dribbble", "name": "Dribbble", "url": "https://dribbble.com/", "for": ["agency"], "why": "Design portfolio, people search it to hire designers." },
+    { "id": "nextdoor", "name": "Nextdoor business page", "url": "https://business.nextdoor.com/", "for": ["local", "nonprofit"], "why": "Neighbors recommend local services here." },
+    { "id": "yelp", "name": "Yelp for Business", "url": "https://biz.yelp.com/", "for": ["local"], "why": "Free listing that feeds Apple Maps and many AI answers." },
+    { "id": "candid", "name": "Candid (GuideStar) profile", "url": "https://candid.org/", "for": ["nonprofit"], "why": "Funders and donors check it. A complete profile earns a transparency seal." },
+    { "id": "greatnonprofits", "name": "GreatNonprofits", "url": "https://greatnonprofits.org/", "for": ["nonprofit"], "why": "Reviews from members and volunteers, often cited in AI answers." },
+    { "id": "volunteermatch", "name": "VolunteerMatch", "url": "https://www.volunteermatch.org/", "for": ["nonprofit"], "why": "Brings in volunteers and adds a trusted mention." },
+    { "id": "idealist", "name": "Idealist", "url": "https://www.idealist.org/", "for": ["nonprofit"], "why": "Free org profile for volunteer and job listings." },
+    { "id": "google-nonprofits", "name": "Google for Nonprofits", "url": "https://www.google.com/nonprofits/", "for": ["nonprofit"], "why": "Unlocks free Workspace, YouTube nonprofit tools and Ad Grants." }
+  ]
+}

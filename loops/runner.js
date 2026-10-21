@@ -2,6 +2,7 @@
 //   node runner.js daemon          check every minute: run scheduled loops (loops.json "schedule") and "every N min" loops
 //   node runner.js ideas [client]  run the weekly ideas loop now (all enabled clients, or one)
 //   node runner.js <loop> [client] run any loop in MODS now (ideas, scripts, engage, leads, site, site-collect)
+// Loops with "off": true in loops.json are skipped by the daemon (still runnable by hand).
 // Schedules use this Mac's clock. Last runs are kept in state/last-run.json so a restart never runs a loop twice.
 const fs = require('fs'), path = require('path');
 const L = require('./lib');
@@ -10,6 +11,10 @@ const MODS = {
   ideas: () => require('./ideas').run, scripts: () => require('./scripts').tick,
   engage: () => require('./engage').run, leads: () => require('./leads').run,
   site: () => require('./site').run, 'site-collect': () => require('./site').collect,
+  audio: () => require('./audio').run,
+  magnet: () => require('./magnet').tick, proposal: () => require('./proposal').tick, onboard: () => require('./onboard').run,
+  directories: () => require('./grow').directories, events: () => require('./grow').events, gbp: () => require('./grow').gbp, templates: () => require('./grow').templates,
+  proof: () => require('./later').proof, warmup: () => require('./later').warmup, retention: () => require('./later').retention, trends: () => require('./later').trends,
 };
 const LAST = path.join(L.STATE, 'last-run.json');
 const DAYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
@@ -31,7 +36,7 @@ async function tick() {
   busy = true;
   try {
     const now = new Date(), last = L.readJSON(LAST, {});
-    for (const loop of L.readJSON(path.join(L.HERE, 'loops.json'), { loops: [] }).loops.filter(l => l.run && MODS[l.run])) {
+    for (const loop of L.readJSON(path.join(L.HERE, 'loops.json'), { loops: [] }).loops.filter(l => l.run && MODS[l.run] && !l.off)) {
       if (!due(loop, last[loop.id], now)) continue;
       last[loop.id] = now.toISOString();
       fs.writeFileSync(LAST, JSON.stringify(last, null, 2));

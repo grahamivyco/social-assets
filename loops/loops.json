@@ -1,5 +1,5 @@
 {
- "_how": "Every loop in the system, one contract: trigger -> work -> self-check -> card (only if needed) -> feeds. layer runtime = runs on Graham's Mac (n8n, pm2, LM Studio). layer improve = Claude scheduled review in the Marketing project. run = the module runner.js calls; loops without it run elsewhere and are listed so the map and the weekly review see the whole system. status: live | built (needs a Mac step) | new | planned.",
+ "_how": "Every loop in the system, one contract: trigger -> work -> self-check -> card (only if needed) -> feeds. layer runtime = runs on Graham's Mac (n8n, pm2, LM Studio). layer improve = Claude scheduled review in the Marketing project. run = the module runner.js calls; loops without it run elsewhere and are listed so the map and the weekly review see the whole system. status: live | built (needs a Mac step) | new | planned | later. off: true = the runner skips it until there is data (posts, followers, clients).",
  "loops": [
   {
    "id": "analytics",
@@ -40,9 +40,26 @@
    "check": "Numbers computed, AI only summarises",
    "card": "none",
    "feeds": [
-    "ideas"
+    "ideas",
+    "audio"
    ],
    "status": "live"
+  },
+  {
+   "id": "audio",
+   "name": "Trending sounds",
+   "layer": "runtime",
+   "where": "pm2 loops (loops/audio.js)",
+   "run": "audio",
+   "schedule": "mon 12:30",
+   "trigger": "Mon 12:30, after the pattern report",
+   "work": "Sounds from this month's outliers, weighted by how far they beat normal; mood labels; every script gets a sound + backup",
+   "check": "Original-voice tracks dropped, only real names from the list, old sounds fade",
+   "card": "This week's sounds (Got it); sound line on each Film this card",
+   "feeds": [
+    "scripts"
+   ],
+   "status": "new"
   },
   {
    "id": "ideas",
@@ -184,6 +201,201 @@
     "report"
    ],
    "status": "new"
+  },
+  {
+   "id": "magnet",
+   "name": "Free site check",
+   "layer": "runtime",
+   "where": "pm2 loops (loops/magnet.js) + check/ form + Hub",
+   "run": "magnet",
+   "every": 5,
+   "trigger": "Someone fills in the free check form",
+   "work": "Runs the site check, publishes the report, Hub emails it with the booking link and adds them to Leads",
+   "check": "Report must have read the site; fixed email template, no AI",
+   "card": "New lead (Got it), only if it fails: couldn't check",
+   "feeds": [
+    "leads"
+   ],
+   "status": "new"
+  },
+  {
+   "id": "proposal",
+   "name": "Proposals",
+   "layer": "runtime",
+   "where": "pm2 loops (loops/proposal.js)",
+   "run": "proposal",
+   "every": 60,
+   "trigger": "A lead moves to consult held",
+   "work": "Picks the plan from call notes, builds the proposal page with rate card prices",
+   "check": "Plan must exist, prices only from the rate card, copy rules, one retry",
+   "card": "Send proposal email (Send / Edit)",
+   "feeds": [
+    "onboard"
+   ],
+   "status": "new"
+  },
+  {
+   "id": "onboard",
+   "name": "Onboarding",
+   "layer": "runtime",
+   "where": "pm2 loops (loops/onboard.js)",
+   "run": "onboard",
+   "schedule": "daily 09:00",
+   "trigger": "A lead is marked won",
+   "work": "Adds the client everywhere, then day 0/3/7/14/30/60/90 steps from the playbook",
+   "check": "Emails: rules, under 140 words, no we/our, one retry",
+   "card": "Email cards (Send / Edit) and Got it reminders",
+   "feeds": [
+    "ideas",
+    "report"
+   ],
+   "status": "new"
+  },
+  {
+   "id": "directories",
+   "name": "Directories",
+   "layer": "runtime",
+   "where": "pm2 loops (loops/grow.js)",
+   "run": "directories",
+   "schedule": "3 10:00",
+   "trigger": "3rd of the month",
+   "work": "2 free listings per client with a ready-to-paste description",
+   "check": "Rules, 120-600 characters",
+   "card": "Listing (Yes = listed, Pass = never)",
+   "feeds": [
+    "site"
+   ],
+   "status": "new"
+  },
+  {
+   "id": "events",
+   "name": "Local events",
+   "layer": "runtime",
+   "where": "pm2 loops (loops/grow.js)",
+   "run": "events",
+   "schedule": "mon 09:00",
+   "trigger": "Mondays",
+   "work": "Reads event feeds, scores fit, best 3",
+   "check": "Score 4+/5; feeds that fail 3 times switch off",
+   "card": "Event (Yes adds to calendar)",
+   "feeds": [
+    "leads"
+   ],
+   "status": "new"
+  },
+  {
+   "id": "gbp",
+   "name": "Google Business posts",
+   "layer": "runtime",
+   "where": "pm2 loops (loops/grow.js)",
+   "run": "gbp",
+   "schedule": "thu 10:00",
+   "trigger": "Thursdays",
+   "work": "Google Business update from the best post or an approved idea",
+   "check": "Rules, 200-800 characters",
+   "card": "Paste and post (Got it)",
+   "feeds": [
+    "site"
+   ],
+   "status": "new"
+  },
+  {
+   "id": "templates",
+   "name": "Template saver",
+   "layer": "runtime",
+   "where": "pm2 loops (loops/grow.js)",
+   "run": "templates",
+   "schedule": "fri 10:00",
+   "trigger": "Fridays",
+   "work": "Month's best post becomes a template candidate",
+   "check": "Score 10+ and not saved before",
+   "card": "Save as a template? (Yes / Pass)",
+   "feeds": [
+    "ideas"
+   ],
+   "status": "new"
+  },
+  {
+   "id": "money",
+   "name": "Money + goal bar",
+   "layer": "runtime",
+   "where": "n8n (business ops thread)",
+   "trigger": "Invoices and payments",
+   "work": "Invoices, paid? cards, income vs the $4k goal, goal bar image",
+   "check": "Owned by the business ops thread",
+   "card": "Paid? (Yes / Not yet)",
+   "feeds": [
+    "report"
+   ],
+   "status": "planned"
+  },
+  {
+   "id": "proof",
+   "name": "Proof posts",
+   "layer": "runtime",
+   "where": "pm2 loops (loops/later.js)",
+   "run": "proof",
+   "schedule": "3 11:00",
+   "off": true,
+   "trigger": "3rd of the month",
+   "work": "A client's numbers jump 20%+ -> case study carousel idea",
+   "check": "Only real numbers, rules",
+   "card": "Idea card (Yes -> script)",
+   "feeds": [
+    "scripts"
+   ],
+   "status": "later"
+  },
+  {
+   "id": "warmup",
+   "name": "Warm-up DMs",
+   "layer": "runtime",
+   "where": "pm2 loops (loops/later.js)",
+   "run": "warmup",
+   "schedule": "weekdays 11:00",
+   "off": true,
+   "trigger": "Weekdays",
+   "work": "People who show up 2+ times get a soft DM draft",
+   "check": "Rules, no pitch, no link",
+   "card": "DM draft (Got it)",
+   "feeds": [
+    "leads"
+   ],
+   "status": "later"
+  },
+  {
+   "id": "retention",
+   "name": "Client health",
+   "layer": "runtime",
+   "where": "pm2 loops (loops/later.js)",
+   "run": "retention",
+   "schedule": "5 09:00",
+   "off": true,
+   "trigger": "5th of the month",
+   "work": "Results trend, overdue approvals, quiet time -> health score",
+   "check": "Card only under 70/100",
+   "card": "Check-in needed (Got it)",
+   "feeds": [
+    "review"
+   ],
+   "status": "later"
+  },
+  {
+   "id": "trends",
+   "name": "Trend Reels",
+   "layer": "runtime",
+   "where": "pm2 loops (loops/later.js)",
+   "run": "trends",
+   "schedule": "daily 12:30",
+   "off": true,
+   "trigger": "Daily",
+   "work": "Fresh 5x+ outlier -> fast rebuild idea",
+   "check": "Rules, hook shape",
+   "card": "Idea card (Yes -> script)",
+   "feeds": [
+    "scripts"
+   ],
+   "status": "later"
   },
   {
    "id": "poster",

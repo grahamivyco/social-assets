@@ -90,15 +90,47 @@ async function logRun(run) {
 // Loops share state through the repo: the Mac pushes loops/state, the weekly review reads it and pushes lessons + prompt fixes.
 const git = (...a) => execFileSync('git', ['-C', C.repo, ...a], { encoding: 'utf8' });
 function pull() { try { git('pull', '--rebase', '--autostash', '-q'); } catch (e) { log('git pull failed:', e.message.split('\n')[0]); } }
-function pushState(msg) {
+function pushState(msg, extra = []) {
   if (!C.push) return;
+  const paths = ['loops/state', ...extra];
   try {
-    git('add', 'loops/state');
-    if (!git('status', '--porcelain', 'loops/state').trim()) return;
-    git('commit', '-q', '-m', msg, '--', 'loops/state');
+    git('add', ...paths);
+    if (!git('status', '--porcelain', ...paths).trim()) return;
+    git('commit', '-q', '-m', msg, '--', ...paths);
     pull();
     git('push', '-q');
   } catch (e) { log('git push failed:', e.message.split('\n')[0]); }
 }
 
-module.exports = { C, HERE, STATE, readJSON, log, slug, today, clients, fill, ask, hub, rules, judge, logRun, pull, pushState };
+// Put a page on GitHub Pages (public link, unguessable folder). Returns the https link. Pages takes about a minute to go live.
+const PAGES = 'https://grahamivyco.github.io/social-assets';
+function publish(dir, files, msg) {
+  const abs = path.join(C.repo, dir);
+  fs.mkdirSync(abs, { recursive: true });
+  Object.entries(files).forEach(([name, body]) => fs.writeFileSync(path.join(abs, name), body));
+  if (C.push) {
+    git('add', dir);
+    git('commit', '-q', '-m', msg || `Loops: publish ${dir}`, '--', dir);
+    pull();
+    git('push', '-q');
+  }
+  return `${PAGES}/${dir.replace(/\\/g, '/')}/`;
+}
+const token = (n = 10) => require('crypto').randomBytes(n).toString('hex').slice(0, n);
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+// Open Frame page shell for client-facing pages the loops make (proposals). Brand fonts and colors from brands/open-frame.
+function page(title, inner) {
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex"><title>${esc(title)}</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,500;1,9..144,500&family=Inter:wght@400;500;600&display=swap">
+<style>:root{--ink:#111110;--ink2:#4B4A46;--cream:#F3F1EA;--red:#F24333;--blue:#2F6BF0;--yellow:#F4BF3A;--green:#33AC66}
+*{box-sizing:border-box}body{margin:0;background:#fff;color:var(--ink);font:16px/1.6 Inter,Arial,sans-serif;padding:0 max(16px,env(safe-area-inset-left))}
+main{max-width:760px;margin:0 auto;padding:40px 0 64px;display:grid;gap:28px}h1,h2{font-family:Fraunces,Georgia,serif;font-weight:500;margin:0;line-height:1.1}
+h1{font-size:clamp(32px,5vw,48px)}h1 i{color:var(--red)}h2{font-size:24px}.logo{height:26px}.card{background:var(--cream);border:2.5px solid var(--ink);border-radius:16px;padding:22px}
+.price{font:500 40px Fraunces,Georgia,serif}.mute{color:var(--ink2)}ul,ol{margin:8px 0 0;padding-left:20px;display:grid;gap:6px}
+.btn{display:inline-block;background:var(--red);color:#fff;border:2.5px solid var(--ink);border-radius:999px;padding:12px 22px;font-weight:600;text-decoration:none}</style></head>
+<body><main><img class="logo" src="${PAGES}/brands/open-frame/open-frame-wordmark-horizontal.svg" alt="Open Frame">${inner}</main></body></html>`;
+}
+
+module.exports = { PAGES, publish, token, esc, page, C, HERE, STATE, readJSON, log, slug, today, clients, fill, ask, hub, rules, judge, logRun, pull, pushState };

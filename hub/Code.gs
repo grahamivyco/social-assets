@@ -49,7 +49,10 @@ const META_INBOX = 'https://business.facebook.com/latest/inbox/all';
 // "Loops" tab: cards from any loop in social-assets loops/ (thread "Self-running agent loops"). One contract for every loop:
 // status card (Yes / Change / Pass) or todo (Got it) -> yes | change | pass | done -> the loop reads the answer and marks it used.
 // "Loop runs" tab: one row per loop run (what it made, what passed its own check), read by the weekly improvement review.
-const LOOP_HEAD = ['id', 'loop', 'client', 'kind', 'title', 'body', 'why', 'ask', 'link', 'status', 'note', 'created', 'updated'];
+// to + subject = an email card (Send sends it from your Gmail). when = 'start|end' ISO = a calendar card (Yes adds it to your calendar).
+const LOOP_HEAD = ['id', 'loop', 'client', 'kind', 'title', 'body', 'why', 'ask', 'link', 'to', 'subject', 'when', 'status', 'note', 'created', 'updated'];
+// "Check requests" tab: the free site + AI search check form (social-assets check/). The Mac runs the check and the Hub emails the result.
+const CHECK_HEAD = ['id', 'at', 'name', 'org', 'email', 'site', 'status', 'score', 'report_url', 'note'];
 const RUN_HEAD = ['at', 'loop', 'client', 'status', 'made', 'kept', 'cards', 'note'];
 const GFX_HEAD = ['id', 'client', 'video', 'at', 'line', 'kind', 'params', 'idea', 'why_new', 'status', 'note', 'looks', 'pick', 'accent', 'checks', 'built', 'created', 'updated'];
 
@@ -121,6 +124,7 @@ function doPost(e) {
   let out;
   try {
     const b = JSON.parse((e && e.postData && e.postData.contents) || '{}');
+    if (b.fn === 'check') return ContentService.createTextOutput(JSON.stringify(withLock_(() => checkRequest_(b)))).setMimeType(ContentService.MimeType.JSON);
     checkKey_(b.key);
     if (b.fn === 'graphics') out = withLock_(() => graphicsApi_(b));
     else if (b.fn === 'loops') out = withLock_(() => loopsApi_(b));
@@ -171,6 +175,31 @@ function hubTab_(name, head) {
 }
 const safeCell_ = v => (v == null ? '' : typeof v === 'string' && /^[=+\-@]/.test(v) ? "'" + v : v);
 
+// Public: anyone can ask for a free check from the form. Light limits so it can't be used to spam.
+function checkRequest_(b) {
+  if (b.website_hp) return { ok: true };   // honeypot field: bots fill it, people never see it
+  const email = String(b.email || '').trim().toLowerCase(), site = String(b.site || '').trim();
+  if (!/^[^@\s]+@[^@\s]+\.[a-z]{2,}$/.test(email)) return { error: 'Please check your email address.' };
+  if (!/^https?:\/\/[^\s/$.?#].[^\s]*$/i.test(site)) return { error: 'Please enter your full website address, starting with https://' };
+  const t = hubTab_('Check requests', CHECK_HEAD), day = new Date().toISOString().slice(0, 10);
+  const today = t.rows.filter(r => String(r.at).slice(0, 10) === day);
+  if (today.length >= 30 || today.filter(r => r.email === email).length >= 2) return { error: 'Your request is already in. Results come by email within a day.' };
+  t.sh.appendRow(CHECK_HEAD.map(h => safeCell_({ id: token_(12), at: new Date().toISOString(), name: String(b.name || '').slice(0, 80), org: String(b.org || '').slice(0, 120),
+    email, site: site.slice(0, 200), status: 'new' }[h])));
+  return { ok: true };
+}
+
+// The check result email. Plain words, the score, the top 3 fixes, the full report link and the booking link.
+function sendCheck_(r, score, fixes, url) {
+  const lines = ['Hi' + (r.name ? ' ' + String(r.name).split(' ')[0] : '') + ',', '',
+    'Your free website and AI search check for ' + r.site + ' is ready.', '', 'Score: ' + score + '/100', '',
+    'The 3 fixes that matter most:', ...fixes.slice(0, 3).map((f, i) => (i + 1) + '. ' + f), '',
+    'Full report:', '', url, '',
+    'Want help with these? Book a free 30 minute call:', '', 'https://calendly.com/grahamivy-co/30min', '',
+    'Graham', 'Open Frame', 'https://openframe.design'];
+  MailApp.sendEmail({ to: r.email, subject: 'Your website check: ' + score + '/100', body: lines.join('\n'), replyTo: REPLY_TO, name: 'Graham at Open Frame' });
+}
+
 // Loops API. list: cards (optionally by loop and status). add: new cards, skips ids already there. set: change fields.
 // log: one "Loop runs" row. stats: a client's best and weakest posts from the last `days` days (same score as the report).
 function loopsApi_(b) {
@@ -186,7 +215,7 @@ function loopsApi_(b) {
     const since = new Date(Date.now() - (Number(b.days) || 30) * 864e5).toISOString().slice(0, 10);
     const rows = (pt ? pt.rows : []).filter(p => p.client === b.client && String(p.published_at).slice(0, 10) >= since && score_(p) != null)
       .sort((x, y) => score_(y) - score_(x))
-      .map(p => ({ platform: p.platform, type: p.type, published: String(p.published_at).slice(0, 10), caption: String(p.caption || '').slice(0, 200),
+      .map(p => ({ id: String(p.post_id || ''), url: p.permalink || '', platform: p.platform, type: p.type, published: String(p.published_at).slice(0, 10), caption: String(p.caption || '').slice(0, 200),
         reach: num_(p.reach), likes: num_(p.likes), comments: num_(p.comments), saves: num_(p.saves), shares: num_(p.shares), score: Math.round(score_(p)) }));
     return { posts: rows.length, top: rows.slice(0, 5), weakest: rows.length > 5 ? rows.slice(-3) : [] };
   }
@@ -209,6 +238,56 @@ function loopsApi_(b) {
     setCells_(e, r._row, b.fields || {});
     return { ok: true };
   }
+  if (b.action === 'check-list') return { rows: hubTab_('Check requests', CHECK_HEAD).rows.filter(r => r.id && r.status === 'new') };
+  if (b.action === 'check-done') {
+    // Mac finished the check: email the result, add them to Leads (the n8n follow-up takes it from there), tell Graham.
+    const t = hubTab_('Check requests', CHECK_HEAD), r = findRow_(t, 'id', b.id);
+    if (b.failed) { setCells_(t, r._row, { status: 'failed', note: b.failed }); return { ok: true }; }
+    sendCheck_(r, b.score, b.fixes || [], b.report_url);
+    setCells_(t, r._row, { status: 'sent', score: b.score, report_url: b.report_url });
+    const l = table_(OUTREACH_SHEET_ID, 'Leads'), id = 'em:' + r.email;
+    if (l && !l.rows.some(x => x.id === id)) {
+      const row = { id, added: new Date().toISOString(), source: 'site check', name: r.name, org: r.org, email: r.email, stage: 'talking',
+        last_contact: new Date().toISOString(), notes: 'Ran the free site check: ' + b.score + '/100. ' + r.site + ' ' + b.report_url, updated_at: new Date().toISOString() };
+      l.sh.appendRow(l.head.map(h => safeCell_(row[h])));
+    }
+    return { ok: true };
+  }
+  if (b.action === 'leads-list') {
+    const l = table_(OUTREACH_SHEET_ID, 'Leads');
+    return { rows: (l ? l.rows : []).filter(r => r.id && (!b.stages || b.stages.indexOf(r.stage) >= 0))
+      .map(r => ({ id: r.id, name: r.name, org: r.org, email: r.email, handle: r.handle, stage: r.stage, source: r.source, notes: r.notes,
+        consult_at: String(r.consult_at || ''), updated_at: String(r.updated_at || '') })) };
+  }
+  if (b.action === 'client-add') {
+    const t = table_(hubId_(), 'Clients');
+    if (t && !t.rows.some(r => r.brand === b.brand)) {
+      const row = { client: b.client, brand: b.brand, contact_email: b.contact_email, client_approves: 'yes' };
+      t.sh.appendRow(t.head.map(h => safeCell_(row[h])));
+      return { added: 1 };
+    }
+    return { added: 0 };
+  }
+  if (b.action === 'people') {
+    // Who keeps showing up in a client's comments and DMs (Inbox tab), last 30 days. For the warm-up loop.
+    const c = clients_().find(x => x.brand === b.client), t = c ? table_(c.sheet_id, 'Inbox') : null, by = {};
+    (t ? t.rows : []).filter(r => within_(r.received_at || r.timestamp, 30)).forEach(r => {
+      const who = r.username || r.sender_name || r.sender; if (!who) return;
+      const p = by[who] || (by[who] = { who, count: 0, kinds: [], last: '' });
+      p.count++; if (p.kinds.indexOf(r.kind || 'dm') < 0) p.kinds.push(r.kind || 'dm'); p.last = String(r.text || '').slice(0, 200);
+    });
+    return { people: Object.keys(by).map(k => by[k]).sort((x, y) => y.count - x.count) };
+  }
+  if (b.action === 'retention') {
+    // Per client: results now vs last month, posts stuck waiting on them, days since they last answered.
+    return { clients: clients_().filter(c => c.client_approves).map(c => {
+      const q = table_(c.sheet_id, 'Queue'), rows = q ? q.rows.filter(r => r.brand === c.brand) : [];
+      const waiting = rows.filter(r => r.status === 'in_review' && r.review_deadline && new Date(r.review_deadline) < new Date()).length;
+      const last = rows.map(r => r.decided_at).filter(Boolean).map(d => new Date(d).getTime()).sort().pop();
+      return { client: c.client, brand: c.brand, results: results_(c), overdue: waiting, daysSinceAnswer: last ? Math.round((Date.now() - last) / 864e5) : null };
+    }) };
+  }
+  if (b.action === 'results') { const c = clients_().find(x => x.brand === b.client); return c ? results_(c) : { empty: true }; }
   if (b.action === 'funnel') {
     // Last 7 days of the pipeline (Engage + Leads tabs) and where every lead sits now.
     const e = table_(OUTREACH_SHEET_ID, 'Engage'), l = table_(OUTREACH_SHEET_ID, 'Leads');
@@ -244,10 +323,19 @@ function loopsApi_(b) {
 // Yes / Change / Pass on a loop card, Got it on a todo card.
 function adminLoop(key, id, action, note) {
   checkKey_(key);
-  const status = { yes: 'yes', change: 'change', pass: 'pass', done: 'done' }[action];
+  const status = { yes: 'yes', change: 'change', pass: 'pass', done: 'done', send: 'sent' }[action];
   if (!status) throw new Error('Unknown answer');
   return withLock_(() => {
     const t = hubTab_('Loops', LOOP_HEAD), r = findRow_(t, 'id', id);
+    if (r.to && (action === 'yes' || action === 'send')) {
+      MailApp.sendEmail({ to: r.to, subject: r.subject || r.title, body: action === 'send' && note ? note : r.body, replyTo: REPLY_TO, name: 'Graham at Open Frame' });
+      setCells_(t, r._row, { status: 'sent', note: action === 'send' ? note : '', updated: new Date().toISOString() });
+      return 'ok';
+    }
+    if (r.when && action === 'yes') {
+      const [a, z] = String(r.when).split('|');
+      CalendarApp.getDefaultCalendar().createEvent(r.title, new Date(a), new Date(z || a), { description: [r.body, r.link].filter(Boolean).join('\n\n') });
+    }
     setCells_(t, r._row, { status, note: note || '', updated: new Date().toISOString() });
     return 'ok';
   });
@@ -351,6 +439,7 @@ function getDashboard(key) {
   const lp = SpreadsheetApp.openById(hubId_()).getSheetByName('Loops') ? table_(hubId_(), 'Loops') : null;
   if (lp) lp.rows.filter(r => r.id && (r.status === 'card' || r.status === 'todo')).forEach(r => out.loops.push({
     id: r.id, loop: r.loop, client: r.client, kind: r.kind, title: r.title, body: r.body, why: r.why, ask: r.ask, link: r.link, status: r.status,
+    to: r.to, subject: r.subject, when: String(r.when || ''),
   }));
   clients.filter(c => c.client_approves && !c.contact_email)
     .forEach(c => out.fixes.push({ kind: 'setup', text: c.client + ' has no contact email in the Clients tab, so review emails can\'t go out.' }));
@@ -1048,7 +1137,9 @@ function build(d) {
     const go = a => () => call('adminLoop', K, l.id, a, '');
     const body = [textEl(l.body), l.why ? $('p', { class: 'mute', text: 'Why: ' + l.why }) : '',
       l.link ? $('p', {}, $('a', { class: 'link', href: l.link, target: '_blank', text: 'Open' })) : ''];
-    if (l.status === 'todo') q.push({ label, body, ask: l.ask || '', yes: ['Got it', go('done')], change: null, skip: null });
+    if (l.to) q.push({ label, body: [$('p', { class: 'text', text: 'To: ' + l.to + '\nSubject: ' + (l.subject || l.title) }), $('div', { class: 'quote', text: l.body }), l.why ? $('p', { class: 'mute', text: 'Why: ' + l.why }) : ''],
+      ask: l.ask || 'Send this email?', yes: ['Send', go('yes')], change: ['Edit', 'Your email', n => call('adminLoop', K, l.id, 'send', n), l.body], skip: ['Don\\'t send', go('pass')] });
+    else if (l.status === 'todo') q.push({ label, body, ask: l.ask || '', yes: ['Got it', go('done')], change: null, skip: null });
     else q.push({ label, body, ask: l.ask || 'Go ahead?', yes: ['Yes', go('yes')],
       change: ['Change', 'What should change?', n => call('adminLoop', K, l.id, 'change', n)], skip: ['Pass', go('pass')] });
   });
