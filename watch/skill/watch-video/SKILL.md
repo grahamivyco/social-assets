@@ -16,14 +16,18 @@ Free tools on Graham's Mac: yt-dlp, ffmpeg, Parakeet speech model, Apple Vision 
 ## 2. Read only what you need
 1. `report.md` first: numbers, hook, shot list with on-screen text and words, transcript.
 2. `contact-sheet.jpg` once: every shot in one image.
-3. Open single files in `frames/` only to check a detail. Never read `video.mp4`.
+3. For edit questions (transitions, motion, zooms, graphics, text timing, spacing, color, sound sync): `edit.md`, then `timeline.jpg` (frames over cut, motion, text, caption, speech and audio-hit bars) and `transitions.jpg` (each transition frame by frame, 0.3 s either side). Trust the pictures over the labels: the machine labels are a first guess.
+4. Open single files in `frames/` only to check a detail. Never read `video.mp4`.
+- Older folder without `edit.md`: run `python3 ~/social-assets/watch/edit.py "<folder>"`.
 
 ## 3. Write the breakdown
 Replace the `## Analysis` section of `report.md` with these headings, short bullets, no hype words:
 - **Hook:** what happens in the first 1 to 3 seconds (said, shown, text) and why it stops the scroll.
 - **Structure:** the beats with timestamps (hook, setup, value, payoff, CTA).
-- **Edit:** cut pace, shot types, b-roll, zooms, text and caption style (font, color, words at a time, position), graphics, transitions.
-- **Sound:** voice, music or trending audio (from the Audio row), sound effects, loudness.
+- **Edit:** cut pace (and where it speeds up), each transition type and how it's built, camera moves and punch-ins, shot sizes and framing, b-roll, graphics and how they animate in and out.
+- **Text and layout:** caption style (font look, color, words at a time, position, size), titles, where text sits against the subject and Instagram's buttons, spacing and margins.
+- **Look:** palette (hex), brightness, contrast, warm or cool.
+- **Sound:** voice, music or trending audio (from the Audio row), sound effects, loudness, whether cuts land on the beat.
 - **Message:** who it is for, the one idea, the CTA, and how the caption backs it up.
 - **Why it works:** 3 points max, tied to the numbers (views, likes, comments) when there are any.
 - **Steal for Open Frame:** 3 concrete ideas for Graham's Reels or a client's. Check each against `REEL-RULES.md` (one-word captions in a brand color, original footage color, brand fonts, Bauhaus graphics for Open Frame only) and say where an idea breaks a rule.

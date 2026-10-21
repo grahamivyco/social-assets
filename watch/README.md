@@ -6,6 +6,7 @@ Lets Claude watch any Instagram Reel, TikTok, YouTube or Shorts link (or a scree
 One folder per video in `~/Downloads/Open Frame LLC & Clients/Watched/<date>-<creator>-<id>/`:
 - `report.md`: creator, caption, views/likes/comments, audio track, length, cut pace, words per minute, the hook, a shot list (time, on-screen text, what's said) and the full transcript. Claude adds the breakdown at the end.
 - `contact-sheet.jpg`: one frame per shot, with its time and on-screen text.
+- `edit.md` + `transitions.jpg` + `timeline.jpg` (from `edit.py`): every transition (hard cut, jump cut, punch-in with its zoom, dissolve, fade, flash, whip, camera reframe) and a frame-by-frame strip of each, camera moves per shot (zoom %/s, pan, tilt, shake, still), shot sizes and where the face sits, text and caption timing with position, size and whether Instagram's buttons cover it, palette and look, audio hits, tempo and how many cuts land on a hit, and cut pace per 5 s.
 - `frames/`, `words.json` (every word with its time), `info.json`, `video.mp4`, `thumbnail.jpg`.
 - `index.md` in the parent folder lists everything watched.
 
@@ -20,10 +21,11 @@ One folder per video in `~/Downloads/Open Frame LLC & Clients/Watched/<date>-<cr
 3. Parakeet (the same speech model as the talking head editor, via sherpa-onnx) writes the transcript with a time on every word.
 4. Apple Vision (`ocr.swift`, built into macOS) reads the on-screen text in each frame.
 5. `watch.py` writes `report.md` and the contact sheet.
+6. `edit.py` reads the video at 10 frames a second with OpenCV (optical flow for camera moves and zooms, feature matching for punch-ins, colour histograms for cuts and dissolves), runs Apple Vision 3 times a second for text boxes and faces, and finds audio hits with numpy.
 
 ## Setup on the Mac (once)
 1. `git -C ~/social-assets pull` (or clone it).
-2. `python3 -m pip install --user yt-dlp sherpa-onnx numpy pillow`
+2. `python3 -m pip install --user yt-dlp sherpa-onnx numpy pillow opencv-python-headless`
 3. ffmpeg + ffprobe without Homebrew: download the macOS builds from https://ffmpeg.martin-riedl.de into `~/.local/bin` and make them executable.
 4. Skill: `cp -R ~/social-assets/watch/skill/watch-video ~/.claude/skills/`
 5. Phone intake:
