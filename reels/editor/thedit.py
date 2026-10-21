@@ -515,7 +515,7 @@ def cmd_render(work):
     cut = work / "cut.mkv"
     (work / "cut.filter").write_text(";".join(graph))
     run(["ffmpeg", "-v", "error", "-y", *inputs,
-         "-filter_complex_script", str(work / "cut.filter"), "-map", "[v]", "-map", "[a]",
+         "-/filter_complex", str(work / "cut.filter"), "-map", "[v]", "-map", "[a]",
          "-c:v", "libx264", "-preset", "veryfast", "-crf", "14", "-c:a", "pcm_s16le", str(cut)])
     probe = json.loads(subprocess.run(["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries",
                                        "stream=width,height", "-of", "json", str(cut)],
