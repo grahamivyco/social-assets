@@ -1422,7 +1422,9 @@ function clientApproval_(c, id, label, comment) {
 // Clients tab link columns (all optional, https only): pay_url (the invoice or payment page), files_url (their Drive
 // "Finished" folder), report_url (the monthly report, set by the report run). Each shows as a button on the client page.
 function clientPage_(c) {
-  return { client: c.client, studio: !!c.studio, approvals: clientApprovals_(c), projects: clientProjects_(c),
+  let month = null;
+  try { const R = results_(c); if (!R.empty) month = { month: R.month, prevMonth: R.prevMonth, tiles: R.tiles.slice(0, 4), top: R.top.slice(0, 1) }; } catch (e) {}
+  return { client: c.client, studio: !!c.studio, approvals: clientApprovals_(c), projects: clientProjects_(c), month,
     links: { pay: c.pay_url || '', files: c.files_url || '', report: /^https:\/\//.test(c.report_url) ? c.report_url : '' } };
 }
 
