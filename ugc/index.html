@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Videos for your brand | Open Frame</title>
+<meta name="description" content="Short videos made for mission-driven brands to post on their own channels. Open Frame, Minneapolis and Barcelona.">
+<link rel="icon" href="../brands/open-frame/favicon-site.svg">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,500;1,9..144,500&family=Inter:wght@400;500;600&display=swap">
+<style>
+  :root { --ink:#111110; --ink2:#4B4A46; --cream:#F3F1EA; --red:#F24333; --blue:#2F6BF0; --yellow:#F4BF3A; --green:#33AC66; --white:#fff; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--white); color:var(--ink); font:16px/1.55 Inter, Arial, sans-serif; padding:0 max(16px, env(safe-area-inset-left)); }
+  main { max-width:980px; margin:0 auto; padding:48px 0 64px; display:grid; grid-template-columns:minmax(0,1.1fr) minmax(0,1fr); gap:48px; align-items:start; }
+  @media (max-width:820px) { main { grid-template-columns:1fr; gap:28px; padding-top:28px; } }
+  .logo { display:block; height:28px; margin-bottom:36px; }
+  h1 { font:500 clamp(34px,5vw,54px)/1.04 Fraunces, Georgia, serif; margin:0 0 16px; letter-spacing:-.01em; }
+  h1 i { color:var(--red); }
+  p.lede { color:var(--ink2); font-size:18px; margin:0 0 24px; max-width:46ch; }
+  ul.gets { list-style:none; padding:0; margin:0; display:grid; gap:12px; }
+  ul.gets li { display:grid; grid-template-columns:14px 1fr; gap:12px; align-items:start; }
+  ul.gets li::before { content:""; width:14px; height:14px; margin-top:5px; border:2px solid var(--ink); border-radius:50%; background:var(--yellow); }
+  ul.gets li:nth-child(2)::before { background:var(--blue); border-radius:0; }
+  ul.gets li:nth-child(3)::before { background:var(--red); border-radius:0; transform:rotate(45deg); }
+  form { background:var(--cream); border:2.5px solid var(--ink); border-radius:16px; padding:24px; display:grid; gap:14px; }
+  label { display:grid; gap:6px; font-weight:600; font-size:14px; }
+  input { font:inherit; padding:12px 14px; border:2px solid var(--ink); border-radius:10px; background:var(--white); color:var(--ink); width:100%; }
+  input:focus { outline:3px solid var(--blue); outline-offset:1px; }
+  .hp { position:absolute; left:-9999px; }
+  button { font:600 16px Inter, Arial, sans-serif; padding:14px; border:2.5px solid var(--ink); border-radius:999px; background:var(--red); color:var(--white); cursor:pointer; }
+  button:disabled { opacity:.6; cursor:wait; }
+  .small { font-size:13px; color:var(--ink2); margin:0; }
+  .msg { font-weight:600; margin:0; }
+  .msg.err { color:#B4261A; }
+  .done { text-align:center; padding:12px 0; }
+  .done h2 { font:500 28px Fraunces, Georgia, serif; margin:0 0 8px; }
+</style>
+</head>
+<style>
+  main { grid-template-columns:1fr; max-width:820px; }
+  .cards { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:16px; }
+  .card { background:var(--cream); border:2.5px solid var(--ink); border-radius:16px; padding:20px; }
+  .card h2 { font:500 22px/1.15 Fraunces, Georgia, serif; margin:0 0 8px; }
+  .card p { margin:0; color:var(--ink2); }
+  .dot { width:18px; height:18px; border:2px solid var(--ink); margin-bottom:12px; }
+  .cta { display:flex; flex-wrap:wrap; gap:12px; }
+  .btn { display:inline-block; font:600 16px Inter, Arial, sans-serif; padding:14px 22px; border:2.5px solid var(--ink); border-radius:999px; background:var(--red); color:var(--white); text-decoration:none; }
+  .btn.alt { background:var(--white); color:var(--ink); }
+  ol.steps { padding-left:20px; margin:0; display:grid; gap:8px; }
+</style>
+</head>
+<body>
+<main>
+  <section>
+    <img class="logo" src="../brands/open-frame/open-frame-wordmark-horizontal.svg" alt="Open Frame">
+    <h1>Short videos your brand <i>posts</i>.</h1>
+    <p class="lede">Open Frame makes short vertical videos for mission-driven brands to run on their own Instagram, TikTok, ads and site. Filmed and edited by a designer, so they match your brand from the first frame.</p>
+    <div class="cta">
+      <a class="btn" href="https://calendly.com/grahamivy-co/30min">Book a 15 minute call</a>
+      <a class="btn alt" href="https://www.instagram.com/open.framedesign/">See the work on Instagram</a>
+    </div>
+  </section>
+  <section class="cards">
+    <div class="card"><div class="dot" style="background:var(--yellow);border-radius:50%"></div><h2>Product in use</h2><p>Real hands, real spaces, your product doing its job.</p></div>
+    <div class="card"><div class="dot" style="background:var(--blue)"></div><h2>Talking head</h2><p>A clear, honest take on why it matters, straight to camera.</p></div>
+    <div class="card"><div class="dot" style="background:var(--red);transform:rotate(45deg)"></div><h2>Mission story</h2><p>The people and the cause behind the brand, in under 30 seconds.</p></div>
+  </section>
+  <section>
+    <h2 style="font:500 28px Fraunces, Georgia, serif;margin:0 0 12px">How it works</h2>
+    <ol class="steps">
+      <li>A short call about the product and who it is for.</li>
+      <li>Three video ideas, picked by you.</li>
+      <li>Raw files plus edited cuts with captions in your brand fonts and colors.</li>
+      <li>Rights to post on your channels, with ad use agreed up front.</li>
+    </ol>
+    <p class="small" style="margin-top:20px">Want to see the fit first? Ask for a free sample video.<br><br>Minneapolis and Barcelona, available US hours.</p>
+  </section>
+</main>
+</body>
+</html>

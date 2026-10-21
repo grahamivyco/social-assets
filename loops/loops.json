@@ -440,6 +440,55 @@
    "status": "live"
   },
   {
+   "id": "key-radar",
+   "name": "Key account radar",
+   "layer": "runtime",
+   "where": "loops runner (Mac)",
+   "run": "key-radar",
+   "schedule": "weekdays 12:00",
+   "trigger": "A key account (Targets tab) commented or DMed this week",
+   "work": "Local AI drafts a follow-up DM that continues the conversation",
+   "check": "Rules (no pitch, no link, no banned words); one card per account per week",
+   "card": "Key account reached out: DM draft (Got it)",
+   "feeds": [
+    "leads"
+   ],
+   "status": "new"
+  },
+  {
+   "id": "spotlight",
+   "name": "Mission-driven spotlight",
+   "layer": "runtime",
+   "where": "loops runner (Mac)",
+   "run": "spotlight",
+   "schedule": "wed 10:00",
+   "trigger": "Weekly; a key account with 2+ recent posts not featured yet",
+   "work": "Carousel draft from their own posts + DM asking their OK",
+   "check": "Rules; caption must tag them; facts only from their posts",
+   "card": "Spotlight them? (Yes/Change/Pass), then Ask before featuring",
+   "feeds": [
+    "content-plan",
+    "key-radar"
+   ],
+   "status": "new"
+  },
+  {
+   "id": "deals",
+   "name": "Brand + UGC deals",
+   "layer": "runtime",
+   "where": "loops runner (Mac)",
+   "run": "deals",
+   "schedule": "weekdays 10:30",
+   "trigger": "Brands tab rows (brand scout + contact finder) at fit high/medium with an email or creator program",
+   "work": "Picks UGC or sponsored, drafts a pitch with 3 video ideas linking the UGC page",
+   "check": "Rules; no prices or follower counts; must link the UGC page",
+   "card": "Send pitch (email card) or Apply here; one follow-up after 7 days",
+   "feeds": [
+    "leads"
+   ],
+   "status": "new"
+  },
+  {
    "id": "health",
    "name": "Health check",
    "layer": "runtime",
