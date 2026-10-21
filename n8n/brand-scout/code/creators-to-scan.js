@@ -5,7 +5,7 @@ const st = r => String(r.status || '').trim().toLowerCase();
 const age = r => (r.last_scanned ? new Date(r.last_scanned).getTime() : 0) || 0;
 const active = rows.filter(r => st(r) === 'active' || st(r) === '').sort((a, b) => age(a) - age(b));
 const suggested = rows.filter(r => st(r) === 'suggested').sort((a, b) => age(a) - age(b));
-const F = '{username,name,biography,website,followers_count,media_count,media.limit(50){caption,permalink,timestamp}}';
+const F = '{username,name,biography,website,followers_count,media_count,media.limit(25){caption,permalink,timestamp}}';
 return [...active, ...suggested].slice(0, 40).map(r => {
   const handle = clean(r.handle);
   return { json: { handle, status: st(r) || 'active', fields: `business_discovery.username(${handle})${F}` } };
