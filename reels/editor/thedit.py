@@ -368,8 +368,9 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
     if edit.get("topic_line"):
         ts_end = edit["hook_seconds"] if edit.get("hook") else 2.5
         tl = hlg_hex("ffffff") if edit.get("hdr") else "ffffff"
-        ev.append(f"Dialogue: 0,{ts(0)},{ts(ts_end)},Cap,,0,0,0,,{pos}{{\\fs{round(H * 0.026)}\\c{ass_color(tl)}}}"
-                  f"{ass_text(edit['topic_line'])}")
+        # one keyword per line, big enough to read (2026-10-22: one long line at 2.6% was too small)
+        ev.append(f"Dialogue: 0,{ts(0)},{ts(ts_end)},Cap,,0,0,0,,{pos}{{\\fs{round(H * 0.032)}\\c{ass_color(tl)}}}"
+                  + "\\N".join(ass_text(k.strip()) for k in edit['topic_line'].split("·")))
     seam = f"{{\\an5\\pos({W // 2},{H // 2})}}"
     on_split = lambda t: any(a <= t < b for a, b in edit.get("_split", []))
     # Graham, 2026-10-20: one word at a time, just the word being said, plain letters in the brand accent
@@ -692,7 +693,7 @@ def cmd_render(work):
             tail += f";[{top}]{subs},format={PF}[main]"
         if edit.get("pop"):
             fx = Pop(W, H, tw, pieces, part_starts, dur, brand, edit.get("hook", ""),
-                     edit["hook_seconds"] if edit.get("hook") else 0, edit.get("keywords"))
+                     edit["hook_seconds"] if edit.get("hook") else 0, edit.get("keywords"), edit.get("beats"))
             gfx = work / f"pop-{name}.mov"
             print(f"drawing graphics for {name}...")
             fx.render(gfx, FPS)

@@ -51,3 +51,8 @@ Use the hook bank and rules in `/mnt/project-files/lessons/ad-attention-videos.m
 - Every Reel gets 15 search keywords from the local AI: the main one in the hook and the first caption sentence, 1 or 2 more worked into the caption, and all 15 as one plain line above the call to action.
 - On screen: the top 3 as a small but readable line where the captions sit, while the hook is up (edit.json `topic_line`). Never hidden or unreadable text. Instagram reads on-screen text it can actually see, and text made to be invisible is a spam pattern that can get a Reel held back.
 - Alt text: one plain sentence with the main keyword, saved in caption.md. Instagram's API takes alt text on photos, not on Reels, so it is ready for photo posts and for pasting in the app where Instagram offers an alt text field.
+
+## Beat graphics (2026-10-22)
+- Graham asked for graphics that match what he is saying. edit.json `"beats"` picks them by hand, one per idea, on the word that says it: `[{"w": word#, "kind": "pdfs", "label": "Old PDFs", "data": {...}}]`. Kinds in pop.js: pdfs, menu, stock, door, timer, num (data.n), headline, people, button (data.words), sticky, nav (data.items, data.at_w), trash, peek, belong, tuesday, friends, plus the older ones. Labels can take a `\n` for two lines.
+- When the background has objects the cut-out grabs (like the wall lamp in his porch shots), set `"cutout": false`. Graphics sit above his head anyway.
+- The keyword line under the hook is now one keyword per line, at 3.2% of the height.

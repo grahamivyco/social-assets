@@ -57,12 +57,12 @@ def load_brand(brand_id, color_fn=lambda h: h):
 
 
 class Pop:
-    def __init__(self, W, H, words, pieces, part_starts, dur, brand, title="", title_until=0, keywords=None):
+    def __init__(self, W, H, words, pieces, part_starts, dur, brand, title="", title_until=0, keywords=None, beats=None):
         self.W, self.H, self.dur, self.brand = W, H, dur, brand
         # edit.json "keywords" adds or overrides triggers per video, e.g. {"stitch": ["design", "Stitch"]}
         self.keywords = {**KEYWORDS, **{k.lower(): tuple(v) for k, v in (keywords or {}).items()}}
         self.title_until = title_until if title else 0
-        self.scenes = self._scenes(words)
+        self.scenes = self._beats(words, beats) if beats else self._scenes(words)
         self.wipes = [{"t": t, "shape": s, "color": c} for t, (s, c) in
                       zip(part_starts[1:], WIPES * 10)] + [{"t": dur, "shape": "circle", "color": "cream"}]
         self.title = {"text": title, "until": title_until, "field": "r", "accent": "y", "dot": "y"} if title else None
@@ -88,6 +88,25 @@ class Pop:
         for k, s in enumerate(out):  # the next scene slides in over the last one
             nxt = out[k + 1]["t"] + 0.3 if k + 1 < len(out) else 1e9
             s["end"] = min(s["t"] + (2.0 if s["kind"] == "send" else 1.7), nxt)
+        return out
+
+    def _beats(self, words, beats):
+        """edit.json "beats" (2026-10-22): graphics picked by hand, one per idea, each on the word that says it.
+        [{"w": word#, "kind": "pdfs", "label": "Old PDFs", "dur": 2.4, "data": {...}}], word numbers from transcript.md.
+        data "at_w": [word#, ...] times parts of a graphic (e.g. menu items) to the words that name them."""
+        at = {w["i"]: w["start"] for w in words}
+        out = []
+        for b in beats:
+            if b["w"] not in at:  # the word was cut from the edit
+                continue
+            t, data = at[b["w"]], dict(b.get("data") or {})
+            if "at_w" in data:
+                data["at"] = [max(0.0, at.get(i, t) - t) for i in data.pop("at_w")]
+            out.append({"t": t, "kind": b["kind"], "label": b.get("label", ""), "data": data, "dur": b.get("dur", 2.4)})
+        out.sort(key=lambda s: s["t"])
+        for k, s in enumerate(out):  # the next graphic slides in over the last one
+            nxt = out[k + 1]["t"] + 0.3 if k + 1 < len(out) else self.dur
+            s["end"] = min(s["t"] + s.pop("dur"), nxt)
         return out
 
     def zoom_expr(self):
