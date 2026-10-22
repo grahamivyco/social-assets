@@ -369,7 +369,8 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         ts_end = edit["hook_seconds"] if edit.get("hook") else 2.5
         tl = hlg_hex("ffffff") if edit.get("hdr") else "ffffff"
         # one keyword per line, big enough to read (2026-10-22: one long line at 2.6% was too small)
-        ev.append(f"Dialogue: 0,{ts(0)},{ts(ts_end)},Cap,,0,0,0,,{pos}{{\\fs{round(H * 0.032)}\\c{ass_color(tl)}}}"
+        tpos = f"{{\\an8\\pos({W // 2},{round(H * edit['topic_y'])})}}" if edit.get("topic_y") else pos  # "topic_y": top of the block, clear of the face
+        ev.append(f"Dialogue: 0,{ts(0)},{ts(ts_end)},Cap,,0,0,0,,{tpos}{{\\fs{round(H * 0.032)}\\c{ass_color(tl)}}}"
                   + "\\N".join(ass_text(k.strip()) for k in edit['topic_line'].split("·")))
     seam = f"{{\\an5\\pos({W // 2},{H // 2})}}"
     on_split = lambda t: any(a <= t < b for a, b in edit.get("_split", []))
