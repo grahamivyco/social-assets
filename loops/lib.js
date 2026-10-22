@@ -27,7 +27,11 @@ const clients = () => Object.entries(readJSON(path.join(HERE, 'clients.json'), {
   .filter(([k, v]) => !k.startsWith('_') && v.enabled).map(([id, v]) => ({ id, ...v }));
 
 // {{name}} in a prompt file -> value. Lists become bullet lines.
+// {{examples}}: the owner's own filmed scripts (prompts/voice.md), for Open Frame only. Other clients get their own voice line.
 function fill(file, vars) {
+  if (vars.examples == null && vars.id === 'open-frame') {
+    try { vars = { ...vars, examples: fs.readFileSync(path.join(HERE, 'prompts', 'voice.md'), 'utf8').replace(/<!--[\s\S]*?-->\s*/, '').trim() }; } catch {}
+  }
   return fs.readFileSync(path.join(HERE, 'prompts', file), 'utf8').replace(/\{\{(\w+)\}\}/g, (_, k) => {
     const v = vars[k];
     if (Array.isArray(v)) return v.length ? v.map(x => '- ' + x).join('\n') : '(none yet)';

@@ -100,7 +100,7 @@ async function llmFetch(init) {
     if (!fs.existsSync(LMS)) throw new Error(`LM Studio isn't running (${e.message}). Open LM Studio and load ${C.model}.`);
     log('LM Studio not answering, starting it:', e.message);
     spawnSync(LMS, ['server', 'start'], { stdio: 'inherit', timeout: 60000 });
-    spawnSync(LMS, ['load', C.model, '--yes'], { stdio: 'inherit', timeout: 180000 });
+    spawnSync(LMS, ['load', C.model, '--identifier', C.model, '-c', String(C.ctx || 16384), '--parallel', '1', '--yes'], { stdio: 'inherit', timeout: 180000 });
     try { return await go(); }
     catch (e2) { throw new Error(`LM Studio isn't running and wouldn't start (${e2.message}). Open LM Studio and load ${C.model}.`); }
   }

@@ -17,7 +17,11 @@ sys.path.insert(0, str(HERE))
 import watch  # noqa: E402
 
 LLM = os.environ.get("WATCH_LLM", "http://127.0.0.1:1234/v1/chat/completions")
-MODEL = os.environ.get("WATCH_LLM_MODEL", "google/gemma-4-e4b")
+try:  # same model setting as every other loop: reels/config.json "model"
+    _cfg = json.loads((HERE.parent / "reels" / "config.json").read_text())
+except (OSError, ValueError):
+    _cfg = {}
+MODEL = os.environ.get("WATCH_LLM_MODEL") or _cfg.get("model") or "google/gemma-4-e4b"
 
 
 def row(md, label):
