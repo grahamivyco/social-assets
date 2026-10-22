@@ -286,14 +286,15 @@ function makePop(W, H, spec) {
     button(ctx, v, x, y, w, h, sc) { // one button: its word cycles (Donate, Join, Volunteer), then a tap
       const words = (sc.data || {}).words || ["Donate"], q = eOutBack(seg(v, 0, .3));
       const bw = w * .78, bh = h * .38, cx = x + w * .46, cy = y + h * .5;
-      const k = Math.min(words.length - 1, Math.floor(seg(v, .3, .3 + .5 * words.length) * words.length));
-      const press = 1 - .08 * Math.sin(seg(v, .3 + .5 * words.length, .5 + .5 * words.length) * Math.PI);
+      const at = (sc.data || {}).at || words.map((_, i) => .3 + .5 * i), last = at[at.length - 1] + .5;  // data.at_w: each word as it's said
+      const k = Math.max(0, at.filter(a => v >= a).length - 1);
+      const press = 1 - .08 * Math.sin(seg(v, last, last + .2) * Math.PI);
       ctx.save(); ctx.translate(cx, cy); ctx.scale(q * press, q * press);
       box(ctx, -bw / 2 + 10 * U, -bh / 2 + 12 * U, bw, bh, bh / 2, P.ink);
       box(ctx, -bw / 2, -bh / 2, bw, bh, bh / 2, [P.r, P.y, P.g][k % 3], P.ink);
       text(ctx, words[k], 0, 4 * U, bh * .44, k % 3 === 1 ? P.ink : P.cream);
       ctx.restore();
-      const pq = eOutExpo(seg(v, .3 + .5 * words.length - .3, .3 + .5 * words.length)); if (pq > 0) {
+      const pq = eOutExpo(seg(v, last - .3, last)); if (pq > 0) {
         ctx.save(); ctx.translate(lerp(cx + bw * .7, cx + bw * .25, pq), lerp(cy + bh * 1.3, cy + bh * .2, pq)); ctx.rotate(-.5); shape(ctx, "triangle", 0, 0, 52 * U, 0, P.cream, P.ink); ctx.restore(); }
     },
     sticky(ctx, v, x, y, w, h) { // sticky notes slap onto the wall, a page name scribbled on each
