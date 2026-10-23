@@ -41,9 +41,10 @@ async function write(client, type, rows, note, count) {
   const vars = { ...client, count, type: T.label, brief: T.brief + ` Call to action link: ${T.cta}`, have, passed, note: note || '(none)',
     patterns: p.report || (type === 'viral' ? 'No scout report yet. Use the hooks below, or proven short-form formats: list of 3, myth vs fact, before and after, one mistake, hot take.' : ''),
     hooks: p.hooks, lessons, private: privateRules() };
+  const system = await L.voice(client, note || T.label);
   let kept = [], why = '', made = 0;
   for (let attempt = 0; attempt < 2 && kept.length < count; attempt++) {
-    const { scripts } = await L.ask(L.fill('reel-ask.md', vars) + (why ? `\n\nLast try failed the check: ${why}. Fix that.` : ''), MANY, 0.7);
+    const { scripts } = await L.ask(L.fill('reel-ask.md', vars) + (why ? `\n\nLast try failed the check: ${why}. Fix that.` : ''), MANY, 0.7, { system });
     made += scripts.length;
     const fails = [];
     for (const s of scripts) {

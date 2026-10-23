@@ -15,7 +15,7 @@ return $input.all().map((item, idx) => {
     '- fit: "high", "medium" or "low" for how likely this brand would sponsor Open Frame\'s content.\n- why: one plain sentence, max 15 words.';
   return { json: { ...b, name: bd.name || '', followers: bd.followers_count || '', website: bd.website || '',
     bio: String(bd.biography || '').replace(/\s+/g, ' ').slice(0, 200), handle_check: 'ok', tagged: [...tagged].slice(0, 15),
-    llm: { model: 'google/gemma-4-e4b', temperature: 0.2, max_tokens: 200,
+    llm: { model: 'qwen/qwen3.5-9b', reasoning_effort: 'none', chat_template_kwargs: { enable_thinking: false }, temperature: 0.2, max_tokens: 200,
       messages: [{ role: 'system', content: SYSTEM }, { role: 'user', content: user }],
       response_format: { type: 'json_schema', json_schema: { name: 'brand_fit', strict: true, schema: { type: 'object',
         properties: { type: { type: 'string', enum: ['brand', 'creator', 'other'] }, fit: { type: 'string', enum: ['high', 'medium', 'low'] }, why: { type: 'string' } },

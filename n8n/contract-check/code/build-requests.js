@@ -1,5 +1,5 @@
 // Two questions for the local AI: what the emails agreed, and what the contract says. Same fields for both.
-const MODEL = 'google/gemma-4-e4b';
+const MODEL = 'qwen/qwen3.5-9b';   // thinking off in each request: the answers need the token budget
 const CAP = 14000; // characters per text, so it fits the model's context window
 const KEY = /(fee|pay|paid|\$|usd|eur|invoice|net ?\d|rate|compens|deliverabl|post|reel|video|stor(y|ies)|deadline|due|date|usage|licen[cs]|rights?|perpetu|exclusiv|compet|revision|approv|terminat|cancel|kill|own|intellectual|whitelist|boost|ads?\b|spark|term\b|months?|days?|weeks?)/i;
 function focus(text) {
@@ -23,7 +23,7 @@ const HELP = 'fee = total money paid to the creator as a number. payment_due_day
   'deliverables = what the creator must make and post, in short words. deliverable_count = number of pieces of content. ' +
   'usage_rights = how long and where the brand may use the content. paid_ads_or_whitelisting = whether the brand can run the content as ads or from the creator\'s account. ' +
   'exclusivity = any ban on working with competitors, with how long. content_ownership = who owns the content.';
-const ask = (who, text) => ({ model: MODEL, temperature: 0, max_tokens: 1500,
+const ask = (who, text) => ({ model: MODEL, reasoning_effort: 'none', chat_template_kwargs: { enable_thinking: false }, temperature: 0, max_tokens: 1500,
   messages: [
     { role: 'system', content: 'You read creator brand-deal documents and pull out the terms. Reply only with JSON. Use null when the text does not say. quote = a short exact quote from the text, max 25 words. Never guess.' },
     { role: 'user', content: `${HELP}\n\n${who}\n\n---\n${text}\n---` }],

@@ -34,7 +34,7 @@ return $input.all().map((item, idx) => {
   if (ex && !/no exclusiv|none|not exclusive/i.test(ex) && (exDays === 0 || exDays > 30)) flags.push([exDays ? `Exclusivity lasts about ${exDays} days` : 'Exclusivity with no clear end date', C.exclusivity]);
   if (/unlimited|as many|until satisf/i.test(v('revisions'))) flags.push(['Unlimited revisions', C.revisions]);
   if (!has(C.cancellation_or_kill_fee)) flags.push(['No kill fee if the brand cancels after you start', null]);
-  const judge = pairs.length ? { model: 'google/gemma-4-e4b', temperature: 0, max_tokens: 800,
+  const judge = pairs.length ? { model: 'qwen/qwen3.5-9b', reasoning_effort: 'none', chat_template_kwargs: { enable_thinking: false }, temperature: 0, max_tokens: 800,
     messages: [{ role: 'system', content: 'You compare deal terms. Reply only with JSON.' },
       { role: 'user', content: 'For each pair, say "same" if the contract matches what the emails agreed (wording can differ), or "different" if a number, amount, length of time, channel, count or obligation differs. Add a short reason, max 15 words.\n\n' + JSON.stringify(pairs) }],
     response_format: { type: 'json_schema', json_schema: { name: 'judgement', strict: true, schema: { type: 'object', properties: { results: { type: 'array', items: { type: 'object',

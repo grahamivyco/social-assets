@@ -13,7 +13,7 @@ const HOME = os.homedir(), HERE = __dirname, REPO = path.resolve(HERE, '..');
 const readJSON = (p, d) => { try { return JSON.parse(fs.readFileSync(p, 'utf8')); } catch { return d; } };
 const reels = readJSON(path.join(REPO, 'reels', 'config.json'), {});
 const C = {
-  hub: reels.hub || '', hubKey: reels.hubKey || '', model: reels.model || 'google/gemma-4-e4b',
+  hub: reels.hub || '', hubKey: reels.hubKey || '', model: reels.model || 'qwen/qwen3.5-9b',
   llm: 'http://127.0.0.1:1234', lms: reels.lms || `${HOME}/.lmstudio/bin/lms`, ctx: reels.ctx || 16384,
   py: '/Library/Frameworks/Python.framework/Versions/3.13/bin/python3.13',
   scriptId: '1C76LbW1Bb1vm2Ce30mC0lTZGf_xJmag1DenYsSRBmNVnuOjQyRYkZOZi',

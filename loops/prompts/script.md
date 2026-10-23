@@ -9,9 +9,6 @@ Hook: {{hook}}
 Angle: {{body}}
 Owner's note: {{note}}
 
-How the owner really talks (match this rhythm: short spoken lines, "you", a concrete step, plain words; never reuse these topics or lines):
-{{examples}}
-
 Rules:
 - 30 to 45 seconds spoken (75 to 110 words). One take, filmed on a phone.
 - Line 1 is the hook, said in the first 3 seconds.

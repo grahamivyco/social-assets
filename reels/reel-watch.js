@@ -5,6 +5,7 @@
 // Free tools only. Settings: config.json next to this file (see config.example.json).
 const fs = require('fs'), path = require('path'), os = require('os');
 const { execFileSync, spawnSync } = require('child_process');
+const LLM = require('../loops/llm');   // shared sampling settings (thinking off)
 
 const HERE = __dirname;
 const HOME = os.homedir();
@@ -22,7 +23,7 @@ const C = {
   chromium: '',                            // headless Chromium or Chrome binary for the graphics
   pwCore: '',                              // path to node_modules/playwright-core
   llm: 'http://127.0.0.1:1234/v1/chat/completions',
-  model: 'google/gemma-4-e4b',
+  model: 'qwen/qwen3.5-9b',
   hook: 'http://localhost:5678/webhook/reel-draft',
   link: 'https://openframe.design/links',
   minSeconds: 8, maxSeconds: 180, minWords: 12,
@@ -140,7 +141,7 @@ Write:
   const res = await llmFetch({
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      model: C.model, temperature: 0.4, messages: [{ role: 'user', content: prompt + rules }],
+      model: C.model, max_tokens: 4000, ...LLM.sampling(0.4), messages: [{ role: 'user', content: prompt + rules }],
       response_format: { type: 'json_schema', json_schema: { name: 'reel', strict: true, schema: {
         type: 'object', additionalProperties: false, required: ['hook', 'headline', 'caption', 'keywords', 'alt_text', 'topic', 'scenes'],
         properties: { hook: { type: 'string' }, headline: { type: 'string' }, caption: { type: 'string' }, topic: { type: 'string' },
@@ -151,7 +152,7 @@ Write:
     }),
   });
   if (!res.ok) throw new Error(`LM Studio said ${res.status}. Is it running with ${C.model} loaded?`);
-  const out = JSON.parse((await res.json()).choices[0].message.content);
+  const out = JSON.parse(LLM.content((await res.json()).choices[0].message));
   // House rules the model can miss: one accent word, link on its own line after a blank line, no em dashes.
   const oneAccent = s => { let n = 0; return String(s).replace(/\*([^*]+)\*/g, (m, w) => (n++ ? w : m)); };
   // Also: straight apostrophes everywhere, and a headline the model left without an accent gets one.

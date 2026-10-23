@@ -4,9 +4,6 @@ Write {{count}} talking head Reel scripts for {{name}}. Type: {{type}}.
 Who they talk to: {{audience}}
 Voice: {{voice}}
 
-How the owner really talks (match this rhythm: short spoken lines, "you", a concrete step, plain words; never reuse these topics or lines):
-{{examples}}
-
 Scripts the owner already has of this type (match the voice and the real facts in them, never repeat their topics):
 {{have}}
 

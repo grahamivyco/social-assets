@@ -11,6 +11,7 @@
 //   node loop.js redo <id> <look>            (same graphic, new words or numbers: edit params in library.json first)
 // Settings: ../config.json (shared with reel-watch). Needs "hub" (Hub web app /exec link) and "hubKey" (the Hub ADMIN_KEY).
 const fs = require('fs'), path = require('path'), os = require('os');
+const LLM = require('../../loops/llm');   // shared sampling settings (thinking off)
 const { execFileSync } = require('child_process');
 
 const HERE = __dirname, HOME = os.homedir();
@@ -20,7 +21,7 @@ const C = {
   brand: 'open-frame',
   out: `${HOME}/open-frame/graphics`,          // finished animations (.mov with transparency) live here
   llm: 'http://127.0.0.1:1234/v1/chat/completions',
-  model: 'google/gemma-4-e4b',
+  model: 'qwen/qwen3.5-9b',
   hub: '', hubKey: '',
   maxIdeas: 3,
   everyMinutes: 5,
@@ -47,11 +48,11 @@ async function hub(action, data = {}) {
 
 async function ask(prompt, schema) {
   const res = await fetch(C.llm, { method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ model: C.model, temperature: 0.3, messages: [{ role: 'user', content: prompt }],
+    body: JSON.stringify({ model: C.model, max_tokens: 4000, ...LLM.sampling(0.3), messages: [{ role: 'user', content: prompt }],
       response_format: { type: 'json_schema', json_schema: { name: 'out', strict: true, schema } } }),
     signal: AbortSignal.timeout(180000) });
   if (!res.ok) throw new Error(`LM Studio said ${res.status}. Is it running with ${C.model} loaded?`);
-  return JSON.parse((await res.json()).choices[0].message.content);
+  return JSON.parse(LLM.content((await res.json()).choices[0].message));
 }
 
 const IDEA = { type: 'object', additionalProperties: false,

@@ -21,7 +21,7 @@ try:  # same model setting as every other loop: reels/config.json "model"
     _cfg = json.loads((HERE.parent / "reels" / "config.json").read_text())
 except (OSError, ValueError):
     _cfg = {}
-MODEL = os.environ.get("WATCH_LLM_MODEL") or _cfg.get("model") or "google/gemma-4-e4b"
+MODEL = os.environ.get("WATCH_LLM_MODEL") or _cfg.get("model") or "qwen/qwen3.5-9b"
 
 
 def row(md, label):
@@ -77,10 +77,13 @@ def ask_llm(videos):
         "instead of inventing one.\n"
         "Only use what is in the data. An empty field means it was not measured: say so, and never write 'all' or "
         "'every' unless every video shows it. Short bullets.\n\nDATA:\n" + json.dumps(brief, ensure_ascii=False))
-    body = json.dumps({"model": MODEL, "temperature": 0.4, "messages": [{"role": "user", "content": prompt}]}).encode()
+    # same settings as loops/llm.js for a tight task: thinking off, low temperature
+    body = json.dumps({"model": MODEL, "temperature": 0.2, "top_p": 0.9, "top_k": 20, "max_tokens": 6000,
+                       "reasoning_effort": "none", "chat_template_kwargs": {"enable_thinking": False},
+                       "messages": [{"role": "user", "content": prompt}]}).encode()
     req = urllib.request.Request(LLM, body, {"Content-Type": "application/json"})
     with urllib.request.urlopen(req, timeout=600) as r:
-        return json.loads(r.read())["choices"][0]["message"]["content"].strip()
+        return re.sub(r"^[\s\S]*?</think>\s*", "", json.loads(r.read())["choices"][0]["message"]["content"] or "").strip()
 
 
 def main():
