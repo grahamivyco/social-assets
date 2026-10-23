@@ -4,3 +4,5 @@
 {"at":"2026-10-21T16:21:10.914Z","loop":"deals","client":"open-frame","status":"ok","made":0,"kept":0,"cards":0,"note":""}
 {"at":"2026-10-22T05:31:24.886Z","loop":"engage","client":"open-frame","status":"ok","made":0,"kept":0,"cards":0,"note":"0 skipped as sensitive, 0 failed the check, 0 sent today"}
 {"at":"2026-10-22T08:01:17.273Z","loop":"gbp","client":"open-frame","status":"check","made":2,"kept":0,"cards":0,"note":"failed the check"}
+{"at":"2026-10-22T08:30:50.313Z","loop":"deals","client":"open-frame","status":"ok","made":0,"kept":0,"cards":0,"note":""}
+{"at":"2026-10-22T10:00:34.519Z","loop":"key","client":"open-frame","status":"ok","made":0,"kept":0,"cards":0,"note":"0 touches from 0 key accounts this week"}
