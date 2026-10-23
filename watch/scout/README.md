@@ -19,7 +19,7 @@ Videos Graham shares himself ("Watch with Claude") land in the same report as "s
 2. n8n: Import from URL `https://raw.githubusercontent.com/grahamivyco/social-assets/main/watch/scout/n8n-viral-scout.json`, pick the Google service account in the 3 Sheet nodes and "Open Frame Page" in the IG node, then Publish.
 3. `pm2 restart video-watch` (for the /scout route).
 4. `pm2 start ~/social-assets/watch/patterns.py --name viral-patterns --interpreter python3.13 --cron "0 12 * * 1" --no-autorestart && pm2 save`
-5. LM Studio running with `google/gemma-4-e4b` on Monday at noon (same as the DM replies). Without it the report still has the numbers and hook bank.
+5. LM Studio running with `qwen/qwen3.5-9b` on Monday at noon (same as the DM replies). Without it the report still has the numbers and hook bank.
 
 ## Files
 - `code/creators-to-check.js`, `code/find-outliers.js`: the n8n Code nodes. `build-workflow.py` builds `n8n-viral-scout.json`.

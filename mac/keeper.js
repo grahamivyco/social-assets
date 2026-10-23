@@ -13,8 +13,8 @@ const HOME = os.homedir(), HERE = __dirname, REPO = path.resolve(HERE, '..');
 const readJSON = (p, d) => { try { return JSON.parse(fs.readFileSync(p, 'utf8')); } catch { return d; } };
 const reels = readJSON(path.join(REPO, 'reels', 'config.json'), {});
 const C = {
-  hub: reels.hub || '', hubKey: reels.hubKey || '', model: reels.model || 'google/gemma-4-e4b',
-  llm: 'http://127.0.0.1:1234', lms: reels.lms || `${HOME}/.lmstudio/bin/lms`,
+  hub: reels.hub || '', hubKey: reels.hubKey || '', model: reels.model || 'qwen/qwen3.5-9b',
+  llm: 'http://127.0.0.1:1234', lms: reels.lms || `${HOME}/.lmstudio/bin/lms`, ctx: reels.ctx || 16384,
   py: '/Library/Frameworks/Python.framework/Versions/3.13/bin/python3.13',
   scriptId: '1C76LbW1Bb1vm2Ce30mC0lTZGf_xJmag1DenYsSRBmNVnuOjQyRYkZOZi',
   deploymentId: 'AKfycbyBkDfWO-LghULYws9PCWUuqyga7kbGz2cat0w8tMIw09DmoEgtxBB7XprqRfCUyfGhpg',
@@ -99,11 +99,18 @@ async function lmstudio() {
     if (m == null) return row('lmstudio', label, 'fail', "LM Studio's server won't start.", 'Open the LM Studio app. In Settings, turn on "Run LLM server on login".');
     did = 'Server was off, started it. ';
   }
-  const loaded = m.some(x => (x.id === C.model || String(x.id).endsWith(C.model.split('/').pop())) && x.state === 'loaded');
-  if (!loaded && m.length) {
-    const r = run(C.lms, ['load', C.model, '--yes'], { timeout: 240000 });
+  // One copy only, at the context the loops need. 16 GB can't hold two: a second copy (google/gemma-4-e4b:2) filled swap.
+  const ours = x => x.id === C.model || String(x.id).endsWith(C.model.split('/').pop());
+  const live = m.filter(x => x.state === 'loaded');
+  for (const x of live.filter(x => /:\d+$/.test(x.id))) { run(C.lms, ['unload', x.id], { timeout: 60000 }); did += `Unloaded extra copy ${x.id}. `; }
+  const mine = live.find(x => ours(x) && !/:\d+$/.test(x.id));
+  const short = mine && mine.loaded_context_length && mine.loaded_context_length < C.ctx;
+  if (m.length && (!mine || short)) {
+    // Switching or reloading: free the memory first (other chat models, or ours at the old context).
+    for (const x of live.filter(x => (x.type === 'llm' || x.type === 'vlm') && !/:\d+$/.test(x.id))) run(C.lms, ['unload', x.id], { timeout: 60000 });
+    const r = run(C.lms, ['load', C.model, '--identifier', C.model, '-c', String(C.ctx), '--parallel', '1', '--yes'], { timeout: 240000 });
     if (!r.ok) return row('lmstudio', label, 'fail', `${did}${C.model} wouldn't load.`, 'In LM Studio, download or load ' + C.model + '.');
-    did += 'Loaded ' + C.model + '. ';
+    did += `Loaded ${C.model} (${C.ctx} context). `;
   }
   return row('lmstudio', label, did ? 'fixing' : 'ok', did || `Server on, ${C.model} loaded.`);
 }

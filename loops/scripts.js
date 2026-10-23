@@ -18,9 +18,10 @@ function parse(card) {
 async function write(client, card) {
   const i = parse(card);
   const vars = { ...client, title: card.title, slot: i.slot, format: i.format, hook: i.hook, body: i.angle, note: card.note };
+  const system = await L.voice(client, [card.title, i.hook, i.angle].join('. '));
   let why = '';
   for (let attempt = 0; attempt < 2; attempt++) {
-    const out = await L.ask(L.fill('script.md', vars) + (why ? `\n\nLast try failed the check: ${why}. Fix that.` : ''), SCRIPT, 0.5);
+    const out = await L.ask(L.fill('script.md', vars) + (why ? `\n\nLast try failed the check: ${why}. Fix that.` : ''), SCRIPT, 0.7, { system });
     const broke = [...L.rules(out.script, { maxWords: 120, firstPersonOk: client.first_person_ok }), ...L.rules(out.caption, { firstPersonOk: client.first_person_ok })];
     if (!/https:\/\//.test(out.caption)) broke.push('caption has no full https link');
     if (broke.length) { why = broke.join(', '); continue; }

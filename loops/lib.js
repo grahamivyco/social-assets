@@ -2,6 +2,7 @@
 // Free tools only: LM Studio on this Mac, the Hub (Google Apps Script), git.
 const fs = require('fs'), path = require('path'), os = require('os');
 const { execFileSync } = require('child_process');
+const LLM = require('./llm');
 
 const HERE = __dirname, HOME = os.homedir();
 const readJSON = (p, d) => { try { return JSON.parse(fs.readFileSync(p, 'utf8')); } catch { return d; } };
@@ -11,7 +12,8 @@ const reels = readJSON(path.join(HERE, '..', 'reels', 'config.json'), {});
 const C = {
   repo: path.resolve(HERE, '..'),
   llm: 'http://127.0.0.1:1234/v1/chat/completions',
-  model: reels.model || 'google/gemma-4-e4b',
+  model: reels.model || 'qwen/qwen3.5-9b',
+  embed: 'text-embedding-nomic-embed-text-v1.5',
   hub: reels.hub || '', hubKey: reels.hubKey || '',
   watched: `${HOME}/Downloads/Open Frame LLC & Clients/Watched`,
   scripts: `${HOME}/Downloads/Open Frame LLC & Clients/Scripts`,
@@ -35,13 +37,34 @@ function fill(file, vars) {
   });
 }
 
-async function ask(prompt, schema, temperature = 0.4) {
+// system: standing instructions (voice rules, examples) sent as the system message, kept apart from the task.
+async function ask(prompt, schema, temperature = 0.4, { system } = {}) {
+  const messages = [...(system ? [{ role: 'system', content: system }] : []), { role: 'user', content: prompt }];
   const res = await fetch(C.llm, { method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ model: C.model, temperature, messages: [{ role: 'user', content: prompt }],
+    body: JSON.stringify({ model: C.model, messages, max_tokens: 4000, ...LLM.sampling(temperature),
       response_format: { type: 'json_schema', json_schema: { name: 'out', strict: true, schema } } }),
     signal: AbortSignal.timeout(240000) });
   if (!res.ok) throw new Error(`LM Studio said ${res.status}. Is it running with ${C.model} loaded?`);
-  return JSON.parse((await res.json()).choices[0].message.content);
+  return JSON.parse(LLM.content((await res.json()).choices[0].message));
+}
+
+// The owner's own filmed scripts (prompts/voice.md, Open Frame only), the n closest to this topic first.
+// The small embedding model already in LM Studio does the matching; if it can't load, the first n are used.
+async function voice(client, topic, n = 3) {
+  if (client.id !== 'open-frame') return '';
+  let ex = [];
+  try { ex = fs.readFileSync(path.join(HERE, 'prompts', 'voice.md'), 'utf8').replace(/<!--[\s\S]*?-->\s*/, '').split(/^Example \d+:\s*$/m).map(x => x.trim()).filter(Boolean); } catch { return ''; }
+  try {
+    const res = await fetch(C.llm.replace(/\/chat\/completions$/, '/embeddings'), { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: C.embed, input: ['search_query: ' + topic, ...ex.map(x => 'search_document: ' + x)] }), signal: AbortSignal.timeout(60000) });
+    const v = (await res.json()).data.map(d => d.embedding);
+    const cos = (a, b) => a.reduce((s, x, i) => s + x * b[i], 0) / Math.hypot(...a) / Math.hypot(...b);
+    ex = ex.map((x, i) => [cos(v[0], v[i + 1]), x]).sort((a, b) => b[0] - a[0]).map(r => r[1]);
+  } catch {}
+  return `You write short talking head Reel scripts that ${client.name}'s owner, Graham, says to camera. Sound exactly like him: short spoken lines, "you", one concrete step, plain words, no hype.
+Here is how he really talks. Copy the rhythm, never the topics or lines:
+
+${ex.slice(0, n).map((x, i) => `Example ${i + 1}:\n${x}`).join('\n\n')}`;
 }
 
 async function hub(action, data = {}) {
@@ -143,4 +166,4 @@ h1{font-size:clamp(32px,5vw,48px)}h1 i{color:var(--red)}h2{font-size:24px}.logo{
 <body><main><img class="logo" src="${PAGES}/brands/open-frame/open-frame-wordmark-horizontal.svg" alt="Open Frame">${inner}</main></body></html>`;
 }
 
-module.exports = { approval, approvals, approvalSet, PAGES, publish, token, esc, page, C, HERE, STATE, readJSON, log, slug, today, clients, fill, ask, hub, rules, judge, logRun, pull, pushState };
+module.exports = { approval, approvals, approvalSet, PAGES, publish, token, esc, page, C, HERE, STATE, readJSON, log, slug, today, clients, fill, ask, voice, hub, rules, judge, logRun, pull, pushState };

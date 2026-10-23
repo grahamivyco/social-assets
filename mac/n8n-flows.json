@@ -1,6 +1,8 @@
 [
-  { "file": "watch/scout/n8n-viral-scout.json", "name": "Open Frame viral scout", "id": "ofViralScout0001", "active": true },
-  { "file": "n8n/brand-scout.json", "name": "Open Frame brand scout", "id": "O6W5ovadJJg1Wn6e", "active": true },
-  { "file": "n8n/brand-contacts.json", "name": "Open Frame brand contacts", "id": "ofBrandContact01", "active": false },
-  { "file": "n8n/contract-check.json", "name": "Open Frame contract check", "id": "ofContractChk001", "active": true }
+  {"file": "watch/scout/n8n-viral-scout.json", "name": "Open Frame viral scout", "id": "ofViralScout0001", "active": true},
+  {"file": "n8n/brand-scout.json", "name": "Open Frame brand scout", "id": "O6W5ovadJJg1Wn6e", "active": true},
+  {"file": "n8n/brand-contacts.json", "name": "Open Frame brand contacts", "id": "ofBrandContact01", "active": false},
+  {"file": "n8n/contract-check.json", "name": "Open Frame contract check", "id": "ofContractChk001", "active": true},
+  {"file": "n8n/comment-replies.json", "name": "Open Frame comment replies", "id": "ofCommentReply01", "active": true},
+  {"file": "n8n/inbox-sorter.json", "name": "Open Frame inbox sorter", "id": "6oS45zOJCilD7QsC", "active": true}
 ]
