@@ -46,7 +46,11 @@ async function tick() {
       if (!due(loop, last[loop.id], now)) continue;
       last[loop.id] = now.toISOString();
       fs.writeFileSync(LAST, JSON.stringify(last, null, 2));
-      try { await MODS[loop.run]()(); } catch (e) { L.log(loop.id, 'failed:', e.message); }
+      try { await MODS[loop.run]()(); } catch (e) {
+        // Into Loop runs too, so a broken loop shows up in the Hub and the weekly review instead of only in the pm2 log.
+        L.log(loop.id, 'failed:', e.message);
+        await L.logRun({ loop: loop.id, client: '', status: 'fail', made: 0, kept: 0, cards: 0, note: String(e.message).slice(0, 300) });
+      }
     }
   } finally { busy = false; }
 }
