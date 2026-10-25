@@ -8,6 +8,7 @@ const fs = require('fs'), path = require('path');
 const L = require('./lib');
 
 const TEXT = { type: 'object', additionalProperties: false, required: ['text'], properties: { text: { type: 'string' } } };
+let lastWhy = '';   // why the last write() failed, for the run log (the weekly review reads it)
 async function write(prompt, opts = {}) {
   let why = '';
   for (let i = 0; i < 2; i++) {
@@ -18,6 +19,7 @@ async function write(prompt, opts = {}) {
     if (!broke.length) return text;
     why = broke.join(', ');
   }
+  lastWhy = why;
   return null;
 }
 // Answers on this loop's cards since last time: { id: status }.
@@ -134,7 +136,7 @@ async function gbp() {
     const text = await write(`Write a Google Business Profile update for ${c.name}${c.city ? ` in ${c.city}` : ''}. Who they help: ${c.audience}.
 ${source}
 3 short sentences, one useful tip or concrete example, then a plain call to action. 300 to 700 characters. No hashtags, no emoji, no em dashes.`, { minChars: 200, maxChars: 800 });
-    if (!text) { await L.logRun({ loop: 'gbp', client: c.id, status: 'check', made: 2, kept: 0, cards: 0, note: 'failed the check' }); continue; }
+    if (!text) { await L.logRun({ loop: 'gbp', client: c.id, status: 'check', made: 2, kept: 0, cards: 0, note: `failed the check: ${lastWhy}` }); continue; }
     await L.hub('add', { rows: [{ id: `gbp-${c.id}-${L.today()}`, loop: 'gbp', client: c.id, kind: 'Google post', status: 'todo', title: `Google Business update for ${c.name}`,
       body: `${text}\n\nButton: Learn more, link ${c.site || ''}\nPhoto: reuse this week's best post image.`, link: 'https://business.google.com/',
       ask: 'Open, Add update, paste, add the photo. Takes 1 minute and keeps the profile active.' }] });

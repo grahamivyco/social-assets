@@ -56,9 +56,9 @@ async function spotlight() {
   // This week's pick: a key account not featured yet, with enough of their own posts to write from.
   const { accounts = [] } = await L.hub('key-accounts', { client: c.id });
   const pick = accounts.find(a => !done[a.handle] && a.posts.length >= 2);
-  let cards = 0;
+  let cards = 0, why = '';
   if (pick) {
-    let s = null, why = '';
+    let s = null;
     for (let i = 0; i < 2 && !s; i++) {
       const o = await L.ask(`Draft a "mission-driven spotlight" carousel for ${c.name}'s Instagram about @${pick.handle}${pick.name ? ` (${pick.name})` : ''}.
 Use only facts from their own recent posts:
@@ -81,7 +81,7 @@ Never invent numbers, names or quotes. No em dashes, no hype words.${why ? `\nLa
   }
   fs.mkdirSync(path.dirname(file), { recursive: true });
   fs.writeFileSync(file, JSON.stringify(done, null, 2) + '\n');
-  await L.logRun({ loop: 'spotlight', client: c.id, status: 'ok', made: pick ? 1 : 0, kept: cards, cards, note: pick ? pick.handle : 'no key account with 2+ recent posts' });
+  await L.logRun({ loop: 'spotlight', client: c.id, status: 'ok', made: pick ? 1 : 0, kept: cards, cards, note: pick ? `${pick.handle}${cards ? '' : ` failed the check: ${why}`}` : 'no key account with 2+ recent posts' });
   L.pushState('Loops: spotlight');
 }
 
