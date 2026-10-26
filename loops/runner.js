@@ -36,6 +36,7 @@ const codeStamp = () => fs.readdirSync(L.HERE).filter(f => f.endsWith('.js')).ma
 const START = codeStamp();
 
 let busy = false;
+const retry = {};   // loop id -> { tries, at } after a failed scheduled run (kept in memory: a restart starts fresh)
 async function tick() {
   if (busy) return;
   if (cmd === 'daemon' && codeStamp() !== START) { L.log('new loop code, restarting'); process.exit(0); }
@@ -43,13 +44,22 @@ async function tick() {
   try {
     const now = new Date(), last = L.readJSON(LAST, {});
     for (const loop of L.readJSON(path.join(L.HERE, 'loops.json'), { loops: [] }).loops.filter(l => l.run && MODS[l.run] && !l.off)) {
-      if (!due(loop, last[loop.id], now)) continue;
+      const r = retry[loop.id];
+      if (r && now < r.at) continue;
+      if (!(r && r.tries < 3) && !due(loop, last[loop.id], now)) continue;
+      const before = last[loop.id];
       last[loop.id] = now.toISOString();
       fs.writeFileSync(LAST, JSON.stringify(last, null, 2));
-      try { await MODS[loop.run]()(); } catch (e) {
+      try { await MODS[loop.run]()(); delete retry[loop.id]; } catch (e) {
         // Into Loop runs too, so a broken loop shows up in the Hub and the weekly review instead of only in the pm2 log.
         L.log(loop.id, 'failed:', e.message);
         await L.logRun({ loop: loop.id, client: '', status: 'fail', made: 0, kept: 0, cards: 0, note: String(e.message).slice(0, 300) });
+        // A scheduled loop that fails (Mac just woke, LM Studio busy) tries again in 20 minutes, up to 3 times, so the day's run isn't lost.
+        if (!loop.every) {
+          const tries = (r ? r.tries : 0) + 1;
+          if (tries < 3) { retry[loop.id] = { tries, at: new Date(Date.now() + 20 * 60000) }; last[loop.id] = before; fs.writeFileSync(LAST, JSON.stringify(last, null, 2)); }
+          else delete retry[loop.id];
+        }
       }
     }
   } finally { busy = false; }
