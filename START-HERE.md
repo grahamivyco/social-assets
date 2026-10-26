@@ -1,13 +1,43 @@
 # Start here
 
-A plain-English map of Graham's marketing system: what it's for, what runs where, and where the results land. Written for someone seeing it for the first time.
+Ben, thanks for looking at this. Over the last week I've built a lot of systems for Open Frame with Claude's help. I'd like a second set of eyes before I lean on them, and your honest read on whether this is helping me get clients or getting in the way.
+
+## What I'd like from you, Ben
+
+- **Check the logic.** Does each loop actually do what it says, and does the overall design make sense for a one-person studio?
+- **Flag flaws.** Anything fragile, overbuilt, wrong or risky. Security too (I'll send you the security inventory directly, it isn't in this public repo).
+- **Suggest improvements.** Simpler ways to do the same thing are welcome.
+- **Pressure-test the plan.** Does the client pipeline and the $4k/month goal hold up? Am I spending time on the right things to land clients, and alongside that, a job?
+
+Questions I'm stuck on are at the end: [Questions for Ben](#questions-for-ben).
+
+## Where things honestly stand (2026-10-26)
+
+- **Clients:** no paying clients yet. Open Frame and the Needlework Guild of Minnesota are my own test brands. Last week's pipeline loop counted 4 leads, 0 consults, 0 wins, 0 outreach comments sent.
+- **Live and working:** posting to IG + FB, the Hub and Studio, the Mac keeper, the hourly health check, comment replies (polling), the DM bot for test accounts, analytics pulls, the inbox sorter, the brand scout, the video watch tool.
+- **Built but not proven:** most of the newer loops (ideas, engage, proposals, onboarding, site check, deals) have barely run. Nobody has answered a Yes/Pass on a loop card yet, so there's no taste data to learn from.
+- **Not working well yet:**
+  - The automatic Reel drafts. I rejected all 4 as looking bad. The hand-edited v2s are better, but the automatic path isn't there.
+  - Loops failed quietly for days. Runs stopped after Oct 22 and nobody noticed, because failures only went to a log. They now show up in the Loop runs tab, which showed Hub network blips and LM Studio timeouts (fixed with retries in #88 and #89). Today's runs still show failures: ideas, audio, reel-ask, site-collect, magnet, proposal, events.
+  - DM replies to real customers wait on Meta (Live mode test or App Review). See [docs/meta-app.md](docs/meta-app.md).
+  - Everything depends on my Mac being awake.
+
+## The docs
+
+| Doc | What's in it |
+|---|---|
+| This page | Goals, big picture, Mac setup, every loop and workflow, the site, history, questions |
+| [docs/meta-app.md](docs/meta-app.md) | The Meta app: accounts, permissions, webhooks, DM bot, comment replies, posting, meta-mcp, App Review status, what's blocked |
+| [docs/tech-stack.md](docs/tech-stack.md) | Every tool, library, API and service, with versions and why it was picked |
+| [docs/video-system.md](docs/video-system.md) | The Reel editor, AirDrop pipeline, graphics, research tools, Claude skills and the rules I've refined |
+| Security inventory (private, from me) | Every credential by name and location, exposure, ranked risks |
 
 Two repos make up the code:
 
 - **grahamivyco/social-assets** (this repo): automations, loops, n8n workflows, the Hub back end, the Reel editor, and public media served by GitHub Pages.
 - **[grahamivyco/Open-Frame](https://github.com/grahamivyco/Open-Frame)**: the website https://openframe.design and Studio (the signed-in dashboard). Read its [CONTEXT.md](https://github.com/grahamivyco/Open-Frame/blob/main/CONTEXT.md) and [docs/design-rules.md](https://github.com/grahamivyco/Open-Frame/blob/main/docs/design-rules.md) first.
 
-Both repos are **public**. Anything committed here can be read by anyone, so the security inventory (credentials and open risks) is kept privately. Ask Graham for it.
+Both repos are **public**. My Google Sheets, the Hub and n8n on my Mac aren't in the repos; I can share those separately.
 
 ## 1. The goals
 
@@ -53,7 +83,7 @@ All of this is installed by one script, [mac/install.sh](mac/install.sh). Detail
 | **pm2** | Keeps Node/Python apps running | Apps listed in [mac/apps.json](mac/apps.json): n8n, reel-watch, loops, video-watch, viral-patterns, ngrok |
 | **keeper** | pm2 app `keeper` ([mac/keeper.js](mac/keeper.js)) every 2 min, plus a login agent ([mac/boot.sh](mac/boot.sh)) | Restarts stopped apps, starts LM Studio and loads the model, `git pull` every 10 min, deploys `hub/Code.gs` with clasp when it changes, re-imports n8n flows listed in [mac/n8n-flows.json](mac/n8n-flows.json). Writes to the Hub "Mac status" tab, shown in Studio Status |
 | **n8n** | Workflow tool, self-hosted at http://localhost:5678 | Posting, DMs, comment replies, scouts, health check. Workflows are in [n8n/](n8n/) and other folders (map below) |
-| **LM Studio** | Local AI server at http://127.0.0.1:1234 (OpenAI-compatible) | Model `google/gemma-4-e4b` (some loops use `qwen/qwen3.5-9b`). Free, offline |
+| **LM Studio** | Local AI server at http://127.0.0.1:1234 (OpenAI-compatible) | Model `qwen/qwen3.5-9b` since 2026-10-23 (was `google/gemma-4-e4b`). Free, offline |
 | **ngrok** | Gives n8n a public https address | Used for Meta webhooks (DMs) and the iPhone "Watch with Claude" shortcut. Address is in [mac/README.md](mac/README.md) |
 | **Git on the Mac** | Clone of this repo at `~/social-assets` | The loops push their state files (`loops/state/`) back to this public repo |
 
@@ -135,10 +165,22 @@ Most of the system was built between 2026-10-20 and 2026-10-26, one Claude proje
 
 ## 7. Where to look first
 
-1. The security inventory (private, from Graham): credentials and open risks.
+1. The security inventory (private, from Graham) and [docs/tech-stack.md](docs/tech-stack.md).
 2. [hub/Code.gs](hub/Code.gs): the API everything calls (`doGet`, `doPost`, `checkKey_`).
 3. [loops/lib.js](loops/lib.js) and [loops/runner.js](loops/runner.js): how loops run, call the Hub and push state.
 4. [mac/install.sh](mac/install.sh) and [mac/keeper.js](mac/keeper.js): what runs on the Mac and with what access.
 5. [n8n/](n8n/): workflow exports. Credentials are referenced by name only; the values live inside n8n on the Mac.
 
 Some setup notes and source files (builders, READMEs) live in Graham's Claude project files, not in a repo. Ask Graham if you need one.
+
+## Questions for Ben
+
+1. **Funnel math.** The plan guesses about 20 outreach messages a week turn into 3 conversations and 1 consult. Last week's count was 0 comments sent. Is that funnel realistic for mission-driven orgs, and what would you change about how I find them?
+2. **Pricing.** Care $400, Starter $1,400, Growth $2,500, Full $3,800 a month, setup $950, a founding Growth rate of $1,800 for the first 3 clients ([pricing](https://openframe.design/pricing)). Too high, too low, too many tiers for someone with no retainer clients yet?
+3. **Overbuilt?** There are about 38 loops and workflows for zero paying clients. Which would you cut or pause so I spend that time on sales? Which few would you keep?
+4. **Reels.** Is filming talking heads worth my time right now, or should the effort go into direct outreach and case studies?
+5. **Security.** Of the risks in the inventory, which would you fix first? Is running everything from my laptop through a public tunnel acceptable for now?
+6. **Reliability.** Loops failed quietly for days. Is a laptop-run system a sound base for client work, or should the client-facing parts move somewhere that's always on (still free)?
+7. **Selling the system.** Is packaging this as a product a real option, or a distraction from getting clients?
+8. **Job search.** I'm also looking for a job. How would you split my week between landing Open Frame clients and applying? Does this work help as a portfolio piece, and how should I present it?
+9. **Blind spots.** What am I not seeing?
