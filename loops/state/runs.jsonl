@@ -15,3 +15,6 @@
 {"at":"2026-10-26T07:15:20.175Z","loop":"proposal","client":"","status":"fail","made":0,"kept":0,"cards":0,"note":"Unexpected token '<', \"<!doctype \"... is not valid JSON"}
 {"at":"2026-10-26T07:39:21.463Z","loop":"engage","client":"","status":"fail","made":0,"kept":0,"cards":0,"note":"The operation was aborted due to timeout"}
 {"at":"2026-10-26T09:04:46.625Z","loop":"leads","client":"open-frame","status":"ok","made":1,"kept":1,"cards":1,"note":"comments 0, key 0, leads 4, consults 0, won 0; drafts/day 15 -> 10"}
+{"at":"2026-10-26T10:01:22.926Z","loop":"site-collect","client":"","status":"fail","made":0,"kept":0,"cards":0,"note":"fetch failed"}
+{"at":"2026-10-26T10:52:43.955Z","loop":"reel-ask","client":"","status":"fail","made":0,"kept":0,"cards":0,"note":"fetch failed"}
+{"at":"2026-10-26T10:58:13.271Z","loop":"site-collect","client":"","status":"fail","made":0,"kept":0,"cards":0,"note":"fetch failed"}
