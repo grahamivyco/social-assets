@@ -38,12 +38,21 @@ function fill(file, vars) {
 }
 
 // system: standing instructions (voice rules, examples) sent as the system message, kept apart from the task.
+// One model copy is shared with reel-watch and asks.js, so a request can wait in LM Studio's queue: a timeout gets one
+// more try with double the time before the loop gives up (Loop runs showed ideas and engage timing out at 4 minutes).
 async function ask(prompt, schema, temperature = 0.4, { system } = {}) {
   const messages = [...(system ? [{ role: 'system', content: system }] : []), { role: 'user', content: prompt }];
-  const res = await fetch(C.llm, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+  const call = ms => fetch(C.llm, { method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ model: C.model, messages, max_tokens: 4000, ...LLM.sampling(temperature),
       response_format: { type: 'json_schema', json_schema: { name: 'out', strict: true, schema } } }),
-    signal: AbortSignal.timeout(240000) });
+    signal: AbortSignal.timeout(ms) });
+  let res;
+  try { res = await call(240000); } catch (e) {
+    if (e.name !== 'TimeoutError' && e.name !== 'AbortError' && !/fetch failed/.test(e.message)) throw e;
+    log('LM Studio slow or unreachable, trying once more:', e.message);
+    await sleep(15000);
+    res = await call(480000);
+  }
   if (!res.ok) throw new Error(`LM Studio said ${res.status}. Is it running with ${C.model} loaded?`);
   return JSON.parse(LLM.content((await res.json()).choices[0].message));
 }
@@ -67,14 +76,26 @@ Here is how he really talks. Copy the rhythm, never the topics or lines:
 ${ex.slice(0, n).map((x, i) => `Example ${i + 1}:\n${x}`).join('\n\n')}`;
 }
 
+// Network blips (Wi-Fi waking up) and Google's busy page ("<!doctype ..." instead of JSON) are retried 3 times before
+// the loop fails. A Hub error answer ({ error }) is real and is not retried.
 async function hub(action, data = {}) {
   if (!C.hub || !C.hubKey) throw new Error('Add "hub" and "hubKey" to reels/config.json or loops/config.json');
-  const res = await fetch(C.hub, { method: 'POST', redirect: 'follow', headers: { 'Content-Type': 'text/plain' },
-    body: JSON.stringify({ key: C.hubKey, fn: 'loops', action, ...data }) });
-  const out = await res.json();
-  if (out.error) throw new Error('Hub: ' + out.error);
-  return out;
+  let last;
+  for (const wait of [0, 5000, 20000, 60000]) {
+    if (wait) await sleep(wait);
+    try {
+      const res = await fetch(C.hub, { method: 'POST', redirect: 'follow', headers: { 'Content-Type': 'text/plain' },
+        body: JSON.stringify({ key: C.hubKey, fn: 'loops', action, ...data }), signal: AbortSignal.timeout(120000) });
+      const text = await res.text();
+      let out;
+      try { out = JSON.parse(text); } catch { throw new Error(`Hub sent a page instead of data (${res.status})`); }
+      if (out.error) throw Object.assign(new Error('Hub: ' + out.error), { final: true });
+      return out;
+    } catch (e) { if (e.final) throw e; last = e; }
+  }
+  throw last;
 }
+const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 // Every decision a person has to make also goes in the Hub's Approvals tab, for Studio (format: Open-Frame docs/approval-items.md,
 // map of who writes what: loops/APPROVALS.md). The Hub checks the kind and the client_ok rules and skips an id it already has.
