@@ -54,4 +54,4 @@ These five lived only in Graham's Claude project files until now. They're here s
 - `outreach-scout.json`: finds prospect posts for the Targets and Engage tabs.
 - `dm-inbox.json`: Meta DM webhook, local AI replies. The webhook verify token is replaced with `SET_YOUR_META_VERIFY_TOKEN`; set your own before importing.
 
-Credentials are referenced by name only. See `START-HERE.md` and `SECURITY-INVENTORY.md` at the repo root.
+Credentials are referenced by name only. See `START-HERE.md` at the repo root.

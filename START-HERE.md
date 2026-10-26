@@ -7,7 +7,7 @@ Two repos make up the code:
 - **grahamivyco/social-assets** (this repo): automations, loops, n8n workflows, the Hub back end, the Reel editor, and public media served by GitHub Pages.
 - **[grahamivyco/Open-Frame](https://github.com/grahamivyco/Open-Frame)**: the website https://openframe.design and Studio (the signed-in dashboard). Read its [CONTEXT.md](https://github.com/grahamivyco/Open-Frame/blob/main/CONTEXT.md) and [docs/design-rules.md](https://github.com/grahamivyco/Open-Frame/blob/main/docs/design-rules.md) first.
 
-Both repos are **public**. Anything committed here can be read by anyone. See [SECURITY-INVENTORY.md](SECURITY-INVENTORY.md) for every credential the system uses and the open risks.
+Both repos are **public**. Anything committed here can be read by anyone, so the security inventory (credentials and open risks) is kept privately. Ask Graham for it.
 
 ## 1. The goals
 
@@ -135,7 +135,7 @@ Most of the system was built between 2026-10-20 and 2026-10-26, one Claude proje
 
 ## 7. Where to look first
 
-1. [SECURITY-INVENTORY.md](SECURITY-INVENTORY.md): credentials and open risks.
+1. The security inventory (private, from Graham): credentials and open risks.
 2. [hub/Code.gs](hub/Code.gs): the API everything calls (`doGet`, `doPost`, `checkKey_`).
 3. [loops/lib.js](loops/lib.js) and [loops/runner.js](loops/runner.js): how loops run, call the Hub and push state.
 4. [mac/install.sh](mac/install.sh) and [mac/keeper.js](mac/keeper.js): what runs on the Mac and with what access.
