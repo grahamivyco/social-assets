@@ -1,0 +1,888 @@
+{
+  "name": "Social analytics (Instagram + Facebook to Sheet)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "days",
+              "daysInterval": 1,
+              "triggerAtHour": 6
+            }
+          ]
+        }
+      },
+      "id": "an1",
+      "name": "Every morning",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// One copy of this workflow per client. Change these four lines and the\n// Sheet URL in the two \"Save\" nodes, then pick the client's Meta credential.\nconst client = 'open-frame';\nconst ig = '17841420040350345';      // Instagram business account id\nconst fb = '1080869611776488';       // Facebook Page id\nconst v = 'v24.0';                   // Graph API version\n\n// This month so far, and all of last month (Meta caps a range at 30 days).\nconst now = DateTime.now().setZone('America/Chicago');\nconst periods = [now.startOf('month'), now.minus({ months: 1 }).startOf('month')].map(start => {\n  let end = start.endOf('month').plus({ seconds: 1 });\n  if (end > now) end = now;\n  const cap = start.plus({ days: 30 });\n  if (end > cap) end = cap;\n  return { month: start.toFormat('yyyy-MM'), since: Math.floor(start.toSeconds()), until: Math.floor(end.toSeconds()) };\n});\nreturn [{ json: { client, ig, fb, v, periods, postsSince: Math.floor(now.minus({ days: 60 }).toSeconds()) } }];"
+      },
+      "id": "an2",
+      "name": "Client settings",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// One request per metric, so a metric Meta retires only blanks one cell.\nconst c = $json;\nconst g = `https://graph.facebook.com/${c.v}`;\nconst igTotals = ['reach', 'views', 'accounts_engaged', 'total_interactions', 'likes', 'comments', 'saves', 'shares', 'profile_links_taps', 'website_clicks', 'profile_views'];\nconst fbTotals = ['page_media_view', 'page_total_media_view_unique', 'page_post_engagements', 'page_views_total', 'page_follows', 'page_daily_follows_unique'];\nconst jobs = [];\nfor (const p of c.periods) {\n  const range = `since=${p.since}&until=${p.until}`;\n  for (const m of igTotals) jobs.push({ month: p.month, platform: 'instagram', metric: m, read: 'total',\n    url: `${g}/${c.ig}/insights?metric=${m}&period=day&metric_type=total_value&${range}` });\n  jobs.push({ month: p.month, platform: 'instagram', metric: 'new_followers', read: 'sum',\n    url: `${g}/${c.ig}/insights?metric=follower_count&period=day&${range}` });\n  for (const m of fbTotals) jobs.push({ month: p.month, platform: 'facebook', metric: m, read: m === 'page_daily_follows_unique' ? 'sum' : 'range',\n    url: `${g}/${c.fb}/insights?metric=${m}&period=${m === 'page_daily_follows_unique' ? 'day' : 'total_over_range'}&${range}` });\n}\n// Follower totals are a snapshot, so they only go on this month's row.\nconst month = c.periods[0].month;\njobs.push({ month, platform: 'instagram', metric: 'followers', read: 'field:followers_count', url: `${g}/${c.ig}?fields=followers_count` });\njobs.push({ month, platform: 'facebook', metric: 'followers', read: 'field:followers_count', url: `${g}/${c.fb}?fields=followers_count` });\nreturn jobs.map(j => ({ json: { ...j, client: c.client } }));"
+      },
+      "id": "an3",
+      "name": "Account metric jobs",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        440,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.url }}",
+        "options": {},
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "facebookGraphApi"
+      },
+      "id": "an4",
+      "name": "Graph: account metric",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        660,
+        160
+      ],
+      "credentials": {
+        "facebookGraphApi": {
+          "id": "",
+          "name": "Open Frame Page"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const jobs = $('Account metric jobs').all();\nconst pulled = DateTime.now().setZone('America/Chicago').toISO();\nreturn $input.all().map((it, i) => {\n  const j = jobs[i].json, r = it.json;\n  let value = '', status = 'ok';\n  try {\n    if (r.error) throw new Error(r.error.message || JSON.stringify(r.error));\n    if (j.read.startsWith('field:')) value = r[j.read.slice(6)];\n    else {\n      const d = (r.data || [])[0];\n      if (!d) throw new Error('no data returned');\n      if (j.read === 'total') { if (!d.total_value) throw new Error('no total_value returned'); value = d.total_value.value; }\n      else if (j.read === 'range') value = (d.values || []).reduce((s, x) => s + (Number(x.value) || 0), 0);\n      else value = (d.values || []).reduce((s, x) => s + (Number(x.value) || 0), 0);\n    }\n  } catch (e) { status = String(e.message).slice(0, 120); }\n  return { json: { key: `${j.month}|${j.platform}|${j.metric}`, client: j.client, month: j.month, platform: j.platform, metric: j.metric, value, status, pulled_at: pulled } };\n});"
+      },
+      "id": "an5",
+      "name": "Shape account rows",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "mode": "url",
+          "value": "https://docs.google.com/spreadsheets/d/1nec5cD5RtjV6yDLzxeKX9vGhI0k123PIaFFDwXqFM6A/edit"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "Account stats"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "matchingColumns": [
+            "key"
+          ],
+          "schema": [
+            {
+              "id": "key",
+              "displayName": "key",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "client",
+              "displayName": "client",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "month",
+              "displayName": "month",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "platform",
+              "displayName": "platform",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "metric",
+              "displayName": "metric",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "value",
+              "displayName": "value",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "pulled_at",
+              "displayName": "pulled_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ]
+        },
+        "options": {},
+        "authentication": "serviceAccount"
+      },
+      "id": "an6",
+      "name": "Save account stats",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        1100,
+        160
+      ],
+      "credentials": {
+        "googleApi": {
+          "id": "",
+          "name": "Google Service Account account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "=https://graph.facebook.com/{{ $json.v }}/{{ $json.ig }}/media?fields=id,caption,media_type,media_product_type,permalink,timestamp,like_count,comments_count&limit=50",
+        "options": {},
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "facebookGraphApi"
+      },
+      "id": "an7",
+      "name": "IG: recent posts",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        440,
+        400
+      ],
+      "credentials": {
+        "facebookGraphApi": {
+          "id": "",
+          "name": "Open Frame Page"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const c = $('Client settings').first().json;\nconst since = c.postsSince * 1000;\nreturn ($json.data || []).filter(p => new Date(p.timestamp).getTime() >= since).map(p => ({ json: {\n  post: p,\n  url: `https://graph.facebook.com/${c.v}/${p.id}/insights?metric=reach,views,saved,shares,total_interactions`,\n} }));"
+      },
+      "id": "an8",
+      "name": "IG: post jobs",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        660,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.url }}",
+        "options": {},
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "facebookGraphApi"
+      },
+      "id": "an9",
+      "name": "IG: post insights",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        880,
+        400
+      ],
+      "credentials": {
+        "facebookGraphApi": {
+          "id": "",
+          "name": "Open Frame Page"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const jobs = $('IG: post jobs').all();\nconst c = $('Client settings').first().json;\nconst pulled = DateTime.now().setZone('America/Chicago').toISO();\nreturn $input.all().map((it, i) => {\n  const p = jobs[i].json.post, r = it.json;\n  const m = {};\n  for (const d of r.data || []) m[d.name] = d.values && d.values[0] ? d.values[0].value : (d.total_value || {}).value;\n  return { json: {\n    post_id: p.id, client: c.client, platform: 'instagram', published_at: p.timestamp,\n    type: p.media_product_type === 'REELS' ? 'reel' : (p.media_type === 'CAROUSEL_ALBUM' ? 'carousel' : p.media_type.toLowerCase()),\n    permalink: p.permalink, caption: (p.caption || '').split('\\n')[0].slice(0, 90),\n    reach: m.reach ?? '', views: m.views ?? '', likes: p.like_count ?? '', comments: p.comments_count ?? '',\n    saves: m.saved ?? '', shares: m.shares ?? '', clicks: '', interactions: m.total_interactions ?? '',\n    status: r.error ? String(r.error.message).slice(0, 120) : 'ok', pulled_at: pulled,\n  } };\n});"
+      },
+      "id": "an10",
+      "name": "IG: shape post rows",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "mode": "url",
+          "value": "https://docs.google.com/spreadsheets/d/1nec5cD5RtjV6yDLzxeKX9vGhI0k123PIaFFDwXqFM6A/edit"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "Post stats"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "matchingColumns": [
+            "post_id"
+          ],
+          "schema": [
+            {
+              "id": "post_id",
+              "displayName": "post_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "client",
+              "displayName": "client",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "platform",
+              "displayName": "platform",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "published_at",
+              "displayName": "published_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "type",
+              "displayName": "type",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "permalink",
+              "displayName": "permalink",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "caption",
+              "displayName": "caption",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "reach",
+              "displayName": "reach",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "views",
+              "displayName": "views",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "likes",
+              "displayName": "likes",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "comments",
+              "displayName": "comments",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "saves",
+              "displayName": "saves",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "shares",
+              "displayName": "shares",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "clicks",
+              "displayName": "clicks",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "interactions",
+              "displayName": "interactions",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "pulled_at",
+              "displayName": "pulled_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ]
+        },
+        "options": {},
+        "authentication": "serviceAccount"
+      },
+      "id": "an11",
+      "name": "Save IG post stats",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        1320,
+        400
+      ],
+      "credentials": {
+        "googleApi": {
+          "id": "",
+          "name": "Google Service Account account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "=https://graph.facebook.com/{{ $json.v }}/{{ $json.fb }}/posts?fields=id,message,created_time,permalink_url,status_type,shares,reactions.summary(total_count).limit(0),comments.summary(total_count).limit(0)&since={{ $json.postsSince }}&limit=50",
+        "options": {},
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "facebookGraphApi"
+      },
+      "id": "an12",
+      "name": "FB: recent posts",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        440,
+        640
+      ],
+      "credentials": {
+        "facebookGraphApi": {
+          "id": "",
+          "name": "Open Frame Page"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// One request per post and metric: Meta rejects the whole call if any metric is retired.\nconst c = $('Client settings').first().json;\nconst metrics = ['post_total_media_view_unique', 'post_media_view', 'post_clicks'];\nreturn ($json.data || []).flatMap(p => metrics.map(metric => ({ json: {\n  post: p, metric,\n  url: `https://graph.facebook.com/${c.v}/${p.id}/insights?metric=${metric}`,\n} })));"
+      },
+      "id": "an13",
+      "name": "FB: post jobs",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        660,
+        640
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.url }}",
+        "options": {},
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "facebookGraphApi"
+      },
+      "id": "an14",
+      "name": "FB: post insights",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        880,
+        640
+      ],
+      "credentials": {
+        "facebookGraphApi": {
+          "id": "",
+          "name": "Open Frame Page"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const jobs = $('FB: post jobs').all();\nconst c = $('Client settings').first().json;\nconst pulled = DateTime.now().setZone('America/Chicago').toISO();\nconst byPost = {};\n$input.all().forEach((it, i) => {\n  const { post: p, metric } = jobs[i].json, r = it.json;\n  const row = byPost[p.id] ||= { p, m: {}, errors: [] };\n  const d = (r.data || [])[0];\n  if (r.error) row.errors.push(`${metric}: ${String(r.error.description || r.error.message).slice(0, 60)}`);\n  else if (d && d.values && d.values[0]) row.m[metric] = d.values[0].value;\n});\nreturn Object.values(byPost).map(({ p, m, errors }) => {\n  const reactions = p.reactions ? p.reactions.summary.total_count : '';\n  const comments = p.comments ? p.comments.summary.total_count : '';\n  const shares = p.shares ? p.shares.count : 0;\n  return { json: {\n    post_id: p.id, client: c.client, platform: 'facebook', published_at: p.created_time,\n    type: /video/.test(p.status_type || '') || /\\/reel\\//.test(p.permalink_url || '') ? 'reel' : (p.status_type === 'added_photos' ? 'photo' : (p.status_type || 'post')),\n    permalink: p.permalink_url, caption: (p.message || '').split('\\n')[0].slice(0, 90),\n    reach: m.post_total_media_view_unique ?? '', views: m.post_media_view ?? '', likes: reactions, comments,\n    saves: '', shares, clicks: m.post_clicks ?? '', interactions: [reactions, comments, shares].reduce((s, x) => s + (Number(x) || 0), 0),\n    status: errors.length ? errors.join('; ').slice(0, 160) : 'ok', pulled_at: pulled,\n  } };\n});"
+      },
+      "id": "an15",
+      "name": "FB: shape post rows",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        640
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "mode": "url",
+          "value": "https://docs.google.com/spreadsheets/d/1nec5cD5RtjV6yDLzxeKX9vGhI0k123PIaFFDwXqFM6A/edit"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "Post stats"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "matchingColumns": [
+            "post_id"
+          ],
+          "schema": [
+            {
+              "id": "post_id",
+              "displayName": "post_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "client",
+              "displayName": "client",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "platform",
+              "displayName": "platform",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "published_at",
+              "displayName": "published_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "type",
+              "displayName": "type",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "permalink",
+              "displayName": "permalink",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "caption",
+              "displayName": "caption",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "reach",
+              "displayName": "reach",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "views",
+              "displayName": "views",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "likes",
+              "displayName": "likes",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "comments",
+              "displayName": "comments",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "saves",
+              "displayName": "saves",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "shares",
+              "displayName": "shares",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "clicks",
+              "displayName": "clicks",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "interactions",
+              "displayName": "interactions",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "pulled_at",
+              "displayName": "pulled_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ]
+        },
+        "options": {},
+        "authentication": "serviceAccount"
+      },
+      "id": "an16",
+      "name": "Save FB post stats",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        1320,
+        640
+      ],
+      "credentials": {
+        "googleApi": {
+          "id": "",
+          "name": "Google Service Account account"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Every morning": {
+      "main": [
+        [
+          {
+            "node": "Client settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Client settings": {
+      "main": [
+        [
+          {
+            "node": "Account metric jobs",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "IG: recent posts",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "FB: recent posts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Account metric jobs": {
+      "main": [
+        [
+          {
+            "node": "Graph: account metric",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Graph: account metric": {
+      "main": [
+        [
+          {
+            "node": "Shape account rows",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Shape account rows": {
+      "main": [
+        [
+          {
+            "node": "Save account stats",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IG: recent posts": {
+      "main": [
+        [
+          {
+            "node": "IG: post jobs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IG: post jobs": {
+      "main": [
+        [
+          {
+            "node": "IG: post insights",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IG: post insights": {
+      "main": [
+        [
+          {
+            "node": "IG: shape post rows",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IG: shape post rows": {
+      "main": [
+        [
+          {
+            "node": "Save IG post stats",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "FB: recent posts": {
+      "main": [
+        [
+          {
+            "node": "FB: post jobs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "FB: post jobs": {
+      "main": [
+        [
+          {
+            "node": "FB: post insights",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "FB: post insights": {
+      "main": [
+        [
+          {
+            "node": "FB: shape post rows",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "FB: shape post rows": {
+      "main": [
+        [
+          {
+            "node": "Save FB post stats",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "America/Chicago"
+  },
+  "pinData": {}
+}

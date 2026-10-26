@@ -1,0 +1,355 @@
+{
+ "name": "NGM content submissions",
+ "nodes": [
+  {
+   "id": "s1",
+   "name": "New submission email",
+   "type": "n8n-nodes-base.emailReadImap",
+   "typeVersion": 2.1,
+   "position": [
+    0,
+    300
+   ],
+   "parameters": {
+    "mailbox": "NGM Submissions",
+    "postProcessAction": "read",
+    "downloadAttachments": true,
+    "format": "simple",
+    "options": {
+     "customEmailConfig": "[\"UNSEEN\"]"
+    }
+   },
+   "credentials": {
+    "imap": {
+     "id": "",
+     "name": "Gmail IMAP"
+    }
+   }
+  },
+  {
+   "id": "s2",
+   "name": "Split submissions",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    220,
+    300
+   ],
+   "parameters": {
+    "jsCode": "// One item per photo, or one text item for emails with no photos (news, events, stories).\nconst out = [];\nfor (const it of $input.all()) {\n  const j = it.json;\n  const fromRaw = typeof j.from === 'string' ? j.from : (j.from?.text || j.from?.value?.[0]?.address || '');\n  const m = fromRaw.match(/^\\s*\"?([^\"<]*?)\"?\\s*<([^>]+)>/);\n  const fromName = (m ? m[1] : '').trim() || (j.from?.value?.[0]?.name || '');\n  const fromEmail = (m ? m[2] : fromRaw).trim();\n  const text = String(j.textPlain || j.text || '').replace(/\\r/g, '');\n  const body = text.split(/\\n--\\s*\\n|\\nOn .+ wrote:\\n|\\nSent from my/)[0].trim();\n  const creditLine = body.match(/^\\s*credit\\s*:\\s*(.+)$/im);\n  let credit = creditLine ? creditLine[1].trim() : fromName;\n  if (/no credit|anonymous/i.test(body)) credit = '';\n  const base = {received: j.date || new Date().toISOString(), from_name: fromName, from_email: fromEmail, credit, subject: j.subject || ''};\n  const photos = Object.entries(it.binary || {}).filter(([, b]) => /^image\\//.test(b.mimeType || '') || /\\.(heic|jpe?g|png|webp)$/i.test(b.fileName || ''));\n  if (!photos.length) { out.push({json: {...base, type: 'text', note: body.slice(0, 2000), photo_count: 0}}); continue; }\n  photos.forEach(([key, b], n) => out.push({\n    json: {...base, type: 'photo', note: body.slice(0, 400), file: b.fileName || `photo-${n + 1}.jpg`, mime: b.mimeType || 'image/jpeg', photo_count: photos.length},\n    binary: {photo: b},\n  }));\n}\nreturn out;"
+   }
+  },
+  {
+   "id": "s10",
+   "name": "Has photo?",
+   "type": "n8n-nodes-base.if",
+   "typeVersion": 2.2,
+   "position": [
+    440,
+    200
+   ],
+   "parameters": {
+    "conditions": {
+     "options": {
+      "caseSensitive": true,
+      "leftValue": "",
+      "typeValidation": "loose",
+      "version": 2
+     },
+     "conditions": [
+      {
+       "id": "c1",
+       "leftValue": "={{ $json.type }}",
+       "rightValue": "photo",
+       "operator": {
+        "type": "string",
+        "operation": "equals"
+       }
+      }
+     ],
+     "combinator": "and"
+    },
+    "options": {}
+   }
+  },
+  {
+   "id": "s3",
+   "name": "Build Gemini request",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    660,
+    100
+   ],
+   "parameters": {
+    "jsCode": "// Gemini request with the photo inline. Brand and posting rules are in the prompt.\nconst promptFor = note => `You review photos sent in by members of the Needlework Guild of Minnesota (a friendly 501(c)(3) stitching guild, mostly women 30+) for the guild's newsletter, Instagram and Facebook.\nRate how good this photo would be as a real, warm, community post. Good: finished or in-progress needlework shown clearly, members stitching together, events, the library, workshops. Natural light and real moments beat posed perfection.\nProblems to flag: blurry, too dark, tilted or sideways, screenshot, heavy filter, cluttered background that hides the work, a pattern cover or someone else's copyrighted design shown as the subject, children, private info (names, addresses, phone numbers), anything unflattering to a person in it.\nscore: 1 to 10. verdict: post (7+, ready), maybe (5 to 6, usable with a crop or as one slide in a carousel), skip (4 or less).\ntopic: the best fit for a post folder. what: one plain sentence describing the photo.\npeople: true if any faces are visible. faces: how many.\ncaption: one short line to put under the photo on a carousel slide, sentence case, warm and plain, no emoji, no em dashes, with exactly one word wrapped in *asterisks* as an accent.\nfocus: a CSS object-position to keep the subject in a 4:5 crop, like \"center 30%\".\nSender's note, for context only: ${note || '(none)'}`;\nconst out = [];\nconst items = $input.all();\nfor (let i = 0; i < items.length; i++) {\n  const buf = await this.helpers.getBinaryDataBuffer(i, 'photo');\n  const it = items[i];\n  out.push({json: {...it.json, gemini_body: JSON.stringify({\n    contents: [{parts: [{text: promptFor(it.json.note)}, {inline_data: {mime_type: it.json.mime, data: buf.toString('base64')}}]}],\n    generationConfig: {responseMimeType: 'application/json', responseSchema: {type: 'OBJECT', required: ['score', 'verdict', 'topic', 'what', 'people', 'faces', 'issues', 'caption', 'focus'], properties: {\n      score: {type: 'INTEGER'}, verdict: {type: 'STRING', enum: ['post', 'maybe', 'skip']},\n      topic: {type: 'STRING', enum: ['member-work', 'come-and-stitch', 'tea-and-stitch', 'retreat', 'workshop', 'library', 'meetings', 'other']},\n      what: {type: 'STRING'}, people: {type: 'BOOLEAN'}, faces: {type: 'INTEGER'}, issues: {type: 'ARRAY', items: {type: 'STRING'}},\n      caption: {type: 'STRING'}, focus: {type: 'STRING'}}}},\n  })}, binary: it.binary});\n}\nreturn out;"
+   }
+  },
+  {
+   "id": "s4",
+   "name": "Gemini: rate photo",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "position": [
+    880,
+    100
+   ],
+   "retryOnFail": true,
+   "maxTries": 3,
+   "waitBetweenTries": 5000,
+   "onError": "continueRegularOutput",
+   "parameters": {
+    "method": "POST",
+    "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
+    "authentication": "genericCredentialType",
+    "genericAuthType": "httpHeaderAuth",
+    "sendBody": true,
+    "specifyBody": "json",
+    "jsonBody": "={{ $json.gemini_body }}",
+    "options": {
+     "batching": {
+      "batch": {
+       "batchSize": 1,
+       "batchInterval": 7000
+      }
+     }
+    }
+   },
+   "credentials": {
+    "httpHeaderAuth": {
+     "id": "",
+     "name": "Gemini API key"
+    }
+   }
+  },
+  {
+   "id": "s5",
+   "name": "Parse rating",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    1100,
+    100
+   ],
+   "parameters": {
+    "jsCode": "// Merge the rating with the sender info, decide where the photo is saved.\nconst src = $('Build Gemini request').all();\nconst slug = s => String(s || 'member').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'member';\nreturn $input.all().map((it, i) => {\n  const s = src[i].json;\n  let r;\n  try { r = JSON.parse(it.json.candidates[0].content.parts[0].text); } catch (e) { r = {score: 0, verdict: 'maybe', issues: ['could not rate, check by hand'], what: '', caption: '', topic: 'other', people: false, faces: 0, focus: 'center'}; }\n  const day = new Date(s.received).toISOString().slice(0, 10);\n  const ext = (s.file.match(/\\.[a-z0-9]+$/i) || ['.jpg'])[0].toLowerCase();\n  const name = `${day}-${slug(s.credit || s.from_name)}-${slug(s.file.replace(/\\.[^.]+$/, ''))}${ext}`;\n  return {json: {\n    received: s.received, type: 'photo', from_name: s.from_name, from_email: s.from_email, credit: s.credit, subject: s.subject, note: s.note,\n    file: s.file, saved_path: `/Users/grahamivy/.n8n-files/ngm-submissions/photos/${r.verdict}/${name}`,\n    score: r.score, verdict: r.verdict, topic: r.topic, what: r.what,\n    people: r.people ? `yes (${r.faces})` : 'no', issues: (r.issues || []).join('; '), caption: r.caption, focus: r.focus, status: 'new',\n  }, binary: src[i].binary};\n});"
+   }
+  },
+  {
+   "id": "s6",
+   "name": "Save photo",
+   "type": "n8n-nodes-base.readWriteFile",
+   "typeVersion": 1,
+   "position": [
+    1320,
+    0
+   ],
+   "parameters": {
+    "operation": "write",
+    "fileName": "={{ $json.saved_path }}",
+    "dataPropertyName": "photo",
+    "options": {}
+   }
+  },
+  {
+   "id": "s11",
+   "name": "Text entry",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    880,
+    300
+   ],
+   "parameters": {
+    "jsCode": "// Emails with no photos: log the note for the newsletter or a text post.\nreturn $input.all().map(it => ({json: {received: it.json.received, type: 'text', from_name: it.json.from_name, from_email: it.json.from_email,\n  credit: it.json.credit, subject: it.json.subject, note: it.json.note, status: 'new'}}));"
+   }
+  },
+  {
+   "id": "s7",
+   "name": "Log to Sheet",
+   "type": "n8n-nodes-base.googleSheets",
+   "typeVersion": 4.5,
+   "position": [
+    1320,
+    200
+   ],
+   "parameters": {
+    "authentication": "serviceAccount",
+    "operation": "append",
+    "documentId": {
+     "__rl": true,
+     "mode": "url",
+     "value": "https://docs.google.com/spreadsheets/d/1nec5cD5RtjV6yDLzxeKX9vGhI0k123PIaFFDwXqFM6A/edit"
+    },
+    "sheetName": {
+     "__rl": true,
+     "mode": "name",
+     "value": "Content submissions"
+    },
+    "columns": {
+     "mappingMode": "autoMapInputData",
+     "value": {},
+     "matchingColumns": [],
+     "schema": []
+    },
+    "options": {}
+   },
+   "credentials": {
+    "googleApi": {
+     "id": "",
+     "name": "Google Service Account account"
+    }
+   }
+  },
+  {
+   "id": "s8",
+   "name": "Thank-you text",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    440,
+    460
+   ],
+   "parameters": {
+    "jsCode": "// One thank-you per email.\nconst seen = new Set(), out = [];\nfor (const it of $('Split submissions').all()) {\n  const j = it.json;\n  if (seen.has(j.from_email + j.subject)) continue;\n  seen.add(j.from_email + j.subject);\n  const first = (j.from_name || '').split(' ')[0] || 'there';\n  const what = j.photo_count === 0 ? 'this in' : j.photo_count === 1 ? 'your photo' : `your ${j.photo_count} photos`;\n  const credit = j.credit ? `We'll credit you as \"${j.credit}\". If you'd like a different name, or no name, just reply and tell us.` : `We won't put a name on it, as you asked.`;\n  const people = j.photo_count ? `If anyone in the photos would rather not be posted, let us know and we'll leave those out.\\n\\n` : '';\n  out.push({json: {to: j.from_email, subject: `Re: ${j.subject || 'your submission'}`, text:\n`Hi ${first},\n\nThank you for sending ${what}. We'll look it over for the guild's newsletter, Instagram and Facebook.\n\n${credit}\n\n${people}Needlework Guild of Minnesota\n\nhttps://needleworkguildmn.org`}});\n}\nreturn out;"
+   }
+  },
+  {
+   "id": "s9",
+   "name": "Send thank-you",
+   "type": "n8n-nodes-base.emailSend",
+   "typeVersion": 2.1,
+   "position": [
+    660,
+    460
+   ],
+   "parameters": {
+    "fromEmail": "Needlework Guild <grahamivy.co@gmail.com>",
+    "toEmail": "={{ $json.to }}",
+    "subject": "={{ $json.subject }}",
+    "emailFormat": "text",
+    "text": "={{ $json.text }}",
+    "options": {
+     "appendAttribution": false
+    }
+   },
+   "credentials": {
+    "smtp": {
+     "id": "",
+     "name": "Gmail SMTP"
+    }
+   }
+  }
+ ],
+ "connections": {
+  "New submission email": {
+   "main": [
+    [
+     {
+      "node": "Split submissions",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Split submissions": {
+   "main": [
+    [
+     {
+      "node": "Has photo?",
+      "type": "main",
+      "index": 0
+     },
+     {
+      "node": "Thank-you text",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Has photo?": {
+   "main": [
+    [
+     {
+      "node": "Build Gemini request",
+      "type": "main",
+      "index": 0
+     }
+    ],
+    [
+     {
+      "node": "Text entry",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Build Gemini request": {
+   "main": [
+    [
+     {
+      "node": "Gemini: rate photo",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Gemini: rate photo": {
+   "main": [
+    [
+     {
+      "node": "Parse rating",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Parse rating": {
+   "main": [
+    [
+     {
+      "node": "Save photo",
+      "type": "main",
+      "index": 0
+     },
+     {
+      "node": "Log to Sheet",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Text entry": {
+   "main": [
+    [
+     {
+      "node": "Log to Sheet",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Thank-you text": {
+   "main": [
+    [
+     {
+      "node": "Send thank-you",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  }
+ },
+ "settings": {
+  "executionOrder": "v1"
+ },
+ "pinData": {}
+}

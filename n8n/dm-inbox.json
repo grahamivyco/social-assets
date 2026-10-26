@@ -1,0 +1,957 @@
+{
+ "name": "Open Frame DM inbox",
+ "nodes": [
+  {
+   "parameters": {
+    "path": "meta-dm",
+    "httpMethod": "GET",
+    "responseMode": "responseNode",
+    "options": {}
+   },
+   "id": "dm1",
+   "name": "Meta verify (GET)",
+   "type": "n8n-nodes-base.webhook",
+   "typeVersion": 2,
+   "position": [
+    0,
+    0
+   ],
+   "webhookId": "of-meta-dm-get"
+  },
+  {
+   "parameters": {
+    "respondWith": "text",
+    "responseBody": "={{ $json.query['hub.verify_token'] === 'SET_YOUR_META_VERIFY_TOKEN' ? $json.query['hub.challenge'] : 'wrong verify token' }}",
+    "options": {}
+   },
+   "id": "dm2",
+   "name": "Answer challenge",
+   "type": "n8n-nodes-base.respondToWebhook",
+   "typeVersion": 1.1,
+   "position": [
+    220,
+    0
+   ]
+  },
+  {
+   "parameters": {
+    "path": "meta-dm",
+    "httpMethod": "POST",
+    "responseMode": "onReceived",
+    "options": {}
+   },
+   "id": "dm3",
+   "name": "Meta events (POST)",
+   "type": "n8n-nodes-base.webhook",
+   "typeVersion": 2,
+   "position": [
+    0,
+    300
+   ],
+   "webhookId": "of-meta-dm-post"
+  },
+  {
+   "parameters": {
+    "jsCode": "// Turn Meta's webhook payload into one item per message or comment.\nconst OWN = ['1080869611776488', '17841420040350345'];\nconst b = $input.first().json.body || {};\nconst platform = b.object === 'instagram' ? 'instagram' : 'facebook';\nconst out = [];\nfor (const e of b.entry || []) {\n  for (const m of e.messaging || []) {\n    if (m.message && m.message.is_echo) continue;\n    if (OWN.includes(String(m.sender && m.sender.id))) continue;\n    const text = (m.message && m.message.text) || (m.postback && (m.postback.title || m.postback.payload)) || '';\n    if (!text) continue;\n    out.push({ id: (m.message && m.message.mid) || ('pb-' + m.timestamp), platform, kind: 'dm',\n      sender_id: String(m.sender.id), comment_id: '', username: '', text,\n      received_at: new Date(m.timestamp || Date.now()).toISOString() });\n  }\n  for (const c of e.changes || []) {\n    const v = c.value || {};\n    if (c.field === 'comments') {\n      if (!v.from || OWN.includes(String(v.from.id))) continue;\n      out.push({ id: 'c-' + v.id, platform: 'instagram', kind: 'comment', sender_id: String(v.from.id),\n        comment_id: String(v.id), username: v.from.username || '', text: v.text || '',\n        received_at: new Date().toISOString() });\n    }\n    if (c.field === 'feed' && v.item === 'comment' && v.verb === 'add') {\n      if (!v.from || OWN.includes(String(v.from.id))) continue;\n      out.push({ id: 'c-' + v.comment_id, platform: 'facebook', kind: 'comment', sender_id: String(v.from.id),\n        comment_id: String(v.comment_id), username: v.from.name || '', text: v.message || '',\n        received_at: new Date((v.created_time || Date.now() / 1000) * 1000).toISOString() });\n    }\n  }\n}\nreturn out.map(json => ({ json }));\n"
+   },
+   "id": "dm4",
+   "name": "Normalize events",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    220,
+    300
+   ]
+  },
+  {
+   "parameters": {
+    "jsCode": "// Decide what each message is, what (if anything) to auto-send, and 3 reply options for Graham.\n// ---- EDIT THESE ----\nconst TAKING_CLIENTS = true;               // false = waitlist wording first\nconst NEXT_OPENING = 'next week';          // e.g. 'in December'\nconst PRICE_FROM = 'PASTE_PRICE_FROM';     // e.g. '$1,500'. Leave as is to never quote a number\nconst KIT_URL = 'PASTE_KIT_URL';           // leave as is = no kit replies\nconst BOOK_URL = 'https://calendly.com/grahamivy-co/30min';  // Calendly. Set to 'PASTE' to use the links page\n// --------------------\nconst CONSULT = BOOK_URL.startsWith('PASTE') ? 'https://openframe.design/links' : BOOK_URL;\nconst WORK = 'https://openframe.design';\nconst has = (t, words) => words.some(w => new RegExp('\\\\b' + w + '\\\\b', 'i').test(t));\nconst emailMatch = t => (t.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,}/i) || [''])[0];\nconst shortId = s => { let h = 5381; for (const ch of s) h = ((h * 33) ^ ch.charCodeAt(0)) >>> 0; return h.toString(36).slice(0, 6); };\n// A reply ending in a link is sent as text + a tappable button, so the link never wraps mid-word.\nconst toMessage = text => {\n  const m = String(text || '').match(/^([\\s\\S]*?)\\s*\\n\\n(https?:\\/\\/\\S+)\\s*$/);\n  if (!m || !m[1].trim()) return { text };\n  const url = m[2];\n  const title = url === WORK ? 'See our work' : url === KIT_URL ? 'Get the kit' : 'Book a free consult';\n  return { attachment: { type: 'template', payload: { template_type: 'button', text: m[1].trim().replace(/:$/, '.'),\n    buttons: [{ type: 'web_url', url, title }] } } };\n};\nconst kitOn = !KIT_URL.startsWith('PASTE');\nconst priceOn = !PRICE_FROM.startsWith('PASTE');\n\nconst OPTIONS = {\n  pricing: [\n    `Thanks for asking. Every project is scoped a little differently, so every project starts with a free 30-minute consult and give you a real number after. Grab a time here:\\n\\n${CONSULT}`,\n    priceOn\n      ? `Projects usually start around ${PRICE_FROM}, depending on scope. Happy to give you an exact number after a free 30-minute consult:\\n\\n${CONSULT}`\n      : `Happy to give you a number. Could you share a bit about the project first? Then a rough range can follow.`,\n    `Happy to help. What are you looking to get done, and is there a timeline or budget you're working with? That makes it easy to point you to the right option.`,\n  ],\n  availability: (TAKING_CLIENTS ? [0, 1] : [1, 0]).map(i => [\n    `Yes, Open Frame is taking new projects and could start ${NEXT_OPENING}. Want to grab a free 30-minute consult to talk it through?\\n\\n${CONSULT}`,\n    `Open Frame is booked right now, with the next opening ${NEXT_OPENING}. Want a spot held? A quick consult locks it in:\\n\\n${CONSULT}`,\n  ][i]).concat([`Possibly. What's your timeline, and what are you hoping to get done?`]),\n  services: [\n    `Open Frame does brand identity, websites, campaigns and content for mission-driven orgs and brands. What are you working on?`,\n    `Here's some recent work:\\n\\n${WORK}\\n\\nIf it feels like a fit, book a free 30-minute consult:\\n\\n${CONSULT}`,\n    `Sounds like something Open Frame can help with. Want to talk it through on a free 30-minute consult?\\n\\n${CONSULT}`,\n  ],\n  other: [\n    `Thanks for reaching out. What are you working on? Happy to help where possible.`,\n    `Thank you, that means a lot.`,\n    `Want to talk it through? Book a free 30-minute consult:\\n\\n${CONSULT}`,\n  ],\n};\n\nreturn $input.all().map(({ json: m }) => {\n  const t = m.text.trim();\n  let intent = 'other', reply = '', publicReply = '';\n  const email = emailMatch(t);\n\n  if (email) {\n    intent = 'email';\n    reply = `Thanks, you're on the list.\\n\\nIf you ever want help with a project, book a free 30-minute consult:\\n\\n${CONSULT}`;\n  } else if (kitOn && has(t, ['kit'])) {\n    intent = 'kit';\n    reply = `Here's the Open Frame kit:\\n\\n${KIT_URL}\\n\\nWant one free template or guide a month? Reply with your email to get on the list.`;\n    if (m.kind === 'comment') publicReply = 'Sent it to your DMs. If you don\\'t see it, check your message requests.';\n  } else if (m.kind === 'comment') {\n    intent = 'comment';            // ordinary comments stay human, no ping\n  } else if (has(t, ['stop', 'unsubscribe'])) {\n    intent = 'unsubscribe';\n    reply = \"Done, you won't get any more emails from us.\";\n  } else if (has(t, ['price', 'prices', 'pricing', 'cost', 'costs', 'how much', 'rates?', 'budget', 'quote', 'charge'])) {\n    intent = 'pricing';\n  } else if (has(t, ['available', 'availability', 'taking', 'capacity', 'timeline', 'when can', 'start date', 'booked'])) {\n    intent = 'availability';\n  } else if (has(t, ['consult', 'call', 'meeting', 'book', 'booking', 'appointment'])) {\n    intent = 'book';\n    reply = `Great, pick any open time for a free 30-minute consult:\\n\\n${CONSULT}`;\n  } else if (has(t, ['where', 'located', 'location', 'hours', 'timezone', 'time zone'])) {\n    intent = 'location';\n    reply = `Open Frame is in Minneapolis and Barcelona, available during US business hours, working with clients anywhere.\\n\\nBook a free consult here:\\n\\n${CONSULT}`;\n  } else if (has(t, ['services', 'branding', 'brand', 'logo', 'website', 'web', 'marketing', 'social', 'design', 'help'])) {\n    intent = 'services';\n  }\n  const opts = OPTIONS[intent] || [];\n  const ping = opts.length > 0;\n  const lead = ['pricing', 'availability', 'book', 'services', 'other'].includes(intent);\n  return { json: { ...m, intent, email, reply, message: toMessage(reply), publicReply, lead, ping, short_id: shortId(m.id),\n    option_1: opts[0] || '', option_2: opts[1] || '', option_3: opts[2] || '',\n    status: ping ? 'needs_reply' : 'auto_replied' } };\n});\n"
+   },
+   "id": "dm5",
+   "name": "Classify + compose",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    440,
+    300
+   ]
+  },
+  {
+   "parameters": {
+    "method": "GET",
+    "url": "={{ 'https://graph.facebook.com/v21.0/' + $json.sender_id }}",
+    "authentication": "predefinedCredentialType",
+    "nodeCredentialType": "facebookGraphApi",
+    "options": {},
+    "sendQuery": true,
+    "specifyQuery": "json",
+    "jsonQuery": "={{ JSON.stringify({ fields: $json.platform === 'instagram' ? 'username,name,is_user_follow_business' : 'first_name,last_name' }) }}"
+   },
+   "id": "dm6",
+   "name": "Look up sender",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "position": [
+    660,
+    300
+   ],
+   "credentials": {
+    "facebookGraphApi": {
+     "id": "",
+     "name": "Open Frame Page"
+    }
+   },
+   "onError": "continueRegularOutput"
+  },
+  {
+   "parameters": {
+    "jsCode": "// Add the sender's name, then let the local AI (Ollama on this Mac) answer DMs the rules didn't.\n// ---- EDIT THESE ----\nconst AI_ON = true;\nconst MODEL = 'qwen2.5:7b';                       // any model pulled into Ollama\nconst BOOK_URL = 'https://calendly.com/grahamivy-co/30min';\nconst BRIEF = `You answer Instagram and Facebook DMs for Open Frame Design, a small design and marketing agency run by Graham.\nFacts you can use:\n- Helps mission-driven organizations, nonprofits and small brands stand out while staying true to who they are.\n- Services: brand identity and logos, websites, social media content and campaigns, newsletters, marketing systems.\n- Based in Minneapolis and Barcelona, works with clients anywhere, available during US business hours.\n- Next step for any project is a free 30-minute consult with Graham, booked online.\n- Portfolio: https://openframe.design\nRules:\n- Sound like a friendly person texting: 1 to 3 short sentences, plain words, no emojis, no hype, no em dashes.\n- Never quote prices, discounts or dates, and never promise anything. For those, say Graham will reply personally and suggest the free consult.\n- Never invent facts beyond the list above. If you can't answer from it, set send to false.\n- Set send to false for complaints, anything personal or sensitive, existing client work, or anything you are unsure about.\n- Set book to true when booking the free consult is a natural next step.\nReturn JSON only: {\"reply\": \"...\", \"send\": true or false, \"book\": true or false}`;\n// --------------------\nconst base = $('Classify + compose').item.json;\nconst p = $json || {};\nconst username = base.username || p.username || [p.first_name, p.last_name].filter(Boolean).join(' ') || '';\nconst out = { ...base, username, follows_us: p.is_user_follow_business === undefined ? '' : String(p.is_user_follow_business) };\n\n// Same as in Classify: a reply ending in a link goes out as text + a tappable button.\nconst toMessage = text => {\n  const m = String(text || '').match(/^([\\s\\S]*?)\\s*\\n\\n(https?:\\/\\/\\S+)\\s*$/);\n  if (!m || !m[1].trim()) return { text };\n  const url = m[2];\n  const title = url === 'https://openframe.design' ? 'See our work' : 'Book a free consult';\n  return { attachment: { type: 'template', payload: { template_type: 'button', text: m[1].trim().replace(/:$/, '.'),\n    buttons: [{ type: 'web_url', url, title }] } } };\n};\n\nif (AI_ON && out.kind === 'dm' && !out.reply && out.text.trim()) {\n  try {\n    const res = await this.helpers.httpRequest({ method: 'POST', url: 'http://localhost:11434/api/chat', json: true, timeout: 60000,\n      body: { model: MODEL, stream: false, format: 'json', options: { temperature: 0.4 },\n        messages: [{ role: 'system', content: BRIEF }, { role: 'user', content: out.text.slice(0, 1500) }] } });\n    const ai = JSON.parse(res.message.content);\n    let reply = String(ai.reply || '').trim().replace(/\\s*\u2014\\s*/g, ', ');\n    const risky = /\\$|\u20ac|\u00a3|\\d+\\s*(%|dollars|euros|per hour|\\/hr)/i.test(reply);\n    if (reply) {\n      if (ai.book) reply += `\\n\\n${BOOK_URL}`;\n      out.option_1 = reply;\n      if (ai.send === true && !risky) {\n        const follow = ['pricing', 'availability'].includes(out.intent);   // still yours to follow up\n        Object.assign(out, { reply, message: toMessage(reply), ping: follow, status: follow ? 'needs_reply' : 'auto_replied' });\n      }\n    }\n    out.ai = ai.send === true && !risky ? 'sent' : 'draft';\n  } catch (e) {\n    out.ai = 'error: ' + String(e.message || e).slice(0, 80);   // Ollama off: falls back to the rules\n  }\n}\nreturn { json: out };\n",
+    "mode": "runOnceForEachItem"
+   },
+   "id": "dm7",
+   "name": "Add sender info",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    880,
+    300
+   ]
+  },
+  {
+   "parameters": {
+    "conditions": {
+     "options": {
+      "caseSensitive": true,
+      "typeValidation": "loose"
+     },
+     "combinator": "and",
+     "conditions": [
+      {
+       "id": "r1",
+       "leftValue": "={{ $json.reply }}",
+       "rightValue": "",
+       "operator": {
+        "type": "string",
+        "operation": "notEmpty",
+        "singleValue": true
+       }
+      }
+     ]
+    },
+    "options": {}
+   },
+   "id": "dm8",
+   "name": "Auto reply?",
+   "type": "n8n-nodes-base.if",
+   "typeVersion": 2,
+   "position": [
+    1100,
+    200
+   ]
+  },
+  {
+   "parameters": {
+    "method": "POST",
+    "url": "https://graph.facebook.com/v21.0/1080869611776488/messages",
+    "authentication": "predefinedCredentialType",
+    "nodeCredentialType": "facebookGraphApi",
+    "options": {},
+    "sendBody": true,
+    "specifyBody": "json",
+    "jsonBody": "={{ JSON.stringify({ recipient: $json.comment_id ? { comment_id: $json.comment_id } : { id: $json.sender_id }, message: $json.comment_id ? { text: $json.reply } : $json.message }) }}"
+   },
+   "id": "dm9",
+   "name": "Send DM",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "position": [
+    1320,
+    100
+   ],
+   "credentials": {
+    "facebookGraphApi": {
+     "id": "",
+     "name": "Open Frame Page"
+    }
+   },
+   "onError": "continueRegularOutput"
+  },
+  {
+   "parameters": {
+    "conditions": {
+     "options": {
+      "caseSensitive": true,
+      "typeValidation": "loose"
+     },
+     "combinator": "and",
+     "conditions": [
+      {
+       "id": "r2",
+       "leftValue": "={{ $('Add sender info').item.json.publicReply }}",
+       "rightValue": "",
+       "operator": {
+        "type": "string",
+        "operation": "notEmpty",
+        "singleValue": true
+       }
+      }
+     ]
+    },
+    "options": {}
+   },
+   "id": "dm10",
+   "name": "Public reply?",
+   "type": "n8n-nodes-base.if",
+   "typeVersion": 2,
+   "position": [
+    1540,
+    100
+   ]
+  },
+  {
+   "parameters": {
+    "method": "POST",
+    "url": "={{ 'https://graph.facebook.com/v21.0/' + $('Add sender info').item.json.comment_id + ($('Add sender info').item.json.platform === 'instagram' ? '/replies' : '/comments') }}",
+    "authentication": "predefinedCredentialType",
+    "nodeCredentialType": "facebookGraphApi",
+    "options": {},
+    "sendBody": true,
+    "specifyBody": "json",
+    "jsonBody": "={{ JSON.stringify({ message: $('Add sender info').item.json.publicReply }) }}"
+   },
+   "id": "dm11",
+   "name": "Reply under comment",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "position": [
+    1760,
+    40
+   ],
+   "credentials": {
+    "facebookGraphApi": {
+     "id": "",
+     "name": "Open Frame Page"
+    }
+   },
+   "onError": "continueRegularOutput"
+  },
+  {
+   "parameters": {
+    "jsCode": "// One row for the Inbox tab.\nconst m = $('Add sender info').item.json;\nreturn { json: { id: m.id, received_at: m.received_at, platform: m.platform, kind: m.kind, sender_id: m.sender_id,\n  username: m.username, text: m.text, intent: m.intent, auto_reply: m.reply, draft_reply: '',\n  status: m.status, sent_at: m.reply ? new Date().toISOString() : '', notes: m.comment_id ? 'comment ' + m.comment_id : (m.ai ? 'ai ' + m.ai : ''),\n  short_id: m.short_id, option_1: m.option_1, option_2: m.option_2, option_3: m.option_3 } };\n",
+    "mode": "runOnceForEachItem"
+   },
+   "id": "dm12",
+   "name": "Inbox row",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    1540,
+    400
+   ]
+  },
+  {
+   "parameters": {
+    "authentication": "serviceAccount",
+    "operation": "append",
+    "documentId": {
+     "__rl": true,
+     "mode": "url",
+     "value": "https://docs.google.com/spreadsheets/d/1VgiiTBTpmFh5bqutvYvjvNZmSicc8Es2vLSmnPlpHaU/edit"
+    },
+    "sheetName": {
+     "__rl": true,
+     "mode": "name",
+     "value": "Inbox"
+    },
+    "options": {},
+    "columns": {
+     "mappingMode": "autoMapInputData",
+     "value": {}
+    }
+   },
+   "id": "dm13",
+   "name": "Log to Inbox",
+   "type": "n8n-nodes-base.googleSheets",
+   "typeVersion": 4.5,
+   "position": [
+    1760,
+    400
+   ],
+   "credentials": {
+    "googleApi": {
+     "id": "",
+     "name": "Google Service Account account"
+    }
+   }
+  },
+  {
+   "parameters": {
+    "conditions": {
+     "options": {
+      "caseSensitive": true,
+      "typeValidation": "loose"
+     },
+     "combinator": "and",
+     "conditions": [
+      {
+       "id": "r3",
+       "leftValue": "={{ $json.email }}",
+       "rightValue": "",
+       "operator": {
+        "type": "string",
+        "operation": "notEmpty",
+        "singleValue": true
+       }
+      }
+     ]
+    },
+    "options": {}
+   },
+   "id": "dm14",
+   "name": "Gave email?",
+   "type": "n8n-nodes-base.if",
+   "typeVersion": 2,
+   "position": [
+    1100,
+    560
+   ]
+  },
+  {
+   "parameters": {
+    "jsCode": "const m = $json;\nreturn { json: { subscribed_at: m.received_at, platform: m.platform, sender_id: m.sender_id, username: m.username,\n  email: m.email, source: 'dm', asset_sent: 'yes', follows_us: m.follows_us } };\n",
+    "mode": "runOnceForEachItem"
+   },
+   "id": "dm15",
+   "name": "Subscriber row",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    1320,
+    560
+   ]
+  },
+  {
+   "parameters": {
+    "authentication": "serviceAccount",
+    "operation": "append",
+    "documentId": {
+     "__rl": true,
+     "mode": "url",
+     "value": "https://docs.google.com/spreadsheets/d/1VgiiTBTpmFh5bqutvYvjvNZmSicc8Es2vLSmnPlpHaU/edit"
+    },
+    "sheetName": {
+     "__rl": true,
+     "mode": "name",
+     "value": "Subscribers"
+    },
+    "options": {},
+    "columns": {
+     "mappingMode": "autoMapInputData",
+     "value": {}
+    }
+   },
+   "id": "dm16",
+   "name": "Add to Subscribers",
+   "type": "n8n-nodes-base.googleSheets",
+   "typeVersion": 4.5,
+   "position": [
+    1540,
+    560
+   ],
+   "credentials": {
+    "googleApi": {
+     "id": "",
+     "name": "Google Service Account account"
+    }
+   }
+  },
+  {
+   "parameters": {
+    "conditions": {
+     "options": {
+      "caseSensitive": true,
+      "typeValidation": "loose"
+     },
+     "combinator": "and",
+     "conditions": [
+      {
+       "id": "r4",
+       "leftValue": "={{ $json.lead }}",
+       "rightValue": true,
+       "operator": {
+        "type": "boolean",
+        "operation": "true",
+        "singleValue": true
+       }
+      }
+     ]
+    },
+    "options": {}
+   },
+   "id": "dm17",
+   "name": "Lead?",
+   "type": "n8n-nodes-base.if",
+   "typeVersion": 2,
+   "position": [
+    1100,
+    760
+   ]
+  },
+  {
+   "parameters": {
+    "authentication": "serviceAccount",
+    "operation": "read",
+    "documentId": {
+     "__rl": true,
+     "mode": "url",
+     "value": "https://docs.google.com/spreadsheets/d/1VgiiTBTpmFh5bqutvYvjvNZmSicc8Es2vLSmnPlpHaU/edit"
+    },
+    "sheetName": {
+     "__rl": true,
+     "mode": "name",
+     "value": "Targets"
+    },
+    "options": {}
+   },
+   "id": "dm18",
+   "name": "Read Targets",
+   "type": "n8n-nodes-base.googleSheets",
+   "typeVersion": 4.5,
+   "position": [
+    1320,
+    760
+   ],
+   "credentials": {
+    "googleApi": {
+     "id": "",
+     "name": "Google Service Account account"
+    }
+   },
+   "alwaysOutputData": true,
+   "executeOnce": true
+  },
+  {
+   "parameters": {
+    "jsCode": "// Add inbound leads to the outreach tracker once. Existing rows are left alone.\nconst known = new Set($('Read Targets').all().map(r => String(r.json.handle || '').toLowerCase().replace('@', '')));\nconst seen = new Set();\nconst out = [];\nfor (const { json: m } of $('Lead?').all()) {\n  const handle = (m.username || m.sender_id).toLowerCase();\n  if (known.has(handle) || seen.has(handle)) continue;\n  seen.add(handle);\n  out.push({ json: { handle, name: m.username, type: 'inbound ' + m.platform, city: '', 'why them': 'Messaged us: ' + m.text.slice(0, 120),\n    stage: 'replied', touches: 1, last_touch: m.received_at.slice(0, 10), next_step: 'Reply in Inbox tab', handle_check: '', notes: 'sender_id ' + m.sender_id } });\n}\nreturn out;\n"
+   },
+   "id": "dm19",
+   "name": "New leads only",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    1540,
+    760
+   ]
+  },
+  {
+   "parameters": {
+    "authentication": "serviceAccount",
+    "operation": "append",
+    "documentId": {
+     "__rl": true,
+     "mode": "url",
+     "value": "https://docs.google.com/spreadsheets/d/1VgiiTBTpmFh5bqutvYvjvNZmSicc8Es2vLSmnPlpHaU/edit"
+    },
+    "sheetName": {
+     "__rl": true,
+     "mode": "name",
+     "value": "Targets"
+    },
+    "options": {},
+    "columns": {
+     "mappingMode": "autoMapInputData",
+     "value": {}
+    }
+   },
+   "id": "dm20",
+   "name": "Add to Targets",
+   "type": "n8n-nodes-base.googleSheets",
+   "typeVersion": 4.5,
+   "position": [
+    1760,
+    760
+   ],
+   "credentials": {
+    "googleApi": {
+     "id": "",
+     "name": "Google Service Account account"
+    }
+   }
+  },
+  {
+   "parameters": {
+    "rule": {
+     "interval": [
+      {
+       "field": "minutes",
+       "minutesInterval": 5
+      }
+     ]
+    }
+   },
+   "id": "dm21",
+   "name": "Every 5 minutes",
+   "type": "n8n-nodes-base.scheduleTrigger",
+   "typeVersion": 1.2,
+   "position": [
+    0,
+    1050
+   ]
+  },
+  {
+   "parameters": {
+    "authentication": "serviceAccount",
+    "operation": "read",
+    "documentId": {
+     "__rl": true,
+     "mode": "url",
+     "value": "https://docs.google.com/spreadsheets/d/1VgiiTBTpmFh5bqutvYvjvNZmSicc8Es2vLSmnPlpHaU/edit"
+    },
+    "sheetName": {
+     "__rl": true,
+     "mode": "name",
+     "value": "Inbox"
+    },
+    "options": {}
+   },
+   "id": "dm22",
+   "name": "Read Inbox",
+   "type": "n8n-nodes-base.googleSheets",
+   "typeVersion": 4.5,
+   "position": [
+    220,
+    1050
+   ],
+   "credentials": {
+    "googleApi": {
+     "id": "",
+     "name": "Google Service Account account"
+    }
+   },
+   "alwaysOutputData": true
+  },
+  {
+   "parameters": {
+    "jsCode": "// Rows Graham approved: send if still inside Meta's 24-hour window, else mark expired.\nconst DAY = 24 * 60 * 60 * 1000;\nconst WORK = 'https://openframe.design';\nconst KIT_URL = '';\n// Same as in Classify: a reply ending in a link is sent as text + a tappable button, so the link never wraps mid-word.\nconst toMessage = text => {\n  const m = String(text || '').match(/^([\\s\\S]*?)\\s*\\n\\n(https?:\\/\\/\\S+)\\s*$/);\n  if (!m || !m[1].trim()) return { text };\n  const url = m[2];\n  const title = url === WORK ? 'See our work' : url === KIT_URL ? 'Get the kit' : 'Book a free consult';\n  return { attachment: { type: 'template', payload: { template_type: 'button', text: m[1].trim().replace(/:$/, '.'),\n    buttons: [{ type: 'web_url', url, title }] } } };\n};\n\nreturn $input.all()\n  .filter(r => String(r.json.status).toLowerCase() === 'approved' && r.json.draft_reply)\n  .filter(r => !String(r.json.notes || '').startsWith('public '))   // public comment replies: sent by the comment replies workflow\n  .map(r => {\n    const late = Date.now() - new Date(r.json.received_at).getTime() > DAY;\n    const commentId = String(r.json.notes || '').startsWith('comment ') ? String(r.json.notes).slice(8) : '';\n    return { json: { ...r.json, late, commentId, message: commentId ? { text: r.json.draft_reply } : toMessage(r.json.draft_reply) } };\n  });\n"
+   },
+   "id": "dm23",
+   "name": "Approved rows",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    440,
+    1050
+   ]
+  },
+  {
+   "parameters": {
+    "conditions": {
+     "options": {
+      "caseSensitive": true,
+      "typeValidation": "loose"
+     },
+     "combinator": "and",
+     "conditions": [
+      {
+       "id": "r5",
+       "leftValue": "={{ $json.late }}",
+       "rightValue": false,
+       "operator": {
+        "type": "boolean",
+        "operation": "false",
+        "singleValue": true
+       }
+      }
+     ]
+    },
+    "options": {}
+   },
+   "id": "dm24",
+   "name": "Inside 24h?",
+   "type": "n8n-nodes-base.if",
+   "typeVersion": 2,
+   "position": [
+    660,
+    1050
+   ]
+  },
+  {
+   "parameters": {
+    "method": "POST",
+    "url": "https://graph.facebook.com/v21.0/1080869611776488/messages",
+    "authentication": "predefinedCredentialType",
+    "nodeCredentialType": "facebookGraphApi",
+    "options": {},
+    "sendBody": true,
+    "specifyBody": "json",
+    "jsonBody": "={{ JSON.stringify({ recipient: $json.commentId ? { comment_id: $json.commentId } : { id: String($json.sender_id) }, message: $json.message }) }}"
+   },
+   "id": "dm25",
+   "name": "Send approved reply",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "position": [
+    880,
+    960
+   ],
+   "credentials": {
+    "facebookGraphApi": {
+     "id": "",
+     "name": "Open Frame Page"
+    }
+   },
+   "onError": "continueRegularOutput"
+  },
+  {
+   "parameters": {
+    "jsCode": "const row = $('Inside 24h?').item.json;\nconst ok = !$json.error;\nreturn { json: { id: row.id, status: ok ? 'sent' : 'failed', sent_at: ok ? new Date().toISOString() : '',\n  notes: ok ? row.notes : String(($json.error && $json.error.message) || 'send failed').slice(0, 200) } };\n",
+    "mode": "runOnceForEachItem"
+   },
+   "id": "dm26",
+   "name": "Mark sent",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    1100,
+    960
+   ]
+  },
+  {
+   "parameters": {
+    "jsCode": "return { json: { id: $json.id, status: 'expired', notes: 'Past 24h window. Reply by hand in the Meta inbox.' } };",
+    "mode": "runOnceForEachItem"
+   },
+   "id": "dm27",
+   "name": "Mark expired",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    880,
+    1150
+   ]
+  },
+  {
+   "parameters": {
+    "authentication": "serviceAccount",
+    "operation": "update",
+    "documentId": {
+     "__rl": true,
+     "mode": "url",
+     "value": "https://docs.google.com/spreadsheets/d/1VgiiTBTpmFh5bqutvYvjvNZmSicc8Es2vLSmnPlpHaU/edit"
+    },
+    "sheetName": {
+     "__rl": true,
+     "mode": "name",
+     "value": "Inbox"
+    },
+    "options": {},
+    "columns": {
+     "mappingMode": "autoMapInputData",
+     "value": {},
+     "matchingColumns": [
+      "id"
+     ]
+    }
+   },
+   "id": "dm28",
+   "name": "Update Inbox",
+   "type": "n8n-nodes-base.googleSheets",
+   "typeVersion": 4.5,
+   "position": [
+    1320,
+    1050
+   ],
+   "credentials": {
+    "googleApi": {
+     "id": "",
+     "name": "Google Service Account account"
+    }
+   }
+  }
+ ],
+ "connections": {
+  "Meta verify (GET)": {
+   "main": [
+    [
+     {
+      "node": "Answer challenge",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Meta events (POST)": {
+   "main": [
+    [
+     {
+      "node": "Normalize events",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Normalize events": {
+   "main": [
+    [
+     {
+      "node": "Classify + compose",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Classify + compose": {
+   "main": [
+    [
+     {
+      "node": "Look up sender",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Look up sender": {
+   "main": [
+    [
+     {
+      "node": "Add sender info",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Add sender info": {
+   "main": [
+    [
+     {
+      "node": "Auto reply?",
+      "type": "main",
+      "index": 0
+     },
+     {
+      "node": "Gave email?",
+      "type": "main",
+      "index": 0
+     },
+     {
+      "node": "Lead?",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Auto reply?": {
+   "main": [
+    [
+     {
+      "node": "Send DM",
+      "type": "main",
+      "index": 0
+     }
+    ],
+    [
+     {
+      "node": "Inbox row",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Send DM": {
+   "main": [
+    [
+     {
+      "node": "Public reply?",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Public reply?": {
+   "main": [
+    [
+     {
+      "node": "Reply under comment",
+      "type": "main",
+      "index": 0
+     },
+     {
+      "node": "Inbox row",
+      "type": "main",
+      "index": 0
+     }
+    ],
+    [
+     {
+      "node": "Inbox row",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Inbox row": {
+   "main": [
+    [
+     {
+      "node": "Log to Inbox",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Gave email?": {
+   "main": [
+    [
+     {
+      "node": "Subscriber row",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Subscriber row": {
+   "main": [
+    [
+     {
+      "node": "Add to Subscribers",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Lead?": {
+   "main": [
+    [
+     {
+      "node": "Read Targets",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Read Targets": {
+   "main": [
+    [
+     {
+      "node": "New leads only",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "New leads only": {
+   "main": [
+    [
+     {
+      "node": "Add to Targets",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Every 5 minutes": {
+   "main": [
+    [
+     {
+      "node": "Read Inbox",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Read Inbox": {
+   "main": [
+    [
+     {
+      "node": "Approved rows",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Approved rows": {
+   "main": [
+    [
+     {
+      "node": "Inside 24h?",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Inside 24h?": {
+   "main": [
+    [
+     {
+      "node": "Send approved reply",
+      "type": "main",
+      "index": 0
+     }
+    ],
+    [
+     {
+      "node": "Mark expired",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Send approved reply": {
+   "main": [
+    [
+     {
+      "node": "Mark sent",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Mark sent": {
+   "main": [
+    [
+     {
+      "node": "Update Inbox",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Mark expired": {
+   "main": [
+    [
+     {
+      "node": "Update Inbox",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  }
+ },
+ "settings": {
+  "executionOrder": "v1",
+  "timezone": "America/Chicago"
+ },
+ "pinData": {}
+}

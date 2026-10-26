@@ -1,0 +1,462 @@
+{
+ "name": "Open Frame outreach scout",
+ "nodes": [
+  {
+   "parameters": {
+    "rule": {
+     "interval": [
+      {
+       "field": "days",
+       "daysInterval": 1,
+       "triggerAtHour": 7
+      }
+     ]
+    }
+   },
+   "id": "o1",
+   "name": "Every morning 7am",
+   "type": "n8n-nodes-base.scheduleTrigger",
+   "typeVersion": 1.2,
+   "position": [
+    0,
+    300
+   ]
+  },
+  {
+   "parameters": {
+    "documentId": {
+     "__rl": true,
+     "mode": "url",
+     "value": "https://docs.google.com/spreadsheets/d/1VgiiTBTpmFh5bqutvYvjvNZmSicc8Es2vLSmnPlpHaU/edit"
+    },
+    "sheetName": {
+     "__rl": true,
+     "mode": "name",
+     "value": "Engage"
+    },
+    "options": {},
+    "authentication": "serviceAccount"
+   },
+   "id": "o2",
+   "name": "Read Engage",
+   "type": "n8n-nodes-base.googleSheets",
+   "typeVersion": 4.5,
+   "position": [
+    220,
+    300
+   ],
+   "credentials": {
+    "googleApi": {
+     "id": "",
+     "name": "Google Service Account account"
+    }
+   },
+   "alwaysOutputData": true
+  },
+  {
+   "parameters": {
+    "documentId": {
+     "__rl": true,
+     "mode": "url",
+     "value": "https://docs.google.com/spreadsheets/d/1VgiiTBTpmFh5bqutvYvjvNZmSicc8Es2vLSmnPlpHaU/edit"
+    },
+    "sheetName": {
+     "__rl": true,
+     "mode": "name",
+     "value": "Targets"
+    },
+    "options": {},
+    "authentication": "serviceAccount"
+   },
+   "id": "o3",
+   "name": "Read Targets",
+   "type": "n8n-nodes-base.googleSheets",
+   "typeVersion": 4.5,
+   "position": [
+    440,
+    200
+   ],
+   "credentials": {
+    "googleApi": {
+     "id": "",
+     "name": "Google Service Account account"
+    }
+   },
+   "executeOnce": true
+  },
+  {
+   "parameters": {
+    "jsCode": "return $input.all()\n  .filter(i => i.json.handle && i.json.stage !== 'pass' && !String(i.json.handle).startsWith('TEMPLATE'))\n  .map(i => {\n    const handle = String(i.json.handle).replace('@','').trim();\n    // Built here because a closing brace pair inside an n8n expression ends it early\n    return { json: { handle, fields: 'business_discovery.username(' + handle + '){username,followers_count,media.limit(4){id,caption,permalink,timestamp,like_count,comments_count}}' } };\n  });"
+   },
+   "id": "o4",
+   "name": "Active targets",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    660,
+    200
+   ]
+  },
+  {
+   "parameters": {
+    "url": "https://graph.facebook.com/v21.0/17841420040350345",
+    "sendQuery": true,
+    "specifyQuery": "json",
+    "jsonQuery": "={{ JSON.stringify({ fields: $json.fields }) }}",
+    "options": {},
+    "authentication": "predefinedCredentialType",
+    "nodeCredentialType": "facebookGraphApi"
+   },
+   "id": "o5",
+   "name": "IG: look up account",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "position": [
+    880,
+    200
+   ],
+   "credentials": {
+    "facebookGraphApi": {
+     "id": "",
+     "name": "Open Frame Page"
+    }
+   },
+   "onError": "continueRegularOutput"
+  },
+  {
+   "parameters": {
+    "jsCode": "// Posts from the last 3 days that aren't in the Engage tab yet\nconst seen = new Set($('Read Engage').all().map(i => String(i.json.post_id)));\nconst handles = $('Active targets').all().map(i => i.json.handle);\nconst cutoff = Date.now() - 3*24*3600*1000;\nconst out = [];\n$input.all().forEach((item, idx) => {\n  const bd = item.json.business_discovery;\n  if (!bd || !bd.media) return;\n  for (const m of bd.media.data) {\n    if (seen.has(String(m.id)) || new Date(m.timestamp).getTime() < cutoff) continue;\n    out.push({ json: { post_id: String(m.id), found_at: new Date().toISOString(), handle: bd.username,\n      post_url: m.permalink, posted_at: m.timestamp, caption: (m.caption || '').slice(0, 400),\n      likes: m.like_count ?? '', comments: m.comments_count ?? '', draft_comment: '', status: 'new', sent_at: '' } });\n  }\n});\nreturn out;"
+   },
+   "id": "o6",
+   "name": "New posts from targets",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    1100,
+    120
+   ]
+  },
+  {
+   "parameters": {
+    "jsCode": "// Mark each target handle ok or show Instagram's error, so problems show up in the Sheet\nconst handles = $('Active targets').all().map(i => i.json.handle);\nreturn $input.all().map((item, idx) => ({ json: {\n  handle: handles[idx],\n  handle_check: item.json.business_discovery\n    ? 'ok (' + item.json.business_discovery.followers_count + ' followers)'\n    : 'error: ' + String(item.json.error?.description || item.json.error?.message || item.json.error || 'no data').slice(0, 200)\n} }));"
+   },
+   "id": "o7",
+   "name": "Handle check",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    1100,
+    300
+   ]
+  },
+  {
+   "parameters": {
+    "documentId": {
+     "__rl": true,
+     "mode": "url",
+     "value": "https://docs.google.com/spreadsheets/d/1VgiiTBTpmFh5bqutvYvjvNZmSicc8Es2vLSmnPlpHaU/edit"
+    },
+    "sheetName": {
+     "__rl": true,
+     "mode": "name",
+     "value": "Targets"
+    },
+    "options": {},
+    "authentication": "serviceAccount",
+    "operation": "update",
+    "columns": {
+     "mappingMode": "defineBelow",
+     "value": {
+      "handle": "={{ $json.handle }}",
+      "handle_check": "={{ $json.handle_check }}"
+     },
+     "matchingColumns": [
+      "handle"
+     ]
+    }
+   },
+   "id": "o8",
+   "name": "Update Targets",
+   "type": "n8n-nodes-base.googleSheets",
+   "typeVersion": 4.5,
+   "position": [
+    1320,
+    300
+   ],
+   "credentials": {
+    "googleApi": {
+     "id": "",
+     "name": "Google Service Account account"
+    }
+   }
+  },
+  {
+   "parameters": {
+    "documentId": {
+     "__rl": true,
+     "mode": "url",
+     "value": "https://docs.google.com/spreadsheets/d/1VgiiTBTpmFh5bqutvYvjvNZmSicc8Es2vLSmnPlpHaU/edit"
+    },
+    "sheetName": {
+     "__rl": true,
+     "mode": "name",
+     "value": "Engage"
+    },
+    "options": {},
+    "authentication": "serviceAccount",
+    "operation": "append",
+    "columns": {
+     "mappingMode": "autoMapInputData",
+     "value": {}
+    }
+   },
+   "id": "o9",
+   "name": "Add to Engage",
+   "type": "n8n-nodes-base.googleSheets",
+   "typeVersion": 4.5,
+   "position": [
+    1540,
+    200
+   ],
+   "credentials": {
+    "googleApi": {
+     "id": "",
+     "name": "Google Service Account account"
+    }
+   }
+  },
+  {
+   "parameters": {
+    "documentId": {
+     "__rl": true,
+     "mode": "url",
+     "value": "https://docs.google.com/spreadsheets/d/1VgiiTBTpmFh5bqutvYvjvNZmSicc8Es2vLSmnPlpHaU/edit"
+    },
+    "sheetName": {
+     "__rl": true,
+     "mode": "name",
+     "value": "Hashtags"
+    },
+    "options": {},
+    "authentication": "serviceAccount"
+   },
+   "id": "o10",
+   "name": "Read Hashtags",
+   "type": "n8n-nodes-base.googleSheets",
+   "typeVersion": 4.5,
+   "position": [
+    440,
+    480
+   ],
+   "credentials": {
+    "googleApi": {
+     "id": "",
+     "name": "Google Service Account account"
+    }
+   },
+   "executeOnce": true
+  },
+  {
+   "parameters": {
+    "url": "https://graph.facebook.com/v21.0/ig_hashtag_search",
+    "sendQuery": true,
+    "specifyQuery": "json",
+    "jsonQuery": "={{ JSON.stringify({ user_id: '17841420040350345', q: $json.hashtag }) }}",
+    "options": {},
+    "authentication": "predefinedCredentialType",
+    "nodeCredentialType": "facebookGraphApi"
+   },
+   "id": "o11",
+   "name": "IG: hashtag id",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "position": [
+    660,
+    480
+   ],
+   "credentials": {
+    "facebookGraphApi": {
+     "id": "",
+     "name": "Open Frame Page"
+    }
+   },
+   "onError": "continueRegularOutput"
+  },
+  {
+   "parameters": {
+    "url": "={{ 'https://graph.facebook.com/v21.0/' + ($json.data?.[0]?.id || 'missing') + '/recent_media' }}",
+    "sendQuery": true,
+    "specifyQuery": "json",
+    "jsonQuery": "={{ JSON.stringify({ user_id: '17841420040350345', fields: 'id,permalink,timestamp,like_count,comments_count,caption', limit: 10 }) }}",
+    "options": {},
+    "authentication": "predefinedCredentialType",
+    "nodeCredentialType": "facebookGraphApi"
+   },
+   "id": "o12",
+   "name": "IG: top posts for hashtag",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "position": [
+    880,
+    480
+   ],
+   "credentials": {
+    "facebookGraphApi": {
+     "id": "",
+     "name": "Open Frame Page"
+    }
+   },
+   "onError": "continueRegularOutput"
+  },
+  {
+   "parameters": {
+    "jsCode": "// Top 2 posts per hashtag from the last 24 hours (recent_media), by likes, skipping ones already in Engage\nconst seen = new Set($('Read Engage').all().map(i => String(i.json.post_id)));\nconst tags = $('Read Hashtags').all().map(i => i.json.hashtag);\nconst cutoff = Date.now() - 7*24*3600*1000;\nconst out = [];\n$input.all().forEach((item, idx) => {\n  const posts = (item.json.data || [])\n    .filter(m => !seen.has(String(m.id)) && new Date(m.timestamp).getTime() >= cutoff)\n    .sort((a, b) => (b.like_count || 0) - (a.like_count || 0)).slice(0, 2);\n  for (const m of posts) {\n    seen.add(String(m.id));\n    out.push({ json: { post_id: String(m.id), found_at: new Date().toISOString(), handle: '#' + tags[idx],\n      post_url: m.permalink, posted_at: m.timestamp, caption: (m.caption || '').slice(0, 400),\n      likes: m.like_count ?? '', comments: m.comments_count ?? '', draft_comment: '', status: 'new', sent_at: '' } });\n  }\n});\nreturn out;"
+   },
+   "id": "o13",
+   "name": "Best popular posts",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    1100,
+    480
+   ]
+  }
+ ],
+ "connections": {
+  "Every morning 7am": {
+   "main": [
+    [
+     {
+      "node": "Read Engage",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Read Engage": {
+   "main": [
+    [
+     {
+      "node": "Read Targets",
+      "type": "main",
+      "index": 0
+     },
+     {
+      "node": "Read Hashtags",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Read Targets": {
+   "main": [
+    [
+     {
+      "node": "Active targets",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Active targets": {
+   "main": [
+    [
+     {
+      "node": "IG: look up account",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "IG: look up account": {
+   "main": [
+    [
+     {
+      "node": "New posts from targets",
+      "type": "main",
+      "index": 0
+     },
+     {
+      "node": "Handle check",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Handle check": {
+   "main": [
+    [
+     {
+      "node": "Update Targets",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "New posts from targets": {
+   "main": [
+    [
+     {
+      "node": "Add to Engage",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Read Hashtags": {
+   "main": [
+    [
+     {
+      "node": "IG: hashtag id",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "IG: hashtag id": {
+   "main": [
+    [
+     {
+      "node": "IG: top posts for hashtag",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "IG: top posts for hashtag": {
+   "main": [
+    [
+     {
+      "node": "Best popular posts",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Best popular posts": {
+   "main": [
+    [
+     {
+      "node": "Add to Engage",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  }
+ },
+ "settings": {
+  "executionOrder": "v1",
+  "timezone": "America/Chicago"
+ }
+}
