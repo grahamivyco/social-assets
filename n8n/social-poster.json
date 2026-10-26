@@ -1,0 +1,690 @@
+{
+ "name": "Social poster (Sheet to Instagram + Facebook)",
+ "nodes": [
+  {
+   "parameters": {
+    "rule": {
+     "interval": [
+      {
+       "field": "minutes",
+       "minutesInterval": 30
+      }
+     ]
+    }
+   },
+   "id": "a1",
+   "name": "Every 30 minutes",
+   "type": "n8n-nodes-base.scheduleTrigger",
+   "typeVersion": 1.2,
+   "position": [
+    0,
+    300
+   ]
+  },
+  {
+   "parameters": {
+    "documentId": {
+     "__rl": true,
+     "mode": "url",
+     "value": "https://docs.google.com/spreadsheets/d/1nec5cD5RtjV6yDLzxeKX9vGhI0k123PIaFFDwXqFM6A/edit"
+    },
+    "sheetName": {
+     "__rl": true,
+     "mode": "name",
+     "value": "Queue"
+    },
+    "options": {},
+    "authentication": "serviceAccount"
+   },
+   "id": "a2",
+   "name": "Read queue",
+   "type": "n8n-nodes-base.googleSheets",
+   "typeVersion": 4.5,
+   "position": [
+    220,
+    300
+   ],
+   "credentials": {
+    "googleApi": {
+     "id": "",
+     "name": "Google Service Account account"
+    }
+   }
+  },
+  {
+   "parameters": {
+    "jsCode": "// Keep rows that are approved, not yet posted, and due now.\nconst now = Date.now();\nreturn $input.all().filter(i => {\n  const r = i.json;\n  return String(r.status).toLowerCase() === 'approved'\n    && !r.posted_at\n    && r.publish_at && new Date(r.publish_at).getTime() <= now;\n});"
+   },
+   "id": "a3",
+   "name": "Due and approved",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    440,
+    300
+   ]
+  },
+  {
+   "parameters": {
+    "rules": {
+     "values": [
+      {
+       "conditions": {
+        "options": {
+         "caseSensitive": true,
+         "typeValidation": "strict",
+         "version": 2
+        },
+        "combinator": "and",
+        "conditions": [
+         {
+          "leftValue": "={{ $json.platform }}",
+          "rightValue": "instagram",
+          "operator": {
+           "type": "string",
+           "operation": "equals"
+          }
+         },
+         {
+          "leftValue": "={{ $json.type }}",
+          "rightValue": "carousel",
+          "operator": {
+           "type": "string",
+           "operation": "notEquals"
+          }
+         }
+        ]
+       },
+       "renameOutput": true,
+       "outputKey": "instagram"
+      },
+      {
+       "conditions": {
+        "options": {
+         "caseSensitive": true,
+         "typeValidation": "strict",
+         "version": 2
+        },
+        "combinator": "and",
+        "conditions": [
+         {
+          "leftValue": "={{ $json.platform }}",
+          "rightValue": "facebook",
+          "operator": {
+           "type": "string",
+           "operation": "equals"
+          }
+         },
+         {
+          "leftValue": "={{ $json.type }}",
+          "rightValue": "carousel",
+          "operator": {
+           "type": "string",
+           "operation": "notEquals"
+          }
+         }
+        ]
+       },
+       "renameOutput": true,
+       "outputKey": "facebook"
+      },
+      {
+       "conditions": {
+        "options": {
+         "caseSensitive": true,
+         "typeValidation": "strict",
+         "version": 2
+        },
+        "combinator": "and",
+        "conditions": [
+         {
+          "leftValue": "={{ $json.platform }}",
+          "rightValue": "instagram",
+          "operator": {
+           "type": "string",
+           "operation": "equals"
+          }
+         },
+         {
+          "leftValue": "={{ $json.type }}",
+          "rightValue": "carousel",
+          "operator": {
+           "type": "string",
+           "operation": "equals"
+          }
+         }
+        ]
+       },
+       "renameOutput": true,
+       "outputKey": "instagram carousel"
+      },
+      {
+       "conditions": {
+        "options": {
+         "caseSensitive": true,
+         "typeValidation": "strict",
+         "version": 2
+        },
+        "combinator": "and",
+        "conditions": [
+         {
+          "leftValue": "={{ $json.platform }}",
+          "rightValue": "facebook",
+          "operator": {
+           "type": "string",
+           "operation": "equals"
+          }
+         },
+         {
+          "leftValue": "={{ $json.type }}",
+          "rightValue": "carousel",
+          "operator": {
+           "type": "string",
+           "operation": "equals"
+          }
+         }
+        ]
+       },
+       "renameOutput": true,
+       "outputKey": "facebook carousel"
+      }
+     ]
+    },
+    "options": {}
+   },
+   "id": "a4",
+   "name": "Which platform",
+   "type": "n8n-nodes-base.switch",
+   "typeVersion": 3.2,
+   "position": [
+    660,
+    300
+   ]
+  },
+  {
+   "parameters": {
+    "method": "POST",
+    "url": "https://graph.facebook.com/v21.0/17841420040350345/media",
+    "sendQuery": true,
+    "specifyQuery": "json",
+    "jsonQuery": "={{ JSON.stringify($json.type === 'reel' ? Object.assign({ media_type: 'REELS', video_url: $json.media_url, caption: $json.caption }, String($json.trial || '').toLowerCase() === 'yes' ? { trial_params: JSON.stringify({ graduation_strategy: 'SS_PERFORMANCE' }) } : {}) : { image_url: $json.media_url, caption: $json.caption }) }}",
+    "options": {},
+    "authentication": "predefinedCredentialType",
+    "nodeCredentialType": "facebookGraphApi"
+   },
+   "id": "a5",
+   "name": "IG: create container",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "position": [
+    900,
+    200
+   ],
+   "credentials": {
+    "facebookGraphApi": {
+     "id": "",
+     "name": "Open Frame Page"
+    }
+   }
+  },
+  {
+   "parameters": {
+    "resume": "timeInterval",
+    "amount": 90,
+    "unit": "seconds"
+   },
+   "id": "a6",
+   "name": "Wait for IG to process",
+   "type": "n8n-nodes-base.wait",
+   "typeVersion": 1.1,
+   "position": [
+    1780,
+    200
+   ]
+  },
+  {
+   "parameters": {
+    "method": "POST",
+    "url": "https://graph.facebook.com/v21.0/17841420040350345/media_publish",
+    "sendQuery": true,
+    "specifyQuery": "json",
+    "jsonQuery": "={{ JSON.stringify({ creation_id: $json.id }) }}",
+    "options": {},
+    "authentication": "predefinedCredentialType",
+    "nodeCredentialType": "facebookGraphApi"
+   },
+   "id": "a7",
+   "name": "IG: publish",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "position": [
+    2000,
+    200
+   ],
+   "credentials": {
+    "facebookGraphApi": {
+     "id": "",
+     "name": "Open Frame Page"
+    }
+   }
+  },
+  {
+   "parameters": {
+    "method": "POST",
+    "url": "=https://graph.facebook.com/v21.0/1080869611776488/{{ $json.type === 'reel' ? 'videos' : 'photos' }}",
+    "sendQuery": true,
+    "specifyQuery": "json",
+    "jsonQuery": "={{ JSON.stringify($json.type === 'reel' ? { file_url: $json.media_url, description: $json.caption } : { url: $json.media_url, caption: $json.caption }) }}",
+    "options": {},
+    "authentication": "predefinedCredentialType",
+    "nodeCredentialType": "facebookGraphApi"
+   },
+   "id": "a8",
+   "name": "FB: post to Page",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "position": [
+    900,
+    420
+   ],
+   "credentials": {
+    "facebookGraphApi": {
+     "id": "",
+     "name": "Open Frame Page"
+    }
+   }
+  },
+  {
+   "parameters": {
+    "operation": "update",
+    "documentId": {
+     "__rl": true,
+     "mode": "url",
+     "value": "https://docs.google.com/spreadsheets/d/1nec5cD5RtjV6yDLzxeKX9vGhI0k123PIaFFDwXqFM6A/edit"
+    },
+    "sheetName": {
+     "__rl": true,
+     "mode": "name",
+     "value": "Queue"
+    },
+    "columns": {
+     "mappingMode": "defineBelow",
+     "value": {
+      "id": "={{ $('Due and approved').item.json.id }}",
+      "posted_at": "={{ $now.toISO() }}",
+      "status": "posted"
+     },
+     "matchingColumns": [
+      "id"
+     ]
+    },
+    "options": {},
+    "authentication": "serviceAccount"
+   },
+   "id": "a9",
+   "name": "Mark posted",
+   "type": "n8n-nodes-base.googleSheets",
+   "typeVersion": 4.5,
+   "position": [
+    2220,
+    300
+   ],
+   "credentials": {
+    "googleApi": {
+     "id": "",
+     "name": "Google Service Account account"
+    }
+   }
+  },
+  {
+   "parameters": {
+    "jsCode": "// One item per image. media_url holds 2-10 image URLs separated by new lines, spaces or commas.\nconst out = [];\n$input.all().forEach((it, i) => {\n  const r = it.json;\n  String(r.media_url).split(/[\\s,|]+/).filter(Boolean).slice(0, 10)\n    .forEach(url => out.push({ json: { row_id: r.id, caption: r.caption, url }, pairedItem: { item: i } }));\n});\nreturn out;"
+   },
+   "name": "IG carousel: split",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    900,
+    -40
+   ]
+  },
+  {
+   "parameters": {
+    "method": "POST",
+    "url": "https://graph.facebook.com/v21.0/17841420040350345/media",
+    "authentication": "predefinedCredentialType",
+    "nodeCredentialType": "facebookGraphApi",
+    "sendQuery": true,
+    "specifyQuery": "json",
+    "jsonQuery": "={{ JSON.stringify({ image_url: $json.url, is_carousel_item: true }) }}",
+    "options": {}
+   },
+   "name": "IG carousel: image",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "position": [
+    1120,
+    -40
+   ],
+   "credentials": {
+    "facebookGraphApi": {
+     "id": "",
+     "name": "Open Frame Page"
+    }
+   }
+  },
+  {
+   "parameters": {
+    "jsCode": "// Regroup the uploaded image ids by queue row.\nconst src = $('IG carousel: split').all();\nconst groups = {};\n$input.all().forEach((it, i) => {\n  const s = src[i].json;\n  const g = groups[s.row_id] ??= { row_id: s.row_id, caption: s.caption, ids: [], first: i };\n  g.ids.push(it.json.id);\n});\nreturn Object.values(groups).map(g => ({ json: { row_id: g.row_id, caption: g.caption, children: g.ids.join(',') }, pairedItem: { item: g.first } }));"
+   },
+   "name": "IG carousel: group",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    1340,
+    -40
+   ]
+  },
+  {
+   "parameters": {
+    "method": "POST",
+    "url": "https://graph.facebook.com/v21.0/17841420040350345/media",
+    "authentication": "predefinedCredentialType",
+    "nodeCredentialType": "facebookGraphApi",
+    "sendQuery": true,
+    "specifyQuery": "json",
+    "jsonQuery": "={{ JSON.stringify({ media_type: 'CAROUSEL', children: $json.children, caption: $json.caption }) }}",
+    "options": {}
+   },
+   "name": "IG carousel: container",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "position": [
+    1560,
+    -40
+   ],
+   "credentials": {
+    "facebookGraphApi": {
+     "id": "",
+     "name": "Open Frame Page"
+    }
+   }
+  },
+  {
+   "parameters": {
+    "jsCode": "// One item per image. media_url holds 2-10 image URLs separated by new lines, spaces or commas.\nconst out = [];\n$input.all().forEach((it, i) => {\n  const r = it.json;\n  String(r.media_url).split(/[\\s,|]+/).filter(Boolean).slice(0, 10)\n    .forEach(url => out.push({ json: { row_id: r.id, caption: r.caption, url }, pairedItem: { item: i } }));\n});\nreturn out;"
+   },
+   "name": "FB carousel: split",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    900,
+    640
+   ]
+  },
+  {
+   "parameters": {
+    "method": "POST",
+    "url": "https://graph.facebook.com/v21.0/1080869611776488/photos",
+    "authentication": "predefinedCredentialType",
+    "nodeCredentialType": "facebookGraphApi",
+    "sendQuery": true,
+    "specifyQuery": "json",
+    "jsonQuery": "={{ JSON.stringify({ url: $json.url, published: false }) }}",
+    "options": {}
+   },
+   "name": "FB carousel: photo",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "position": [
+    1120,
+    640
+   ],
+   "credentials": {
+    "facebookGraphApi": {
+     "id": "",
+     "name": "Open Frame Page"
+    }
+   }
+  },
+  {
+   "parameters": {
+    "jsCode": "// Regroup the uploaded image ids by queue row.\nconst src = $('FB carousel: split').all();\nconst groups = {};\n$input.all().forEach((it, i) => {\n  const s = src[i].json;\n  const g = groups[s.row_id] ??= { row_id: s.row_id, caption: s.caption, ids: [], first: i };\n  g.ids.push(it.json.id);\n});\nreturn Object.values(groups).map(g => ({ json: { row_id: g.row_id, caption: g.caption, attached: JSON.stringify(g.ids.map(id => ({ media_fbid: id }))) }, pairedItem: { item: g.first } }));"
+   },
+   "name": "FB carousel: group",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    1340,
+    640
+   ]
+  },
+  {
+   "parameters": {
+    "method": "POST",
+    "url": "https://graph.facebook.com/v21.0/1080869611776488/feed",
+    "authentication": "predefinedCredentialType",
+    "nodeCredentialType": "facebookGraphApi",
+    "sendQuery": true,
+    "specifyQuery": "json",
+    "jsonQuery": "={{ JSON.stringify({ message: $json.caption, attached_media: $json.attached }) }}",
+    "options": {}
+   },
+   "name": "FB carousel: post",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "position": [
+    1560,
+    640
+   ],
+   "credentials": {
+    "facebookGraphApi": {
+     "id": "",
+     "name": "Open Frame Page"
+    }
+   }
+  }
+ ],
+ "connections": {
+  "Every 30 minutes": {
+   "main": [
+    [
+     {
+      "node": "Read queue",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Read queue": {
+   "main": [
+    [
+     {
+      "node": "Due and approved",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Due and approved": {
+   "main": [
+    [
+     {
+      "node": "Which platform",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Which platform": {
+   "main": [
+    [
+     {
+      "node": "IG: create container",
+      "type": "main",
+      "index": 0
+     }
+    ],
+    [
+     {
+      "node": "FB: post to Page",
+      "type": "main",
+      "index": 0
+     }
+    ],
+    [
+     {
+      "node": "IG carousel: split",
+      "type": "main",
+      "index": 0
+     }
+    ],
+    [
+     {
+      "node": "FB carousel: split",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "IG: create container": {
+   "main": [
+    [
+     {
+      "node": "Wait for IG to process",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Wait for IG to process": {
+   "main": [
+    [
+     {
+      "node": "IG: publish",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "IG: publish": {
+   "main": [
+    [
+     {
+      "node": "Mark posted",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "FB: post to Page": {
+   "main": [
+    [
+     {
+      "node": "Mark posted",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "IG carousel: split": {
+   "main": [
+    [
+     {
+      "node": "IG carousel: image",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "IG carousel: image": {
+   "main": [
+    [
+     {
+      "node": "IG carousel: group",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "IG carousel: group": {
+   "main": [
+    [
+     {
+      "node": "IG carousel: container",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "IG carousel: container": {
+   "main": [
+    [
+     {
+      "node": "Wait for IG to process",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "FB carousel: split": {
+   "main": [
+    [
+     {
+      "node": "FB carousel: photo",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "FB carousel: photo": {
+   "main": [
+    [
+     {
+      "node": "FB carousel: group",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "FB carousel: group": {
+   "main": [
+    [
+     {
+      "node": "FB carousel: post",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "FB carousel: post": {
+   "main": [
+    [
+     {
+      "node": "Mark posted",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  }
+ },
+ "settings": {
+  "executionOrder": "v1"
+ }
+}

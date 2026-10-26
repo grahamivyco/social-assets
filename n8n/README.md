@@ -42,3 +42,16 @@ Import from URL: https://raw.githubusercontent.com/grahamivyco/social-assets/mai
 `inbox-sorter.json`: new inbox mail (IMAP) is typed by LM Studio on the Mac (free, local) and written to the `Mail` tab of NGM social queue; the Hub's `triageMail` applies Gmail labels, saves reply drafts and shows lead/client replies as Send cards. Setup: /mnt/project-files/business-ops/inbox-sorter/README.md
 
 Import from URL: https://raw.githubusercontent.com/grahamivyco/social-assets/main/n8n/inbox-sorter.json
+
+
+# Copies from Graham's project files (2026-10-26)
+
+These five lived only in Graham's Claude project files until now. They're here so the whole system is in one place. The Mac keeper does not import them (they're not in `mac/n8n-flows.json`), so the live copies in n8n on the Mac stay as they are and may carry small live tweaks.
+
+- `social-poster.json`: posts approved, due Queue rows to IG + FB.
+- `social-analytics.json`: daily 06:00 IG + FB insights into Account stats and Post stats.
+- `content-submissions.json`: emailed member photos become post drafts.
+- `outreach-scout.json`: finds prospect posts for the Targets and Engage tabs.
+- `dm-inbox.json`: Meta DM webhook, local AI replies. The webhook verify token is replaced with `SET_YOUR_META_VERIFY_TOKEN`; set your own before importing.
+
+Credentials are referenced by name only. See `START-HERE.md` and `SECURITY-INVENTORY.md` at the repo root.
