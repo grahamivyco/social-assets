@@ -6,3 +6,12 @@
 {"at":"2026-10-22T08:01:17.273Z","loop":"gbp","client":"open-frame","status":"check","made":2,"kept":0,"cards":0,"note":"failed the check"}
 {"at":"2026-10-22T08:30:50.313Z","loop":"deals","client":"open-frame","status":"ok","made":0,"kept":0,"cards":0,"note":""}
 {"at":"2026-10-22T10:00:34.519Z","loop":"key","client":"open-frame","status":"ok","made":0,"kept":0,"cards":0,"note":"0 touches from 0 key accounts this week"}
+{"at":"2026-10-25T23:42:26.020Z","loop":"proposal","client":"","status":"fail","made":0,"kept":0,"cards":0,"note":"fetch failed"}
+{"at":"2026-10-26T00:13:47.292Z","loop":"reel-ask","client":"","status":"fail","made":0,"kept":0,"cards":0,"note":"Unexpected token '<', \"<!doctype \"... is not valid JSON"}
+{"at":"2026-10-26T01:51:14.207Z","loop":"reel-ask","client":"","status":"fail","made":0,"kept":0,"cards":0,"note":"fetch failed"}
+{"at":"2026-10-26T04:06:35.958Z","loop":"magnet","client":"","status":"fail","made":0,"kept":0,"cards":0,"note":"fetch failed"}
+{"at":"2026-10-26T05:24:52.622Z","loop":"reel-ask","client":"","status":"fail","made":0,"kept":0,"cards":0,"note":"fetch failed"}
+{"at":"2026-10-26T07:13:25.841Z","loop":"reel-ask","client":"","status":"fail","made":0,"kept":0,"cards":0,"note":"fetch failed"}
+{"at":"2026-10-26T07:15:20.175Z","loop":"proposal","client":"","status":"fail","made":0,"kept":0,"cards":0,"note":"Unexpected token '<', \"<!doctype \"... is not valid JSON"}
+{"at":"2026-10-26T07:39:21.463Z","loop":"engage","client":"","status":"fail","made":0,"kept":0,"cards":0,"note":"The operation was aborted due to timeout"}
+{"at":"2026-10-26T09:04:46.625Z","loop":"leads","client":"open-frame","status":"ok","made":1,"kept":1,"cards":1,"note":"comments 0, key 0, leads 4, consults 0, won 0; drafts/day 15 -> 10"}
