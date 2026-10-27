@@ -22,3 +22,10 @@
 {"at":"2026-10-26T11:27:06.347Z","loop":"deals","client":"","status":"fail","made":0,"kept":0,"cards":0,"note":"fetch failed"}
 {"at":"2026-10-26T12:17:23.550Z","loop":"audio","client":"","status":"fail","made":0,"kept":0,"cards":0,"note":"fetch failed"}
 {"at":"2026-10-26T12:23:23.727Z","loop":"ideas","client":"open-frame","status":"fail","made":0,"kept":0,"cards":0,"note":"The operation was aborted due to timeout"}
+{"at":"2026-10-26T12:49:36.351Z","loop":"scripts","client":"","status":"fail","made":0,"kept":0,"cards":0,"note":"fetch failed"}
+{"at":"2026-10-26T13:00:54.590Z","loop":"reel-ask","client":"","status":"fail","made":0,"kept":0,"cards":0,"note":"fetch failed"}
+{"at":"2026-10-26T13:01:41.167Z","loop":"proposal","client":"","status":"fail","made":0,"kept":0,"cards":0,"note":"Unexpected token '<', \"<!doctype \"... is not valid JSON"}
+{"at":"2026-10-26T13:07:21.586Z","loop":"key","client":"open-frame","status":"ok","made":0,"kept":0,"cards":0,"note":"0 touches from 0 key accounts this week"}
+{"at":"2026-10-26T13:36:43.016Z","loop":"reel-ask","client":"","status":"fail","made":0,"kept":0,"cards":0,"note":"fetch failed"}
+{"at":"2026-10-26T14:10:41.800Z","loop":"magnet","client":"","status":"fail","made":0,"kept":0,"cards":0,"note":"fetch failed"}
+{"at":"2026-10-27T08:37:11.624Z","loop":"engage","client":"","status":"fail","made":0,"kept":0,"cards":0,"note":"The operation was aborted due to timeout"}
