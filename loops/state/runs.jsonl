@@ -29,3 +29,17 @@
 {"at":"2026-10-26T13:36:43.016Z","loop":"reel-ask","client":"","status":"fail","made":0,"kept":0,"cards":0,"note":"fetch failed"}
 {"at":"2026-10-26T14:10:41.800Z","loop":"magnet","client":"","status":"fail","made":0,"kept":0,"cards":0,"note":"fetch failed"}
 {"at":"2026-10-27T08:37:11.624Z","loop":"engage","client":"","status":"fail","made":0,"kept":0,"cards":0,"note":"The operation was aborted due to timeout"}
+{"at":"2026-10-27T11:27:55.913Z","loop":"engage","client":"open-frame","status":"ok","made":10,"kept":10,"cards":0,"note":"0 skipped as sensitive, 0 failed the check, 0 sent today"}
+{"at":"2026-10-27T11:28:16.634Z","loop":"deals","client":"open-frame","status":"ok","made":0,"kept":0,"cards":0,"note":""}
+{"at":"2026-10-27T11:44:31.480Z","loop":"key","client":"open-frame","status":"ok","made":0,"kept":0,"cards":0,"note":"0 touches from 0 key accounts this week"}
+{"at":"2026-10-27T16:13:47.868Z","loop":"reel-ask","client":"","status":"fail","made":0,"kept":0,"cards":0,"note":"Hub: Se ha superado el tiempo de espera para la solicitud de bloqueo: otro proceso ha retenido el bloqueo durante demasiado tiempo."}
+{"at":"2026-10-27T16:47:56.309Z","loop":"reel-ask","client":"","status":"fail","made":0,"kept":0,"cards":0,"note":"Hub: Se ha superado el tiempo de espera para la solicitud de bloqueo: otro proceso ha retenido el bloqueo durante demasiado tiempo."}
+{"at":"2026-10-27T16:48:30.304Z","loop":"magnet","client":"","status":"fail","made":0,"kept":0,"cards":0,"note":"Hub: Se ha superado el tiempo de espera para la solicitud de bloqueo: otro proceso ha retenido el bloqueo durante demasiado tiempo."}
+{"at":"2026-10-27T16:49:45.955Z","loop":"reel-ask","client":"","status":"fail","made":0,"kept":0,"cards":0,"note":"Hub: Se ha superado el tiempo de espera para la solicitud de bloqueo: otro proceso ha retenido el bloqueo durante demasiado tiempo."}
+{"at":"2026-10-27T16:50:44.572Z","loop":"scripts","client":"","status":"fail","made":0,"kept":0,"cards":0,"note":"Hub: Se ha superado el tiempo de espera para la solicitud de bloqueo: otro proceso ha retenido el bloqueo durante demasiado tiempo."}
+{"at":"2026-10-27T16:51:18.714Z","loop":"magnet","client":"","status":"fail","made":0,"kept":0,"cards":0,"note":"Hub: Se ha superado el tiempo de espera para la solicitud de bloqueo: otro proceso ha retenido el bloqueo durante demasiado tiempo."}
+{"at":"2026-10-27T18:11:47.661Z","loop":"reel-ask","client":"","status":"fail","made":0,"kept":0,"cards":0,"note":"Hub: Se ha superado el tiempo de espera para la solicitud de bloqueo: otro proceso ha retenido el bloqueo durante demasiado tiempo."}
+{"at":"2026-10-27T18:12:21.731Z","loop":"magnet","client":"","status":"fail","made":0,"kept":0,"cards":0,"note":"Hub: Se ha superado el tiempo de espera para la solicitud de bloqueo: otro proceso ha retenido el bloqueo durante demasiado tiempo."}
+{"at":"2026-10-27T18:14:45.283Z","loop":"reel-ask","client":"","status":"fail","made":0,"kept":0,"cards":0,"note":"Hub: Se ha superado el tiempo de espera para la solicitud de bloqueo: otro proceso ha retenido el bloqueo durante demasiado tiempo."}
+{"at":"2026-10-27T18:16:44.866Z","loop":"reel-ask","client":"","status":"fail","made":0,"kept":0,"cards":0,"note":"Hub: Se ha superado el tiempo de espera para la solicitud de bloqueo: otro proceso ha retenido el bloqueo durante demasiado tiempo."}
+{"at":"2026-10-28T06:52:44.402Z","loop":"engage","client":"open-frame","status":"ok","made":10,"kept":7,"cards":0,"note":"3 skipped as sensitive, 0 failed the check, 0 sent today"}
