@@ -1,8 +1,8 @@
 {
-  "_how": "What the keeper keeps running. always = restart when it isn't online. cron = pm2 starts it on that schedule, stopped in between is normal. external = started by hand once (n8n, ngrok); the keeper restarts it but can't create it. py = run with the editor's Python 3.13.",
+  "_how": "What the keeper keeps running. always = restart when it isn't online. cron = pm2 starts it on that schedule, stopped in between is normal. external = started by hand once (n8n, ngrok); the keeper restarts it but can't create it. off = paused on purpose: the keeper stops it and leaves it stopped. py = run with the editor's Python 3.13.",
   "apps": [
     { "name": "n8n", "label": "n8n (posting, DMs, scouts)", "always": true, "external": true, "url": "http://127.0.0.1:5678/healthz" },
-    { "name": "reel-watch", "label": "Reel maker (AirDrop watcher)", "always": true, "script": "reels/reel-watch.js", "cwd": "reels" },
+    { "name": "reel-watch", "label": "Reel maker (AirDrop watcher)", "always": true, "off": true, "script": "reels/reel-watch.js", "cwd": "reels" },
     { "name": "loops", "label": "Loops (ideas, scripts)", "always": true, "script": "loops/runner.js", "args": ["daemon"] },
     { "name": "video-watch", "label": "Video watch tool", "always": true, "script": "watch/server.py", "py": true },
     { "name": "viral-patterns", "label": "Viral patterns (Mon 12:00)", "script": "watch/patterns.py", "py": true, "cron": "0 12 * * 1" },

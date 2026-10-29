@@ -50,6 +50,8 @@ async function apps() {
   let changed = false;
   for (const a of want) {
     const p = list.find(x => x.name === a.name), st = p && p.pm2_env.status;
+    // "off": true = paused on purpose: stop it if it runs, never restart it
+    if (a.off) { if (st === 'online') { pm2('stop', a.name); changed = true; } out.push(row(a.name, a.label, 'ok', 'Paused on purpose.')); continue; }
     if (!p) {
       if (a.external) { if (!a.optional) out.push(row(a.name, a.label, 'fail', `${a.label} isn't set up in pm2.`, 'Ask Claude to set it up again.')); continue; }
       const args = ['start', path.join(REPO, a.script), '--name', a.name, '--cwd', path.join(REPO, a.cwd || '')];
