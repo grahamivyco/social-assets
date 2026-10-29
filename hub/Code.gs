@@ -2259,8 +2259,9 @@ function clientByLink_(code, touch) {
 }
 
 function withLock_(fn) {
+  // 30 s, since the hourly sync can hold the lock longer than 15 s; callers retry on 'Hub busy'.
   const lock = LockService.getScriptLock();
-  lock.waitLock(15000);
+  if (!lock.tryLock(30000)) throw new Error('Hub busy, try again');
   try { const out = fn(); SpreadsheetApp.flush(); return out; } finally { lock.releaseLock(); }
 }
 

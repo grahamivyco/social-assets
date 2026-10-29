@@ -1,6 +1,6 @@
 // Shared pieces for every loop: settings, the local AI, the Hub, the self-check, the run log, git sync.
 // Free tools only: LM Studio on this Mac, the Hub (Google Apps Script), git.
-const fs = require('fs'), path = require('path'), os = require('os');
+const fs = require('fs'), path = require('path'), os = require('os'), http = require('http');
 const { execFileSync } = require('child_process');
 const LLM = require('./llm');
 
@@ -40,21 +40,36 @@ function fill(file, vars) {
 // system: standing instructions (voice rules, examples) sent as the system message, kept apart from the task.
 // One model copy is shared with reel-watch and asks.js, so a request can wait in LM Studio's queue: a timeout gets one
 // more try with double the time before the loop gives up (Loop runs showed ideas and engage timing out at 4 minutes).
+// Plain http, not fetch: Node's fetch drops any answer that takes over 5 minutes to start ("fetch failed"), so the
+// 8-minute retry never got its 8 minutes and reel-ask, scripts, ideas and audio never finished once (audit 2026-10-29).
+function post(url, body, ms) {
+  return new Promise((resolve, reject) => {
+    const req = http.request(url, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) } }, res => {
+      let text = '';
+      res.setEncoding('utf8');
+      res.on('data', d => { text += d; });
+      res.on('end', () => { clearTimeout(t); resolve({ ok: res.statusCode < 300, status: res.statusCode, json: () => JSON.parse(text) }); });
+      res.on('error', e => { clearTimeout(t); reject(e); });
+    });
+    const t = setTimeout(() => req.destroy(Object.assign(new Error(`LM Studio took over ${ms / 60000} min`), { name: 'TimeoutError' })), ms);
+    req.on('error', e => { clearTimeout(t); reject(e); });
+    req.end(body);
+  });
+}
+
 async function ask(prompt, schema, temperature = 0.4, { system } = {}) {
   const messages = [...(system ? [{ role: 'system', content: system }] : []), { role: 'user', content: prompt }];
-  const call = ms => fetch(C.llm, { method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ model: C.model, messages, max_tokens: 4000, ...LLM.sampling(temperature),
-      response_format: { type: 'json_schema', json_schema: { name: 'out', strict: true, schema } } }),
-    signal: AbortSignal.timeout(ms) });
+  const body = JSON.stringify({ model: C.model, messages, max_tokens: 4000, ...LLM.sampling(temperature),
+    response_format: { type: 'json_schema', json_schema: { name: 'out', strict: true, schema } } });
   let res;
-  try { res = await call(240000); } catch (e) {
-    if (e.name !== 'TimeoutError' && e.name !== 'AbortError' && !/fetch failed/.test(e.message)) throw e;
+  try { res = await post(C.llm, body, 240000); } catch (e) {
+    if (e.name !== 'TimeoutError' && !/ECONNREFUSED|ECONNRESET|socket hang up/.test(e.message)) throw e;
     log('LM Studio slow or unreachable, trying once more:', e.message);
     await sleep(15000);
-    res = await call(480000);
+    res = await post(C.llm, body, 480000);
   }
   if (!res.ok) throw new Error(`LM Studio said ${res.status}. Is it running with ${C.model} loaded?`);
-  return JSON.parse(LLM.content((await res.json()).choices[0].message));
+  return JSON.parse(LLM.content(res.json().choices[0].message));
 }
 
 // The owner's own filmed scripts (prompts/voice.md, Open Frame only), the n closest to this topic first.
@@ -77,7 +92,7 @@ ${ex.slice(0, n).map((x, i) => `Example ${i + 1}:\n${x}`).join('\n\n')}`;
 }
 
 // Network blips (Wi-Fi waking up) and Google's busy page ("<!doctype ..." instead of JSON) are retried 3 times before
-// the loop fails. A Hub error answer ({ error }) is real and is not retried.
+// the loop fails. A Hub error answer ({ error }) is real and is not retried, except 'Hub busy' (another run holds the lock).
 async function hub(action, data = {}) {
   if (!C.hub || !C.hubKey) throw new Error('Add "hub" and "hubKey" to reels/config.json or loops/config.json');
   let last;
@@ -89,7 +104,7 @@ async function hub(action, data = {}) {
       const text = await res.text();
       let out;
       try { out = JSON.parse(text); } catch { throw new Error(`Hub sent a page instead of data (${res.status})`); }
-      if (out.error) throw Object.assign(new Error('Hub: ' + out.error), { final: true });
+      if (out.error) throw Object.assign(new Error('Hub: ' + out.error), { final: !/Hub busy|bloqueo|lock/i.test(out.error) });
       return out;
     } catch (e) { if (e.final) throw e; last = e; }
   }
