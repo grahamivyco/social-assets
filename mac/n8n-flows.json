@@ -4,5 +4,7 @@
   {"file": "n8n/brand-contacts.json", "name": "Open Frame brand contacts", "id": "ofBrandContact01", "active": false},
   {"file": "n8n/contract-check.json", "name": "Open Frame contract check", "id": "ofContractChk001", "active": true, "off": true},
   {"file": "n8n/comment-replies.json", "name": "Open Frame comment replies", "id": "ofCommentReply01", "active": true},
-  {"file": "n8n/inbox-sorter.json", "name": "Open Frame inbox sorter", "id": "6oS45zOJCilD7QsC", "active": true}
+  {"file": "n8n/inbox-sorter.json", "name": "Open Frame inbox sorter", "id": "6oS45zOJCilD7QsC", "active": true},
+  {"file": "n8n/lead-followup.json", "name": "Open Frame lead follow-up", "id": "xdzrX9mAyr7pBkqC", "active": true},
+  {"file": "n8n/social-poster.json", "name": "Social poster (Sheet to Instagram + Facebook)", "id": "j3IDbEgFpR0rSeqQ", "active": true}
 ]
