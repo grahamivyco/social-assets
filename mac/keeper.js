@@ -118,6 +118,8 @@ async function lmstudio() {
 }
 
 // ---------- repo + Hub deploy ----------
+const fileSha = () => { try { return require('crypto').createHash('sha1').update(fs.readFileSync(__filename)).digest('hex'); } catch { return START_SHA; } };
+const START_SHA = fileSha();
 function pull() {
   if (Date.now() - (S.pulled || 0) < 10 * 6e4) return null;
   if (fs.existsSync(path.join(REPO, '.git', 'index.lock'))) return null;
@@ -133,6 +135,8 @@ function pull() {
   if (r.ok) S.pullFailSince = 0; else S.pullFailSince = S.pullFailSince || Date.now();
   // new keeper code came down: let pm2 start the new version after this check reports
   if (r.ok && before && mine() !== before) S.restart = true;
+  // also when someone else pulled first (a by-hand git pull): the file no longer matches what this process loaded
+  if (fileSha() !== START_SHA) S.restart = true;
   const why = r.out.replace(/\s+/g, ' ').trim().slice(-200);
   const long = S.pullFailSince && Date.now() - S.pullFailSince > 60 * 6e4;
   return row('repo', 'Code updates', long ? 'fail' : 'ok', r.ok ? 'Up to date.' : (long ? 'git pull keeps failing: ' : 'Pull failed, will retry: ') + why);
