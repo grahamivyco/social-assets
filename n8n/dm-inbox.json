@@ -428,7 +428,10 @@
     }
    },
    "alwaysOutputData": true,
-   "executeOnce": true
+   "executeOnce": true,
+   "retryOnFail": true,
+   "maxTries": 3,
+   "waitBetweenTries": 5000
   },
   {
    "parameters": {
@@ -528,7 +531,10 @@
      "name": "Google Service Account account"
     }
    },
-   "alwaysOutputData": true
+   "alwaysOutputData": true,
+   "retryOnFail": true,
+   "maxTries": 3,
+   "waitBetweenTries": 5000
   },
   {
    "parameters": {

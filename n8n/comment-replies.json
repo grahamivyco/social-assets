@@ -127,7 +127,10 @@
     }
    },
    "executeOnce": true,
-   "alwaysOutputData": true
+   "alwaysOutputData": true,
+   "retryOnFail": true,
+   "maxTries": 3,
+   "waitBetweenTries": 5000
   },
   {
    "id": "cr5",
@@ -452,7 +455,10 @@
     }
    },
    "executeOnce": true,
-   "alwaysOutputData": true
+   "alwaysOutputData": true,
+   "retryOnFail": true,
+   "maxTries": 3,
+   "waitBetweenTries": 5000
   },
   {
    "id": "cr12",
