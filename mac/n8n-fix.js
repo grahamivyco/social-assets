@@ -2,7 +2,8 @@
 // Uses n8n's own command line (same install pm2 runs), so no API key is needed:
 //   list:workflow -> import:workflow (credentials filled in from the ones already in n8n) -> publish:workflow -> pm2 restart n8n
 // A flow is (re)imported when it's missing or its file changed on main (sha kept in mac/state-n8n.json), always under the
-// same id. "active": true flows get published; "active": false ones stay as they were (off until someone turns them on).
+// same id. "active": true flows get published; "active": false ones stay as they were (off until someone turns them on);
+// "off": true ones are unpublished (paused on purpose; delete "off" to bring one back).
 // To add a workflow: add a line to n8n-flows.json (id = 16 letters/digits).
 // node mac/n8n-fix.js          fix it and say what happened
 // node mac/n8n-fix.js --json   same, last line is { status, detail, fix } for the keeper
@@ -84,9 +85,15 @@ for (const f of FLOWS) {
     if (!flows(n8n('list:workflow').out).some(w => w.id === id)) { fails.push({ f, why: "Import didn't work: " + im.out.slice(-200) }); continue; }
     state[id] = sha;
     changed.push(`${have ? 'updated' : 'added'} ${f.name}`);
-  } else if (!(f.active && !wasOn)) continue;
+  } else if (f.off && wasOn) {
+    // "off": true = paused on purpose (Graham's keep/pause list, 2026-10-29): unpublish it and leave it imported
+    const un = n8n('unpublish:workflow', `--id=${id}`);
+    if (!un.ok && !n8n('update:workflow', `--id=${id}`, '--active=false').ok) fails.push({ f, why: "Couldn't pause it: " + un.out.slice(-200) });
+    else changed.push(`paused ${f.name}`);
+    continue;
+  } else if (f.off || !(f.active && !wasOn)) continue;
   // publish: always for active flows; for off-by-default ones only if someone had already turned it on
-  if (f.active || wasOn) {
+  if (!f.off && (f.active || wasOn)) {
     const pub = n8n('publish:workflow', `--id=${id}`);
     if (!pub.ok && !n8n('update:workflow', `--id=${id}`, '--active=true').ok)   // n8n 1.x name for the same thing
       fails.push({ f, why: "Couldn't publish: " + pub.out.slice(-200), fix: `Open http://localhost:5678/workflow/${id} and click Publish.` });

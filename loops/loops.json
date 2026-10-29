@@ -59,7 +59,9 @@
    "feeds": [
     "scripts"
    ],
-   "status": "new"
+   "status": "new",
+   "paused": "2026-10-29, Graham: not bringing clients yet",
+   "off": true
   },
   {
    "id": "ideas",
@@ -76,7 +78,9 @@
     "scripts",
     "content-plan"
    ],
-   "status": "new"
+   "status": "new",
+   "paused": "2026-10-29, Graham: not bringing clients yet",
+   "off": true
   },
   {
    "id": "scripts",
@@ -92,7 +96,9 @@
    "feeds": [
     "reel-watch"
    ],
-   "status": "new"
+   "status": "new",
+   "paused": "2026-10-29, Graham: not bringing clients yet",
+   "off": true
   },
   {
    "id": "reel-ask",
@@ -123,7 +129,8 @@
     "graphics",
     "poster"
    ],
-   "status": "live"
+   "status": "live",
+   "paused": "2026-10-29, Graham: not bringing clients yet"
   },
   {
    "id": "graphics",
@@ -137,7 +144,8 @@
    "feeds": [
     "library"
    ],
-   "status": "built"
+   "status": "built",
+   "paused": "2026-10-29, Graham: not bringing clients yet"
   },
   {
    "id": "content-plan",
@@ -151,7 +159,8 @@
    "feeds": [
     "poster"
    ],
-   "status": "live"
+   "status": "live",
+   "paused": "2026-10-29, Graham: not bringing clients yet"
   },
   {
    "id": "engage",
@@ -297,7 +306,9 @@
    "feeds": [
     "leads"
    ],
-   "status": "new"
+   "status": "new",
+   "paused": "2026-10-29, Graham: not bringing clients yet",
+   "off": true
   },
   {
    "id": "gbp",
@@ -453,7 +464,8 @@
    "feeds": [
     "outreach"
    ],
-   "status": "live"
+   "status": "live",
+   "paused": "2026-10-29, Graham: not bringing clients yet"
   },
   {
    "id": "key-radar",
@@ -502,7 +514,9 @@
    "feeds": [
     "leads"
    ],
-   "status": "new"
+   "status": "new",
+   "paused": "2026-10-29, Graham: not bringing clients yet",
+   "off": true
   },
   {
    "id": "approvals",
@@ -576,7 +590,8 @@
     "ideas",
     "scripts"
    ],
-   "status": "new"
+   "status": "new",
+   "paused": "2026-10-29, Graham: not bringing clients yet"
   },
   {
    "id": "keeper",
