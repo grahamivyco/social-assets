@@ -66,3 +66,4 @@
 {"at":"2026-10-29T23:06:15.300Z","loop":"reel-ask","client":"","status":"fail","made":0,"kept":0,"cards":0,"note":"Hub: Hub busy, try again"}
 {"at":"2026-10-30T07:14:47.880Z","loop":"engage","client":"","status":"fail","made":0,"kept":0,"cards":0,"note":"LM Studio took over 8 min"}
 {"at":"2026-10-30T09:23:24.171Z","loop":"engage","client":"","status":"fail","made":0,"kept":0,"cards":0,"note":"LM Studio took over 8 min"}
+{"at":"2026-10-30T09:36:49.147Z","loop":"templates","client":"open-frame","status":"ok","made":1,"kept":0,"cards":0,"note":""}
