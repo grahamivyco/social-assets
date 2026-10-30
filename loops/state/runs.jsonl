@@ -55,3 +55,14 @@
 {"at":"2026-10-28T12:58:49.345Z","loop":"scripts","client":"","status":"fail","made":0,"kept":0,"cards":0,"note":"fetch failed"}
 {"at":"2026-10-29T06:56:02.051Z","loop":"engage","client":"open-frame","status":"ok","made":10,"kept":7,"cards":0,"note":"3 skipped as sensitive, 0 failed the check, 0 sent today"}
 {"at":"2026-10-29T09:13:27.303Z","loop":"gbp","client":"open-frame","status":"ok","made":1,"kept":1,"cards":1,"note":""}
+{"at":"2026-10-29T09:47:35.162Z","loop":"site-collect","client":"","status":"fail","made":0,"kept":0,"cards":0,"note":"fetch failed"}
+{"at":"2026-10-29T10:20:03.441Z","loop":"proposal","client":"","status":"fail","made":0,"kept":0,"cards":0,"note":"fetch failed"}
+{"at":"2026-10-29T10:22:53.584Z","loop":"deals","client":"","status":"fail","made":0,"kept":0,"cards":0,"note":"fetch failed"}
+{"at":"2026-10-29T10:52:05.187Z","loop":"scripts","client":"","status":"fail","made":0,"kept":0,"cards":0,"note":"fetch failed"}
+{"at":"2026-10-29T10:56:02.722Z","loop":"deals","client":"open-frame","status":"ok","made":0,"kept":0,"cards":0,"note":""}
+{"at":"2026-10-29T11:00:58.614Z","loop":"key","client":"open-frame","status":"ok","made":0,"kept":0,"cards":0,"note":"0 touches from 0 key accounts this week"}
+{"at":"2026-10-29T11:25:14.420Z","loop":"reel-ask","client":"","status":"fail","made":0,"kept":0,"cards":0,"note":"fetch failed"}
+{"at":"2026-10-29T14:43:25.314Z","loop":"reel-ask","client":"","status":"fail","made":0,"kept":0,"cards":0,"note":"fetch failed"}
+{"at":"2026-10-29T23:06:15.300Z","loop":"reel-ask","client":"","status":"fail","made":0,"kept":0,"cards":0,"note":"Hub: Hub busy, try again"}
+{"at":"2026-10-30T07:14:47.880Z","loop":"engage","client":"","status":"fail","made":0,"kept":0,"cards":0,"note":"LM Studio took over 8 min"}
+{"at":"2026-10-30T09:23:24.171Z","loop":"engage","client":"","status":"fail","made":0,"kept":0,"cards":0,"note":"LM Studio took over 8 min"}
