@@ -1,6 +1,6 @@
 {
   "_how": "Numbers the loops tune for each other. The leads loop changes commentsPerDay from the weekly pipeline; the weekly review can change the rest.",
-  "commentsPerDay": 10,
+  "commentsPerDay": 5,
   "minComments": 5,
   "maxComments": 25,
   "weekly": {

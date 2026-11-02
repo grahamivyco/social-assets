@@ -67,3 +67,7 @@
 {"at":"2026-10-30T07:14:47.880Z","loop":"engage","client":"","status":"fail","made":0,"kept":0,"cards":0,"note":"LM Studio took over 8 min"}
 {"at":"2026-10-30T09:23:24.171Z","loop":"engage","client":"","status":"fail","made":0,"kept":0,"cards":0,"note":"LM Studio took over 8 min"}
 {"at":"2026-10-30T09:36:49.147Z","loop":"templates","client":"open-frame","status":"ok","made":1,"kept":0,"cards":0,"note":""}
+{"at":"2026-10-30T10:41:18.675Z","loop":"engage","client":"","status":"fail","made":0,"kept":0,"cards":0,"note":"LM Studio took over 8 min"}
+{"at":"2026-10-30T11:31:03.203Z","loop":"key","client":"open-frame","status":"ok","made":0,"kept":0,"cards":0,"note":"0 touches from 0 key accounts this week"}
+{"at":"2026-11-02T15:16:46.832Z","loop":"engage","client":"open-frame","status":"ok","made":10,"kept":7,"cards":0,"note":"3 skipped as sensitive, 0 failed the check, 0 sent today"}
+{"at":"2026-11-02T15:17:00.461Z","loop":"leads","client":"open-frame","status":"ok","made":1,"kept":1,"cards":1,"note":"comments 0, key 0, leads 1, consults 0, won 0; drafts/day 10 -> 5"}
