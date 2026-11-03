@@ -710,6 +710,7 @@ def cmd_render(work):
         if edit.get("pop"):
             fx = Pop(W, H, tw, pieces, part_starts, dur, brand, edit.get("hook", ""),
                      edit["hook_seconds"] if edit.get("hook") else 0, edit.get("keywords"), edit.get("beats"))
+            fx.frame_intro = bool(edit.get("frame_intro"))  # off by default (Graham, 2026-11-03)
             gfx = work / f"pop-{name}.mov"
             print(f"drawing graphics for {name}...")
             fx.render(gfx, FPS)
