@@ -1,6 +1,6 @@
 # Approval map
 
-Every automation that needs a yes from Graham or a client writes one row in the Hub's **Approvals** tab, in the format in Open-Frame [`docs/approval-items.md`](https://github.com/grahamivyco/Open-Frame/blob/main/docs/approval-items.md): one row per decision, a `kind` from that list, `client_ok` set by its rules. Studio reads and answers the tab (Hub calls `studioApprovals` / `adminApproval` for Graham, `getClientApprovals` / `clientApproval` for clients; the Studio pages that use them ship next). The old cards (Hub dashboard, client review page, Loops cards) keep working alongside.
+Every automation that needs a yes from Graham or a client writes one row in the Hub's **Approvals** tab, in the format in Open-Frame [`docs/approval-items.md`](https://github.com/grahamivyco/Open-Frame/blob/main/docs/approval-items.md): one row per decision, a `kind` from that list, `client_ok` set by its rules. Graham reads and answers the tab in Claude since 2026-11-03 (Studio is paused; see [hub/CLAUDE-INBOX.md](../hub/CLAUDE-INBOX.md)). Studio read and answered the tab (Hub calls `studioApprovals` / `adminApproval` for Graham, `getClientApprovals` / `clientApproval` for clients; the Studio pages that use them ship next). The old cards (Hub dashboard, client review page, Loops cards) keep working alongside.
 
 How to write a row:
 
