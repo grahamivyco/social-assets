@@ -21,7 +21,7 @@ Built on the Open Frame mark. A big open frame holds each question and the spark
 - Replaced the pendulum wipe (2026-11-03): Graham felt the pendulum was too much the reference studio's own look.
 
 ### `sketch-to-guide.html` (any client with a mark, default NGM)
-Pencil sketch draws on, construction guides and anchor points snap over it, design-tool panels slide in, the clean vector replaces the sketch, a flash through white into the lockup, color versions slide in as bands, palette bars rise, the real brand guide pages drift on a tilted plane, then whip cuts through the pages on the beat (117 BPM), then an end card. 16.9 s.
+Pencil sketch draws on, construction guides and anchor points snap over it, design-tool panels slide in, the clean vector replaces the sketch, a flash through white into the lockup, color versions slide in as bands, palette bars rise, the real brand guide pages drift on a tilted plane, then flat mockups (tee, hanging sign, stickers, app, tote, embroidery hoop, name badge, business cards, from `mockups-ngm.js`) with whip cuts on the beat (117 BPM), the guild end card, and an Open Frame sign-off question ("Want your brand to be next?"). 22.2 s.
 - Params: `sketch` (path to a real sketch photo, used instead of the traced pencil), `pages[]` (brand guide page images), `credit`, `question`, `cta`.
 - Mockups are drawn flat shapes in the client's brand (no stock photos, no outlines). For a new client, copy `mockups-ngm.js` and swap colors and copy.
 - Guild fonts load from Google Fonts at render time (fonts are never mirrored in this repo).
