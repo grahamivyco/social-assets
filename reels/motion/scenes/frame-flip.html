@@ -11,7 +11,7 @@
   @font-face { font-family: In; src: url(../../editor/fonts/Inter-SemiBold.otf); }
   html, body { margin: 0; width: 1080px; height: 1920px; overflow: hidden; background: #111110; }
   svg { position: absolute; inset: 0; overflow: visible; }
-  .txt { position: absolute; left: 540px; top: 900px; width: 600px; transform: translate(-50%, -50%); text-align: center; font: 700 96px/1.02 Fr; letter-spacing: -3px; }
+  .txt { position: absolute; left: 540px; top: 900px; width: 780px; transform: translate(-50%, -50%); text-align: center; font: 700 96px/1.02 Fr; letter-spacing: -3px; }
   #cta { position: absolute; left: 0; right: 0; top: 1130px; text-align: center; font: 700 76px/1.05 Fr; color: #F3F1EA; letter-spacing: -2px; }
   #link { position: absolute; left: 0; right: 0; top: 1240px; text-align: center; font: 600 30px/1 In; color: #F3F1EA; letter-spacing: .5px; }
 </style></head>
@@ -39,7 +39,8 @@ $('#cta').textContent = P.cta; $('#link').textContent = P.link;
 const ITEMS = P.pairs.flatMap(([q, a], k) => [{ html: q, col: CREAM }, { html: a, col: ACC[k % 4] }]);
 
 // rectangle while the words play, the mark at the end (mark box 22..98 of 120, drawn 2.5x, centred on 540,860)
-const RECT = { x: 150, y: 420, w: 780, h: 960, r: 44, sw: 6 };
+// a squashed, wide version of the mark with the same open corner (Graham, 2026-11-03)
+const RECT = { x: 70, y: 640, w: 940, h: 520, r: 40, sw: 6 };
 const MS = 2.5, MARK = { x: 540 - 38 * MS, y: 860 - 38 * MS, w: 76 * MS, h: 76 * MS, r: 14 * MS, sw: 8 * MS };
 const GT = 0.316, GR = 0.342;   // the mark's open corner: 24/76 of the top edge, 26/76 of the right edge
 
@@ -58,9 +59,9 @@ const starts = []; let tt = S0;
 ITEMS.forEach((it, i) => { starts.push(tt); tt += SWEEP + HOLD[i % 2]; });
 const END = tt, SHRINK = 0.7, DUR = END + SHRINK + 2.2;
 
-function fit(el) {   // shrink a line until it fits in 4 lines inside the rectangle
+function fit(el) {   // shrink a line until it fits in 3 lines inside the frame
   let f = 96; el.style.fontSize = f + 'px';
-  while (el.offsetHeight > 4 * f * 1.02 && f > 60) { f -= 2; el.style.fontSize = f + 'px'; }
+  while (el.offsetHeight > 3 * f * 1.02 && f > 60) { f -= 2; el.style.fontSize = f + 'px'; }
 }
 function show(el, item, clip) {
   el.innerHTML = item.html; el.style.color = item.col; fit(el);
@@ -71,8 +72,8 @@ window.SCENE = {
   dur: DUR, ready: false,
   seek(t) {
     const fr = $('#frame'), sp = $('#spark'), t0 = $('#t0'), t1 = $('#t1');
-    t0.style.display = t1.style.display = 'none';
-    let box = RECT, gap = 0, draw = 1, spark = null;
+    t0.style.display = t1.style.display = 'none'; t0.style.top = t1.style.top = (RECT.y + RECT.h / 2) + 'px';
+    let box = RECT, gap = 1, draw = 1, spark = null;   // the corner stays open the whole time
     const midY = RECT.y + RECT.h / 2, L = RECT.x, R = RECT.x + RECT.w;
 
     if (t < S0) {
@@ -85,9 +86,9 @@ window.SCENE = {
       const k = prog(t, starts[i], starts[i] + SWEEP, 'inOutCubic');
       const x = ltr ? lerp(L, R, k) : lerp(R, L, k);
       // new line shows on the side the sparkle has passed, the old one on the side it hasn't reached
-      const lx = x - (540 - 300);   // clip-path insets are in the text box's own coordinates (600 wide, centred)
-      const newClip = ltr ? `inset(-50px ${600 - lx}px -50px -50px)` : `inset(-50px -50px -50px ${lx}px)`;
-      const oldClip = ltr ? `inset(-50px -50px -50px ${lx}px)` : `inset(-50px ${600 - lx}px -50px -50px)`;
+      const lx = x - (540 - 390);   // clip-path insets are in the text box's own coordinates (600 wide, centred)
+      const newClip = ltr ? `inset(-50px ${780 - lx}px -50px -50px)` : `inset(-50px -50px -50px ${lx}px)`;
+      const oldClip = ltr ? `inset(-50px -50px -50px ${lx}px)` : `inset(-50px ${780 - lx}px -50px -50px)`;
       show(t1, ITEMS[i], k >= 1 ? 'none' : newClip);
       if (i > 0 && k < 1) show(t0, ITEMS[i - 1], oldClip);
       spark = { x, y: midY, s: 1.1, rot: (ltr ? 1 : -1) * 180 * k, col: ACC[Math.floor(i / 2) % 4] };
@@ -95,7 +96,6 @@ window.SCENE = {
       // the last answer clears, the rectangle shrinks into the mark, its corner opens, the sparkle centres
       const k = prog(t, END + 0.12, END + SHRINK, 'outExpo');
       box = mix(RECT, MARK, k);
-      gap = prog(t, END + 0.15, END + SHRINK + 0.1, 'inOutCubic');
       const last = ITEMS[ITEMS.length - 1];
       t1.innerHTML = last.html; t1.style.color = last.col; t1.style.clipPath = 'none';
       t1.style.display = 'block'; t1.style.opacity = 1 - prog(t, END, END + 0.12);
