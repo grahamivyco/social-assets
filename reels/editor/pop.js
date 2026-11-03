@@ -15,6 +15,17 @@ function makePop(W, H, spec) {
   const eIO = x => x < .5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2;
   const LW = 7 * U, HEAD = spec.head || { family: "Helvetica Neue", weight: 700, italic: false };
   const FAM = `"${HEAD.family}", "Helvetica Neue", Helvetica, Arial, "Liberation Sans", sans-serif`;
+  /* hook text "*accent*" parts -> words. Punctuation right after an accent word ("*for*?", "*Graham*.") sticks to
+     that word instead of becoming its own word (it takes the word's color). keepSpaces keeps the spaces as tokens. */
+  function hookSplit(parts, keepSpaces) {
+    const words = []; let glue = false; // true when the last thing seen was a word with no space after it
+    parts.forEach(p => { const it = p.startsWith("*"), txt = p.replace(/\*/g, "");
+      txt.split(/(\s+)/).forEach(w => { if (!w) return; const sp = !w.trim();
+        if (sp) { glue = false; if (keepSpaces) words.push({ w, it }); return; }
+        if (glue && /^[.,!?;:)\]'"’”…-]+$/.test(w)) words[words.length - 1].w += w; else words.push({ w, it });
+        glue = true; }); });
+    return words;
+  }
   const SITE = String(spec.site || "openframe.design").replace(/^https?:\/\//, "").replace(/\/$/, ""); // brand.json "site"
   const IT = HEAD.italic !== false; // brands with an italic accent (NGM); Open Frame accents by color only
   const FLAT = spec.flat !== false; // no ink outlines (Graham, 2026-11-03); details inside shapes stay
@@ -587,7 +598,7 @@ const PLATES = ["quarter", "circle", "half", "capsule", "ring", "stripes", "brac
     const pin = eOutExpo(seg(t, 0, .4)), out = eInExpo(seg(t, T.until, T.until + .32));
     if (out >= 1) return false;
     const bh = H * (TALL ? .34 : .4), maxW = W * .86, parts = T.text.split(/(\*[^*]+\*)/).filter(Boolean);
-    const words = []; parts.forEach(p => { const it = p.startsWith("*"); p.replace(/\*/g, "").split(/\s+/).forEach(w => w && words.push({ w, it })); });
+    const words = hookSplit(parts, false);
     let size = (TALL ? 170 : 130) * U, lines;
     for (;;) { // the biggest size that fits in 3 lines inside the band
       ctx.font = `${HEAD.weight} ${size}px ${FAM}`; const sp = ctx.measureText(" ").width; lines = [[]]; let lw = 0;
@@ -630,7 +641,7 @@ const PLATES = ["quarter", "circle", "half", "capsule", "ring", "stripes", "brac
   }
   function hookWords(ctx, T, t, y0, bh) {
     const maxW = W * .86, parts = T.text.split(/(\*[^*]+\*)/).filter(Boolean);
-    const words = []; parts.forEach(p => { const it = p.startsWith("*"); p.replace(/\*/g, "").split(/\s+/).forEach(w => w && words.push({ w, it })); });
+    const words = hookSplit(parts, false);
     let size = (TALL ? 170 : 130) * U, lines;
     for (;;) {
       ctx.font = `${HEAD.weight} ${size}px ${FAM}`; const sp = ctx.measureText(" ").width; lines = [[]]; let lw = 0;
@@ -691,7 +702,7 @@ const PLATES = ["quarter", "circle", "half", "capsule", "ring", "stripes", "brac
     const T = spec.title; if (!T || t > T.until + .4) return false;
     if (spec.title_style !== "box") return titleField(ctx, t, T);
     const size = (TALL ? 92 : 80) * U, maxW = W * .8, parts = T.text.split(/(\*[^*]+\*)/).filter(Boolean);
-    const words = []; parts.forEach(p => { const it = p.startsWith("*"); p.replace(/\*/g, "").split(/(\s+)/).forEach(w => w && words.push({ w, it })); });
+    const words = hookSplit(parts, true);
     const font = it => `${it && IT ? "italic " : ""}${HEAD.weight} ${size}px ${FAM}`;
     const lines = [[]]; let lw = 0;
     for (const x of words) { ctx.font = font(x.it); const ww = ctx.measureText(x.w).width;
