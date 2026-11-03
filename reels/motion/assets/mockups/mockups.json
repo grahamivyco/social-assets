@@ -1,0 +1,15 @@
+{
+  "note": "Where the brand art goes on each photo, in photo pixels. Order = the order they whip in. See tools/mockup-composite.py.",
+  "photos": {
+    "tee":      { "photo": "tee.jpg",      "frame": [780, 560, 900],  "pieces": [{ "art": "tee", "kind": "print", "center": [768, 410], "width": 170 }] },
+    "sign":     { "photo": "sign.jpg",     "frame": [655, 800, 900],  "pieces": [{ "art": "sign", "kind": "surface", "quad": [[383, 463], [931, 451], [936, 1002], [373, 1002]] }] },
+    "stickers": { "photo": "stickers.jpg", "frame": [800, 533, 1000], "pieces": [{ "art": "button", "kind": "surface", "quad": [[364, 337], [756, 337], [756, 729], [364, 729]] }] },
+    "phone":    { "photo": "phone.jpg",    "frame": [820, 800, 900],  "pieces": [{ "art": "phone", "kind": "screen", "quad": [[539, 145], [1103, 145], [1103, 1379], [539, 1379]] }] },
+    "tote":     { "photo": "tote.jpg",     "frame": [534, 900, 900],  "pieces": [{ "art": "tote", "kind": "print", "center": [534, 1150], "width": 330 }] },
+    "hoop":     { "photo": "hoop.jpg",     "frame": [950, 950, 1200], "pieces": [{ "art": "hoop", "kind": "print", "center": [950, 960], "width": 600 }] },
+    "badge":    { "photo": "badge.jpg",    "frame": [470, 800, 900],  "pieces": [{ "art": "badge", "kind": "surface", "keep_dark": 0.45, "quad": [[342, 858], [610, 871], [593, 1325], [322, 1297]] }] },
+    "cards":    { "photo": "cards.jpg",    "frame": [745, 505, 1000], "pieces": [
+      { "art": "cardB", "kind": "surface", "quad": [[225, 410], [673, 172], [843, 402], [395, 640]] },
+      { "art": "cardF", "kind": "surface", "quad": [[618, 582], [1061, 306], [1265, 562], [822, 838]] } ] }
+  }
+}
