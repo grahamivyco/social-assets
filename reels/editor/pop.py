@@ -17,6 +17,13 @@ KEYWORDS = {
     "product": ("product", "Product"), "newsletter": ("newsletter", "Newsletter"),
     "talk": ("send", "Done"),
 }
+# a named service shows its real logo (Graham, 2026-11-03), kind = the logo name in assets/logos/logos.json
+for _k, _t in {"instagram": "Instagram", "tiktok": "TikTok", "facebook": "Facebook", "linkedin": "LinkedIn",
+               "youtube": "YouTube", "threads": "Threads", "pinterest": "Pinterest", "mailchimp": "Mailchimp",
+               "gmail": "Gmail", "substack": "Substack", "brevo": "Brevo", "canva": "Canva", "shopify": "Shopify",
+               "squarespace": "Squarespace", "wix": "Wix", "wordpress": "WordPress", "calendly": "Calendly",
+               "whatsapp": "WhatsApp", "google": "Google"}.items():
+    KEYWORDS[_k] = (_k, _t)
 WIPES = [("circle", "r"), ("square", "b"), ("circle", "y"), ("square", "g")]
 
 

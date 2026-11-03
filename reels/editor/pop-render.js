@@ -18,6 +18,13 @@ const exe = process.env.CHROMIUM || "/opt/pw-browsers/chromium_headless_shell-11
     const ext = path.extname(sc.src).slice(1).toLowerCase().replace("jpg", "jpeg");
     imgs[sc.src] = `data:image/${ext};base64,` + fs.readFileSync(path.resolve(path.dirname(specPath), sc.src)).toString("base64");
   }
+  // real service logos (Instagram, Mailchimp...) for "logos" scenes, from assets/logos/logos.json (Simple Icons, CC0)
+  const LOGO_FILE = path.join(__dirname, "assets", "logos", "logos.json");
+  if (fs.existsSync(LOGO_FILE)) {
+    const all = JSON.parse(fs.readFileSync(LOGO_FILE, "utf8")), want = new Set();
+    for (const sc of spec.scenes || []) [sc.kind, ...((sc.data && sc.data.logos) || sc.logos || [])].forEach(k => k && all[k] && want.add(k));
+    spec.logo_data = Object.fromEntries([...want].map(k => [k, all[k]]));
+  }
   await page.setContent("<canvas id=c></canvas>");
   await page.addScriptTag({ path: path.join(__dirname, "pop.js") });
   await page.evaluate(async ({ spec, fonts, imgs }) => {

@@ -26,6 +26,31 @@ function makePop(W, H, spec) {
         glue = true; }); });
     return words;
   }
+  /* real service logos (Graham, 2026-11-03: "when it comes to socials and emails i want the logos for the services
+     i'm talking about not the graphics"). kind "logos" + data.logos ["instagram", "mailchimp"], or kind = one logo
+     name. Each logo is an app-icon tile in the service's own color with its official mark in white (Simple Icons). */
+  const LOGOS = spec.logo_data || {};
+  const LOGO_ALIAS = { ig: "instagram", insta: "instagram", fb: "facebook", yt: "youtube", twitter: "x", tiktoks: "tiktok", mail: "gmail" };
+  function logoNames(sc) {
+    const list = sc.kind === "logos" ? ((sc.data && sc.data.logos) || sc.logos || []) : [sc.kind];
+    const n = list.map(k => LOGOS[k] ? k : LOGO_ALIAS[k]).filter(k => k && LOGOS[k]);
+    return n.length ? n.slice(0, 4) : null;
+  }
+  const IG = ["#FEDA75", "#FA7E1E", "#D62976", "#962FBF", "#4F5BD5"];
+  function logoRow(ctx, names, x, y, w, h, v) {
+    const n = names.length, gap = 26 * U, s = Math.min(h, (w - (n - 1) * gap) / n), x0 = x + (w - (n * s + (n - 1) * gap)) / 2, y0 = y + (h - s) / 2;
+    names.forEach((k, i) => {
+      const L = LOGOS[k], q = eOutBack(seg(v, .1 + i * .09, .45 + i * .09)); if (q <= 0) return;
+      const tx = x0 + i * (s + gap), hex = "#" + L.hex, lum = parseInt(L.hex.slice(0, 2), 16) * .3 + parseInt(L.hex.slice(2, 4), 16) * .59 + parseInt(L.hex.slice(4, 6), 16) * .11;
+      ctx.save(); ctx.translate(tx + s / 2, y0 + s / 2); ctx.scale(q, q); ctx.rotate((1 - q) * -.2);
+      let bg = hex;
+      if (k === "instagram") { bg = ctx.createLinearGradient(-s / 2, s / 2, s / 2, -s / 2); IG.forEach((c, j) => bg.addColorStop(j / (IG.length - 1), c)); }
+      ctx.beginPath(); ctx.roundRect(-s / 2, -s / 2, s, s, s * .23); ctx.fillStyle = bg; ctx.fill();
+      const g = s * .56 / 24; ctx.translate(-12 * g, -12 * g); ctx.scale(g, g);
+      ctx.fillStyle = k !== "instagram" && lum > 170 ? "#111110" : "#ffffff"; ctx.fill(new Path2D(L.path));
+      ctx.restore();
+    });
+  }
   const SITE = String(spec.site || "openframe.design").replace(/^https?:\/\//, "").replace(/\/$/, ""); // brand.json "site"
   const IT = HEAD.italic !== false; // brands with an italic accent (NGM); Open Frame accents by color only
   const FLAT = spec.flat !== false; // no ink outlines (Graham, 2026-11-03); details inside shapes stay
@@ -551,8 +576,9 @@ const PLATES = ["quarter", "circle", "half", "capsule", "ring", "stripes", "brac
     ctx.save(); ctx.globalAlpha = Math.min(1, inK * 1.5) * (1 - outK);
     ctx.translate(0, (1 - inK) * 60 * U - outK * 60 * U);
     box(ctx, cx - cw / 2, top, cw, ch, 24 * U, field);
-    const order = PLATES.slice().sort(() => R() - .5);
-    if (gk && gk !== "shapes") { // a topic glyph in the art area, pieces popping in on a stagger, then out together
+    const order = PLATES.slice().sort(() => R() - .5), lg = logoNames(sc);
+    if (lg) logoRow(ctx, lg, cx - cw / 2 + pad, top + pad, cw - 2 * pad, gh, v);
+    else if (gk && gk !== "shapes") { // a topic glyph in the art area, pieces popping in on a stagger, then out together
       const accents = ["r", "b", "y", "g"].filter(c => c !== fk);
       const C = { ...P, field, a: P[accents[0]], b2: P[accents[1]] };
       const ax = cx - cw / 2 + pad, aw = cw - 2 * pad, gone = eInBack(seg(t, sc.end - .32, sc.end - .05));
@@ -663,7 +689,9 @@ const PLATES = ["quarter", "circle", "half", "capsule", "ring", "stripes", "brac
     const R = rnd(hash((sc.kind || "") + (sc.label || ""))), cols = [P.cream, P.ink, P.r, P.b, P.y, P.g].filter(c => c !== field);
     const ls = String(sc.label || "").split("\n"), lsz = (TALL ? 70 : 60) * U * (ls.length > 1 ? .8 : 1);
     const pad = 44 * U, gap = 14 * U, aw = W * .9, ah = bh - pad * 2.2 - ls.length * lsz * 1.12, ax = (W - aw) / 2, ay = y0 + pad;
-    if (gk && gk !== "shapes") {
+    const lg = logoNames(sc);
+    if (lg) logoRow(ctx, lg, ax, ay, aw, ah, v);
+    else if (gk && gk !== "shapes") {
       const accents = ["r", "b", "y", "g"].filter(c => c !== fk), C = { ...P, field, a: P[accents[0]], b2: P[accents[1]] };
       const gw = Math.min(aw, ah * 1.7), kf = i => eOutBack(seg(v, .12 + i * .07, .42 + i * .07));
       glyph[gk](ctx, Math.max(0, v - .3), (W - gw) / 2, ay, gw, ah, C, kf);
