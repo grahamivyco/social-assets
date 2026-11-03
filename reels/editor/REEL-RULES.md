@@ -57,3 +57,18 @@ Use the hook bank and rules in `/mnt/project-files/lessons/ad-attention-videos.m
 - When the background has objects the cut-out grabs (like the wall lamp in his porch shots), set `"cutout": false`. Graphics sit above his head anyway.
 - The keyword line under the hook is now one keyword per line, at 3.2% of the height.
 - Key point graphics (2026-11-03): centered card in the topic color with a 3x2 grid of animated art plate tiles and the label underneath. No pictograms. `"scene_style": "illustrated"` in edit.json brings back the old drawn ones.
+
+## Graphic or real image (Graham, 2026-11-03)
+
+Every key point card is one of two things, in the same centered card with the label underneath:
+
+- **Real screenshot or photo** (`"kind": "image", "src": "file.png", "label": "...", "focus": [x, y]`) when the line is about a specific real thing a viewer could check:
+  - a client's actual website, post, ad, email or app screen
+  - a real number or result from a dashboard (Instagram insights, Search Console, Calendly)
+  - a before and after, a real product, a real place or event
+  - a tool's screen when the Reel teaches how to use it
+  - a real person, only with their OK
+- **Motion graphic** (topic glyphs: `website`, `phone`, `branding`, `people`, `computer`, `shapes`, `trash`) when the line is general advice or an idea ("your website needs one job"), when no real asset exists, or when the real one would show private info.
+- Never fake a screenshot or mock up a result that didn't happen. Captions and graphics never invent claims.
+- Screenshots: crop to the part that matters (`focus` picks the spot), blur names, emails, DMs and anything private, max about 2.5 s on screen, slow push in. Graham drops them in the Reel's folder; the plan names them line by line.
+- If unsure, ask Graham in the graphics plan step instead of guessing.

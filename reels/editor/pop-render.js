@@ -12,18 +12,26 @@ const exe = process.env.CHROMIUM || "/opt/pw-browsers/chromium_headless_shell-11
   const browser = await chromium.launch({ executablePath: exe });
   const page = await browser.newPage();
   const fonts = spec.fonts.map(f => (f.path ? { ...f, data: fs.readFileSync(f.path).toString("base64") } : f));
+  // real screenshots and photos for "image" scenes: read here, decoded in the page before drawing
+  const imgs = {};
+  for (const sc of spec.scenes || []) if (sc.kind === "image" && sc.src && !imgs[sc.src]) {
+    const ext = path.extname(sc.src).slice(1).toLowerCase().replace("jpg", "jpeg");
+    imgs[sc.src] = `data:image/${ext};base64,` + fs.readFileSync(path.resolve(path.dirname(specPath), sc.src)).toString("base64");
+  }
   await page.setContent("<canvas id=c></canvas>");
   await page.addScriptTag({ path: path.join(__dirname, "pop.js") });
-  await page.evaluate(async ({ spec, fonts }) => {
+  await page.evaluate(async ({ spec, fonts, imgs }) => {
     for (const f of fonts) {
       // system fonts (Helvetica Neue on the Mac) load by name with local(), others from the file bytes
       const src = f.data ? Uint8Array.from(atob(f.data), ch => ch.charCodeAt(0)) : f.local.map(n => `local("${n}")`).join(",");
       const face = new FontFace(f.family, src, { weight: String(f.weight), style: f.style });
       document.fonts.add(await face.load());
     }
+    window.POP_IMAGES = {};
+    for (const [k, u] of Object.entries(imgs)) { const im = new Image(); im.src = u; await im.decode(); window.POP_IMAGES[k] = im; }
     const c = document.getElementById("c"); c.width = spec.W; c.height = spec.H;
     window.ctx = c.getContext("2d"); window.pop = makePop(spec.W, spec.H, spec); window.canvas = c;
-  }, { spec, fonts });
+  }, { spec, fonts, imgs });
   const ff = spawn("ffmpeg", ["-v", "error", "-y", "-f", "image2pipe", "-c:v", "png", "-framerate", String(spec.fps),
     "-i", "-", "-c:v", "qtrle", out], { stdio: ["pipe", "inherit", "inherit"] });
   const n = Math.ceil(spec.dur * spec.fps);
