@@ -1,8 +1,8 @@
 /* Open Frame pop layer for talking heads. makePop(W,H,spec).draw(ctx,t) paints one transparent frame and
    returns false when nothing is on screen. Brand rules (brands/open-frame/brand.json, Open-Frame docs/design-rules.md,
    2026-11-03): flat fills with no ink outlines on bold color fields, accents cycled red, blue, yellow, green,
-   Helvetica Neue Bold headings, the accent word is a color (never italic). The intro is an art plate: the open
-   frame draws on around the screen and a circle in the lead color enters through its open corner, with the spark.
+   Helvetica Neue Bold headings, the accent word is a color (never italic). No frame around the screen and no logo
+   on the video by default (Graham, 2026-11-03); spec.frame_intro turns the art-plate frame intro back on.
    spec: {pal:{ink,cream,r,y,b,g}, intro:seconds, scenes:[{t,end,kind,label}], wipes:[{t,shape,color}]} */
 function makePop(W, H, spec) {
   const P = spec.pal, U = Math.min(W, H) / 1080, TALL = H > W;
@@ -414,7 +414,7 @@ function makePop(W, H, spec) {
     const pin = eOutBack(seg(t, 0, .35)), out = eInBack(seg(t, T.until, T.until + .35));
     if (out >= 1) return false;
     ctx.save(); ctx.translate(cx, cy); ctx.rotate(lerp(-.08, -.03, pin) + out * .2); ctx.scale(pin * (1 - out), pin * (1 - out));
-    if (!spec.intro) shape(ctx, "circle", bw / 2 - 10 * U, -bh / 2 + 6 * U, 110 * U, 0, P[T.dot || "y"], P.ink); // the art plate circle stands in for it
+    if (!(spec.frame_intro && spec.intro)) shape(ctx, "circle", bw / 2 - 10 * U, -bh / 2 + 6 * U, 110 * U, 0, P[T.dot || "y"], P.ink); // the art plate circle stands in for it
     box(ctx, -bw / 2, -bh / 2, bw, bh, 18 * U, P[T.field || "r"], P.ink);
     ctx.textBaseline = "middle";
     lines.forEach((l, i) => { let x = -widths[i] / 2; const y = -bh / 2 + 35 * U + size * 1.15 * (i + .5);
@@ -444,13 +444,15 @@ function makePop(W, H, spec) {
     const c = eOutBack(seg(t, .35, 1.0)), co = eInBack(seg(t, until - .2, until + .25));
     if (c > 0 && co < 1) shape(ctx, "circle", lerp(W + cr * 2, x1 - cr * 1.6, c) + co * cr * 4, lerp(-cr * 2, y0 + cr * 1.6, c) - co * cr * 4, cr * 2, 0, lead);
     const k = eOutBack(seg(t, .7, 1.05)) * (1 - eInBack(seg(t, until - .25, until + .1)));
-    if (k > 0) spark(ctx, x1, y0, 84 * U * k, P.cream); // the spark sits on the corner the frame leaves open
+    if (k > 0 && spec.frame_spark) spark(ctx, x1, y0, 84 * U * k, P.cream); // the spark is the logo: off unless asked
   }
 
   function draw(ctx, t) {
     ctx.clearRect(0, 0, W, H);
     let drew = false;
-    if (spec.intro && t < spec.intro + .4) { drawFrame(ctx, t, spec.intro); drew = true; }
+    // art-plate intro is opt-in (edit.json "frame_intro": true). Graham, 2026-11-03: "I hate the blue rim",
+    // "take out my logo", so by default no frame around the screen and no mark or spark on the video.
+    if (spec.frame_intro && spec.intro && t < spec.intro + .4) { drawFrame(ctx, t, spec.intro); drew = true; }
     for (const sc of spec.scenes) drew = scene(ctx, sc, t) || drew;
     drew = title(ctx, t) || drew;
     for (const wp of spec.wipes) { // a big shape sweeps corner to corner and covers the cut at its midpoint

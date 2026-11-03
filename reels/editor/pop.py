@@ -125,6 +125,7 @@ class Pop:
         self.scenes = self._beats(words, beats) if beats else self._scenes(words)
         self.wipes = [{"t": t, "shape": s, "color": c} for t, (s, c) in
                       zip(part_starts[1:], WIPES * 10)] + [{"t": dur, "shape": "circle", "color": "cream"}]
+        self.frame_intro = False  # edit.json "frame_intro": true brings back the frame around the screen
         self.title = {"text": title, "until": title_until, "field": "r", "accent": "y", "dot": "y"} if title else None
         # punch in on every other jump cut inside a take, back out at each new take
         self.zooms, z = [], 1.0
@@ -178,6 +179,7 @@ class Pop:
         spec = {"W": self.W, "H": self.H, "fps": fps, "dur": self.dur, "pal": self.brand["pal"],
                 "head": self.brand["head"], "scenes": self.scenes, "wipes": self.wipes, "title": self.title,
                 "intro": self.title["until"] if self.title else 0,
+                "frame_intro": self.frame_intro,
                 "fonts": [font_spec(self.brand["head"]["family"], self.brand["head"]["weight"], "normal", f["head"])]
                 + ([font_spec(self.brand["head"]["family"], self.brand["head"]["weight"], "italic", f["head_italic"])]
                    if self.brand["head"]["italic"] else [])}
