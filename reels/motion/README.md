@@ -16,7 +16,8 @@ Videos are silent. Add the trending sound in the Instagram app. For Facebook 1:1
 
 ### `frame-flip.html` (Open Frame)
 Built on the Open Frame mark. A big open frame holds each question and the sparkle waits in the open corner. The sparkle spins to the middle and bursts over the screen in a Bauhaus color, then pulls back into the corner and that question's own answer is in the frame. To move on, the camera flies through the frame into the next question. Ends on the real mark and the free consult.
-- Params: `pairs` ([[question, answer], ...], `<i>` marks the italic accent), `cta`, `link`.
+- Params: `pairs` ([[question, answer], ...]), `cta`, `link`.
+- Type: Helvetica Neue Bold, upright (Open Frame brand since 2026-11-03). Loaded by name from the Mac's system fonts (it isn't free to copy into a repo); Linux previews fall back to Liberation Sans.
 - Timing: 2.8 s per pair, 4 pairs = 14.5 s. Answer colors rotate red, blue, yellow, green with the text color that passes contrast.
 - Replaced the pendulum wipe (2026-11-03): Graham felt the pendulum was too much the reference studio's own look.
 
@@ -24,7 +25,7 @@ Built on the Open Frame mark. A big open frame holds each question and the spark
 Pencil sketch draws on, construction guides and anchor points snap over it, design-tool panels slide in, the clean vector replaces the sketch, a flash through white into the lockup, color versions slide in as bands, palette bars rise, the real brand guide pages drift on a tilted plane, then flat mockups (tee, hanging sign, stickers, app, tote, embroidery hoop, name badge, business cards, from `mockups-ngm.js`) with whip cuts on the beat (117 BPM), the guild end card, and an Open Frame sign-off question ("Want your brand to be next?"). 22.2 s.
 - Params: `sketch` (path to a real sketch photo, used instead of the traced pencil), `pages[]` (brand guide page images), `credit`, `question`, `cta`.
 - Mockups are drawn flat shapes in the client's brand (no stock photos, no outlines). For a new client, copy `mockups-ngm.js` and swap colors and copy.
-- Guild fonts load from Google Fonts at render time (fonts are never mirrored in this repo).
+- Guild fonts load from Google Fonts at render time (fonts are never mirrored in this repo). The Open Frame sign-off card is Helvetica Neue Bold with the accent word in red, no italics.
 - The pencil stage is traced from the final mark. If it's used as is, don't caption it as the original sketch.
 - Guide pages: `assets/ngm/page-N.jpg`, from `brands/ngm/kit/guidelines.pdf` (`pdftoppm -r 110 -jpeg`).
 

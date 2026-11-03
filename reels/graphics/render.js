@@ -27,6 +27,8 @@ function fontFile(brand, family, re) {
     const f = fs.readdirSync(d).find(n => n.replace(/[-_\s]/g, '').toLowerCase().includes(want) && re.test(n) && !/italic/i.test(n));
     if (f) return path.join(d, f);
   }
+  // system fonts that are never copied into a repo (Helvetica Neue on macOS): load by name, Liberation Sans on Linux
+  if (/helvetica/i.test(family)) return { local: ['Helvetica Neue Bold', 'HelveticaNeue-Bold', 'Helvetica Bold', 'Arial Bold', 'Liberation Sans Bold'] };
   throw new Error(`missing font ${family} (put it in brands/${brand}/fonts)`);
 }
 
@@ -37,15 +39,15 @@ function fontFile(brand, family, re) {
   const fonts = [
     { family: 'Fr', file: fontFile(spec.brand, spec.pal.head, /500|medium/i) },
     { family: 'In', file: fontFile(spec.brand, 'Inter', /600|semibold/i) },
-  ].map(f => ({ family: f.family, data: fs.readFileSync(f.file).toString('base64') }));
+  ].map(f => (f.file.local ? { family: f.family, local: f.file.local } : { family: f.family, data: fs.readFileSync(f.file).toString('base64') }));
   const browser = await chromium.launch(process.env.CHROMIUM ? { executablePath: process.env.CHROMIUM } : {});
   const page = await browser.newPage({ viewport: { width: spec.W, height: spec.H } });
   await page.setContent('<html><body style="margin:0;background:transparent"><div id="g"></div></body></html>');
   await page.addScriptTag({ path: path.join(HERE, 'templates.js') });
   const warnings = await page.evaluate(async ({ spec, fonts }) => {
     for (const f of fonts) {
-      const bin = Uint8Array.from(atob(f.data), c => c.charCodeAt(0));
-      document.fonts.add(await new FontFace(f.family, bin).load());
+      const src = f.data ? Uint8Array.from(atob(f.data), c => c.charCodeAt(0)) : f.local.map(n => `local("${n}")`).join(',');
+      document.fonts.add(await new FontFace(f.family, src).load());
     }
     window.G = makeGraphic(spec);
     return G.check();

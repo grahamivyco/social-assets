@@ -6,17 +6,17 @@
      next question. Ends on the real mark and the free consult.
      PARAMS: pairs [[question, answer], ...], cta, link -->
 <style>
-  @font-face { font-family: Fr; src: url(../../editor/fonts/Fraunces_600SemiBold.ttf); }
-  @font-face { font-family: FrI; src: url(../../editor/fonts/Fraunces_600SemiBold_Italic.ttf); }
+  /* Open Frame headings: Helvetica Neue Bold, upright (2026-11-03). A macOS system font, so loaded by name; Liberation Sans on Linux */
+  @font-face { font-family: Fr; src: local("Helvetica Neue Bold"), local("HelveticaNeue-Bold"), local("Helvetica Bold"), local("Arial Bold"), local("Liberation Sans Bold"); font-weight: 700; }
   @font-face { font-family: In; src: url(../../editor/fonts/Inter-SemiBold.otf); }
   html, body { margin: 0; width: 1080px; height: 1920px; overflow: hidden; background: #111110; }
   .layer { position: absolute; inset: 0; transform-origin: 540px 900px; }
   .layer svg { position: absolute; inset: 0; overflow: visible; }
   .txt { position: absolute; left: 540px; top: 900px; width: 450px; transform: translate(-50%, -50%); text-align: center; }
-  .q { font: 600 70px/1.1 In; letter-spacing: -1.5px; }
-  .a { font: 600 92px/1.02 Fr; letter-spacing: -2px; }
-  .a i { font-family: FrI; font-style: normal; }
-  #end .cta { position: absolute; left: 0; right: 0; top: 1130px; text-align: center; font: 600 76px/1.05 Fr; color: #F3F1EA; letter-spacing: -1.5px; }
+  .q { font: 700 72px/1.08 Fr; letter-spacing: -2px; }
+  .a { font: 700 92px/1.02 Fr; letter-spacing: -2.5px; }
+  .a i { font-style: normal; }
+  #end .cta { position: absolute; left: 0; right: 0; top: 1130px; text-align: center; font: 700 76px/1.05 Fr; color: #F3F1EA; letter-spacing: -2px; }
   #end .link { position: absolute; left: 0; right: 0; top: 1240px; text-align: center; font: 600 30px/1 In; color: #F3F1EA; opacity: .6; letter-spacing: .5px; }
 </style></head>
 <body>
@@ -26,10 +26,10 @@
 <script>
 const P = Object.assign({
   pairs: [
-    ['Need a brand?', 'Let’s make it look like <i>you.</i>'],
-    ['Need a website?', 'We’ll design it and <i>build it.</i>'],
-    ['Posts piling up?', 'We plan the month <i>with you.</i>'],
-    ['Want it all to match?', 'That’s the <i>whole idea.</i>'],
+    ['Need a brand?', 'Let’s make it look like you.'],
+    ['Need a website?', 'We’ll design it and build it.'],
+    ['Posts piling up?', 'We plan the month with you.'],
+    ['Want it all to match?', 'That’s the whole idea.'],
   ],
   cta: 'Book a free consult', link: 'openframe.design/links',
 }, window.PARAMS || {});
@@ -136,7 +136,7 @@ window.SCENE = {
     }
   },
 };
-Promise.all(['600 92px Fr', '600 92px FrI', '600 70px In'].map(f => document.fonts.load(f))).then(() => {
+Promise.all(['700 92px Fr', '600 30px In'].map(f => document.fonts.load(f))).then(() => {
   L.forEach(l => { css(l.el, { display: 'block' }); if (l.kind === 'a') fit(l.el.querySelector('.txt'), 450); css(l.el, { display: 'none' }); });
   SCENE.ready = true; SCENE.seek(0);
 });

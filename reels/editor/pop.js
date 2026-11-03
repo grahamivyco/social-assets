@@ -1,6 +1,8 @@
 /* Open Frame pop layer for talking heads. makePop(W,H,spec).draw(ctx,t) paints one transparent frame and
-   returns false when nothing is on screen. Brand rules (brands/open-frame/brand.json): flat ink-outlined
-   illustrations on bold color fields, accents cycled red, blue, yellow, green, Fraunces headings.
+   returns false when nothing is on screen. Brand rules (brands/open-frame/brand.json, Open-Frame docs/design-rules.md,
+   2026-11-03): flat fills with no ink outlines on bold color fields, accents cycled red, blue, yellow, green,
+   Helvetica Neue Bold headings, the accent word is a color (never italic). The intro is an art plate: the open
+   frame draws on around the screen and a circle in the lead color enters through its open corner, with the spark.
    spec: {pal:{ink,cream,r,y,b,g}, intro:seconds, scenes:[{t,end,kind,label}], wipes:[{t,shape,color}]} */
 function makePop(W, H, spec) {
   const P = spec.pal, U = Math.min(W, H) / 1080, TALL = H > W;
@@ -11,7 +13,11 @@ function makePop(W, H, spec) {
   const eOutBack = x => 1 + c3 * Math.pow(x - 1, 3) + c1 * Math.pow(x - 1, 2);
   const eInBack = x => c3 * x * x * x - c1 * x * x;
   const eIO = x => x < .5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2;
-  const LW = 7 * U, HEAD = spec.head || { family: "Fraunces", weight: 500 };
+  const LW = 7 * U, HEAD = spec.head || { family: "Helvetica Neue", weight: 700, italic: false };
+  const FAM = `"${HEAD.family}", "Helvetica Neue", Helvetica, Arial, "Liberation Sans", sans-serif`;
+  const IT = HEAD.italic !== false; // brands with an italic accent (NGM); Open Frame accents by color only
+  const FLAT = spec.flat !== false; // no ink outlines (Graham, 2026-11-03); details inside shapes stay
+  function outline(ctx, lw) { ctx.lineWidth = lw; ctx.lineJoin = "round"; ctx.strokeStyle = P.ink; if (!FLAT) ctx.stroke(); }
 
   function shape(ctx, kind, x, y, s, rot, fill, stroke) {
     if (s <= 0) return;
@@ -20,14 +26,14 @@ function makePop(W, H, spec) {
     else if (kind === "square") ctx.rect(-s / 2, -s / 2, s, s);
     else { const h = s * Math.sqrt(3) / 2; ctx.moveTo(0, -h * 2 / 3); ctx.lineTo(s / 2, h / 3); ctx.lineTo(-s / 2, h / 3); ctx.closePath(); }
     if (fill) { ctx.fillStyle = fill; ctx.fill(); }
-    if (stroke) { ctx.lineWidth = LW; ctx.lineJoin = "round"; ctx.strokeStyle = stroke; ctx.stroke(); }
+    if (stroke && !(FLAT && stroke === P.ink)) { ctx.lineWidth = LW; ctx.lineJoin = "round"; ctx.strokeStyle = stroke; ctx.stroke(); }
     ctx.restore();
   }
   function box(ctx, x, y, w, h, r, fill, stroke) {
     if (w <= 0 || h <= 0) return;
     ctx.beginPath(); ctx.roundRect(x, y, w, h, Math.min(r, w / 2, h / 2));
     if (fill) { ctx.fillStyle = fill; ctx.fill(); }
-    if (stroke) { ctx.lineWidth = LW; ctx.strokeStyle = stroke; ctx.stroke(); }
+    if (stroke && !(FLAT && stroke === P.ink)) { ctx.lineWidth = LW; ctx.strokeStyle = stroke; ctx.stroke(); }
   }
   function line(ctx, x1, y1, x2, y2, col, lw) {
     ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.lineWidth = lw || LW; ctx.lineCap = "round"; ctx.strokeStyle = col; ctx.stroke();
@@ -35,9 +41,9 @@ function makePop(W, H, spec) {
   function label(ctx, text, x, y, size, col, p, maxW) {
     if (p <= 0) return;
     ctx.save(); ctx.globalAlpha = Math.min(1, p * 1.6);
-    ctx.font = `${HEAD.weight} ${size}px "${HEAD.family}"`;
+    ctx.font = `${HEAD.weight} ${size}px ${FAM}`;
     const tw = ctx.measureText(text).width;
-    if (maxW && tw > maxW) { size *= maxW / tw; ctx.font = `${HEAD.weight} ${size}px "${HEAD.family}"`; } ctx.fillStyle = col; ctx.textBaseline = "middle";
+    if (maxW && tw > maxW) { size *= maxW / tw; ctx.font = `${HEAD.weight} ${size}px ${FAM}`; } ctx.fillStyle = col; ctx.textBaseline = "middle";
     ctx.fillText(text, x, y + (1 - p) * size * .4); ctx.restore();
   }
 
@@ -134,7 +140,7 @@ function makePop(W, H, spec) {
       if (q < 1) { const ang = Math.atan2(-Math.cos(q * Math.PI) * h * .3 * Math.PI, w * .72), s = h * .34;
         ctx.save(); ctx.translate(ax, ay); ctx.rotate(ang);
         ctx.beginPath(); ctx.moveTo(s * .6, 0); ctx.lineTo(-s * .5, -s * .38); ctx.lineTo(-s * .25, 0); ctx.lineTo(-s * .5, s * .38); ctx.closePath();
-        ctx.fillStyle = P.cream; ctx.fill(); ctx.lineWidth = LW; ctx.lineJoin = "round"; ctx.strokeStyle = P.ink; ctx.stroke();
+        ctx.fillStyle = P.cream; ctx.fill(); outline(ctx, LW);
         line(ctx, s * .6, 0, -s * .25, 0, P.ink, LW * .7); ctx.restore(); }
       const d = eOutBack(seg(v, .62, .85)); if (d > 0) {
         const cx = x + w * .7, cy = y + h * .5, r = h * .26 * d;
@@ -155,20 +161,20 @@ function makePop(W, H, spec) {
   }
   function file(ctx, x, y, w, h, tag) { // a document with a folded corner and a colored tag
     const f = w * .28; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + w - f, y); ctx.lineTo(x + w, y + f); ctx.lineTo(x + w, y + h); ctx.lineTo(x, y + h); ctx.closePath();
-    ctx.fillStyle = P.cream; ctx.fill(); ctx.lineWidth = LW; ctx.lineJoin = "round"; ctx.strokeStyle = P.ink; ctx.stroke();
+    ctx.fillStyle = P.cream; ctx.fill(); outline(ctx, LW);
     ctx.beginPath(); ctx.moveTo(x + w - f, y); ctx.lineTo(x + w - f, y + f); ctx.lineTo(x + w, y + f); ctx.stroke();
     box(ctx, x - w * .12, y + h * .5, w * .78, h * .24, 6 * U, tag, P.ink);
     [.18, .3].forEach(k => box(ctx, x + w * .14, y + h * k + h * .04, w * .5, 6 * U, 3 * U, P.ink));
   }
   function bin(ctx, x, y, w, h, lid) { // a trash bin, lid tips open by `lid` (0..1)
     ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + w, y); ctx.lineTo(x + w * .88, y + h); ctx.lineTo(x + w * .12, y + h); ctx.closePath();
-    ctx.fillStyle = P.cream; ctx.fill(); ctx.lineWidth = LW; ctx.lineJoin = "round"; ctx.strokeStyle = P.ink; ctx.stroke();
+    ctx.fillStyle = P.cream; ctx.fill(); outline(ctx, LW);
     [.35, .5, .65].forEach(k => line(ctx, x + w * k, y + h * .2, x + w * k, y + h * .8, P.ink, LW * .6));
     ctx.save(); ctx.translate(x - 6 * U, y - 4 * U); ctx.rotate(-lid * .7);
     box(ctx, 0, -18 * U, w + 12 * U, 18 * U, 6 * U, P.r, P.ink); box(ctx, w / 2 - 14 * U, -32 * U, 40 * U, 14 * U, 6 * U, P.r, P.ink); ctx.restore();
   }
   function text(ctx, s, x, y, size, col, italic, align) {
-    ctx.save(); ctx.font = `${italic ? "italic " : ""}${HEAD.weight} ${size}px "${HEAD.family}"`; ctx.fillStyle = col;
+    ctx.save(); ctx.font = `${italic && IT ? "italic " : ""}${HEAD.weight} ${size}px ${FAM}`; ctx.fillStyle = col;
     ctx.textBaseline = "middle"; ctx.textAlign = align || "center"; ctx.fillText(s, x, y); ctx.restore();
   }
   function browser(ctx, bx, by, bw, bh) {
@@ -374,7 +380,7 @@ function makePop(W, H, spec) {
   function heart(ctx, x, y, s, col) {
     ctx.save(); ctx.translate(x, y); ctx.beginPath(); ctx.moveTo(0, s * .35);
     ctx.bezierCurveTo(-s * .7, -s * .1, -s * .35, -s * .6, 0, -s * .25); ctx.bezierCurveTo(s * .35, -s * .6, s * .7, -s * .1, 0, s * .35);
-    ctx.fillStyle = col; ctx.fill(); ctx.lineWidth = LW * .8; ctx.lineJoin = "round"; ctx.strokeStyle = P.ink; ctx.stroke(); ctx.restore();
+    ctx.fillStyle = col; ctx.fill(); outline(ctx, LW * .8); ctx.restore();
   }
   Object.assign(FIELD, { pdfs: "y", menu: "b", stock: "g", door: "r", timer: "y", num: "b", headline: "g", people: "r", button: "b", sticky: "g", nav: "y", trash: "r", peek: "y", belong: "b", tuesday: "g", friends: "y" });
 
@@ -393,12 +399,12 @@ function makePop(W, H, spec) {
     return true;
   }
 
-  /* video title: brand head font on a background shape, *word* in italic accent, pops in then wipes out */
+  /* video title: brand head font on a background shape, *word* in the accent color (italic too where the brand has one) */
   function title(ctx, t) {
     const T = spec.title; if (!T || t > T.until + .4) return false;
     const size = (TALL ? 92 : 80) * U, maxW = W * .8, parts = T.text.split(/(\*[^*]+\*)/).filter(Boolean);
     const words = []; parts.forEach(p => { const it = p.startsWith("*"); p.replace(/\*/g, "").split(/(\s+)/).forEach(w => w && words.push({ w, it })); });
-    const font = it => `${it ? "italic " : ""}${HEAD.weight} ${size}px "${HEAD.family}"`;
+    const font = it => `${it && IT ? "italic " : ""}${HEAD.weight} ${size}px ${FAM}`;
     const lines = [[]]; let lw = 0;
     for (const x of words) { ctx.font = font(x.it); const ww = ctx.measureText(x.w).width;
       if (lw + ww > maxW && x.w.trim() && lines[lines.length - 1].length) { lines.push([]); lw = 0; }
@@ -408,7 +414,7 @@ function makePop(W, H, spec) {
     const pin = eOutBack(seg(t, 0, .35)), out = eInBack(seg(t, T.until, T.until + .35));
     if (out >= 1) return false;
     ctx.save(); ctx.translate(cx, cy); ctx.rotate(lerp(-.08, -.03, pin) + out * .2); ctx.scale(pin * (1 - out), pin * (1 - out));
-    shape(ctx, "circle", bw / 2 - 10 * U, -bh / 2 + 6 * U, 110 * U, 0, P[T.dot || "y"], P.ink); // accent dot behind the corner
+    if (!spec.intro) shape(ctx, "circle", bw / 2 - 10 * U, -bh / 2 + 6 * U, 110 * U, 0, P[T.dot || "y"], P.ink); // the art plate circle stands in for it
     box(ctx, -bw / 2, -bh / 2, bw, bh, 18 * U, P[T.field || "r"], P.ink);
     ctx.textBaseline = "middle";
     lines.forEach((l, i) => { let x = -widths[i] / 2; const y = -bh / 2 + 35 * U + size * 1.15 * (i + .5);
@@ -417,16 +423,34 @@ function makePop(W, H, spec) {
     return true;
   }
 
+  /* art plate intro (Open Frame, 2026-11-03): the open frame draws on around the screen edge, open at the top right
+     like the mark, a circle in the lead color rolls in through that corner and the spark pops in the gap. */
+  function spark(ctx, x, y, s, col) {
+    ctx.save(); ctx.translate(x, y); ctx.scale(s / 100, s / 100); ctx.beginPath();
+    ctx.moveTo(0, -50); ctx.bezierCurveTo(0, -21, 21, 0, 50, 0); ctx.bezierCurveTo(21, 0, 0, 21, 0, 50);
+    ctx.bezierCurveTo(0, 21, -21, 0, -50, 0); ctx.bezierCurveTo(-21, 0, 0, -21, 0, -50); ctx.closePath();
+    ctx.fillStyle = col; ctx.fill(); ctx.restore();
+  }
+  function drawFrame(ctx, t, until) {
+    const m = 54 * U, x0 = m, y0 = m, x1 = W - m, y1 = H - m, r = 70 * U, fw = x1 - x0, fh = y1 - y0;
+    const gx = x1 - fw * .32, gy = y0 + Math.min(fh * .2, fw * .34); // where the frame stops: the open corner
+    const inP = eOutExpo(seg(t, 0, .7)), outP = eInExpo(seg(t, until - .15, until + .3));
+    ctx.save(); ctx.beginPath(); ctx.moveTo(gx, y0); ctx.lineTo(x0 + r, y0); ctx.arcTo(x0, y0, x0, y0 + r, r);
+    ctx.lineTo(x0, y1 - r); ctx.arcTo(x0, y1, x0 + r, y1, r); ctx.lineTo(x1 - r, y1); ctx.arcTo(x1, y1, x1, y1 - r, r); ctx.lineTo(x1, gy);
+    const len = 2 * (fw + fh) - (x1 - gx) - (gy - y0);
+    ctx.setLineDash([len * inP * (1 - outP), len * 2]); ctx.lineDashOffset = -len * outP;
+    ctx.lineWidth = 16 * U; ctx.lineCap = "round"; ctx.lineJoin = "round"; ctx.strokeStyle = P.cream; ctx.stroke(); ctx.restore();
+    const lead = P[spec.lead || (spec.title && spec.title.dot) || "y"], cr = Math.min(fw, fh) * .1;
+    const c = eOutBack(seg(t, .35, 1.0)), co = eInBack(seg(t, until - .2, until + .25));
+    if (c > 0 && co < 1) shape(ctx, "circle", lerp(W + cr * 2, x1 - cr * 1.6, c) + co * cr * 4, lerp(-cr * 2, y0 + cr * 1.6, c) - co * cr * 4, cr * 2, 0, lead);
+    const k = eOutBack(seg(t, .7, 1.05)) * (1 - eInBack(seg(t, until - .25, until + .1)));
+    if (k > 0) spark(ctx, x1, y0, 84 * U * k, P.cream); // the spark sits on the corner the frame leaves open
+  }
+
   function draw(ctx, t) {
     ctx.clearRect(0, 0, W, H);
     let drew = false;
-    if (spec.intro && t < spec.intro + .4) { // the Bauhaus trio slides in at the edges while the hook is up
-      const i = eOutExpo(seg(t, 0, .5)), o = eInBack(seg(t, spec.intro - .1, spec.intro + .3)), s = 320 * U;
-      shape(ctx, "circle", -s * .15 - o * s, H * .5, s * i, 0, P.r, P.ink);
-      shape(ctx, "square", W + s * .05 + o * s, H * (TALL ? .2 : .25), s * .8 * i, (1 - i) * 1.5, P.b, P.ink);
-      shape(ctx, "triangle", W - s * .1 + o * s, H * .62, s * .7 * i, (1 - i) * -2, P.y, P.ink);
-      drew = true;
-    }
+    if (spec.intro && t < spec.intro + .4) { drawFrame(ctx, t, spec.intro); drew = true; }
     for (const sc of spec.scenes) drew = scene(ctx, sc, t) || drew;
     drew = title(ctx, t) || drew;
     for (const wp of spec.wipes) { // a big shape sweeps corner to corner and covers the cut at its midpoint

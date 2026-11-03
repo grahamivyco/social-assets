@@ -9,8 +9,8 @@
      and it is used instead. Don't caption the traced version as the original sketch. -->
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;1,500&family=DM+Sans:wght@500&display=block">
 <style>
-  @font-face { font-family: OFr; src: url(../../editor/fonts/Fraunces_600SemiBold.ttf); }
-  @font-face { font-family: OFrI; src: url(../../editor/fonts/Fraunces_600SemiBold_Italic.ttf); }
+  /* Open Frame sign-off: Helvetica Neue Bold, upright, accent by color (2026-11-03); Liberation Sans on Linux */
+  @font-face { font-family: OFr; src: local("Helvetica Neue Bold"), local("HelveticaNeue-Bold"), local("Helvetica Bold"), local("Arial Bold"), local("Liberation Sans Bold"); font-weight: 700; }
   @font-face { font-family: In; src: url(../../editor/fonts/Inter-SemiBold.otf); }
   :root { --sage: #3E5538; --mid: #5C7A52; --pale: #EEF3EC; --rose: #B87260; --cream: #FAF7F2; --linen: #F0EAE0; --ink: #242424; --ui: #0D99FF; }
   html, body { margin: 0; width: 1080px; height: 1920px; overflow: hidden; background: var(--linen); }
@@ -141,7 +141,7 @@
     <path id="ofFrame" d="M74 22 H36 A14 14 0 0 0 22 36 V84 A14 14 0 0 0 36 98 H84 A14 14 0 0 0 98 84 V48" fill="none" stroke="#F3F1EA" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
     <g id="ofSpark"><path d="M0 -50 C0 -21 21 0 50 0 C21 0 0 21 0 50 C0 21 -21 0 -50 0 C-21 0 0 -21 0 -50 Z" fill="#F3F1EA"/></g>
   </svg>
-  <div id="ofQ" style="position:absolute;left:0;right:0;top:850px;text-align:center;font:600 104px/1.04 OFr;letter-spacing:-2.5px;color:#F3F1EA"></div>
+  <div id="ofQ" style="position:absolute;left:0;right:0;top:850px;text-align:center;font:700 104px/1.04 OFr;letter-spacing:-3px;color:#F3F1EA"></div>
   <div id="ofCta" style="position:absolute;left:0;right:0;top:1150px;text-align:center;font:600 34px/1.4 In;color:#F3F1EA"></div>
 </div>
 <div class="full" id="flash"></div>
@@ -153,7 +153,7 @@
 const P = Object.assign({ sketch: null, pages: [1, 2, 3, 4, 5].map(n => `../assets/ngm/page-${n}.jpg`), credit: 'Brand kit by Open Frame', tag: 'Mark', question: 'Want your brand<br>to be <i>next?</i>', cta: 'Book a free consult<br><span style="opacity:.6">openframe.design/links</span>' }, window.PARAMS || {});
 const { tw, prog, clamp, lerp, spring, $, $$, css } = M;
 $('#credit').textContent = P.credit;
-$('#ofQ').innerHTML = P.question.replace(/<i>/g, '<i style="font-family:OFrI;font-style:normal;color:#F24333">'); $('#ofCta').innerHTML = P.cta;
+$('#ofQ').innerHTML = P.question.replace(/<i>/g, '<i style="font-style:normal;color:#F24333">'); $('#ofCta').innerHTML = P.cta;
 $$('[data-src]').forEach(e => e.setAttribute('d', document.getElementById(e.dataset.src).getAttribute('d')));
 const LEN = new Map(); const draw = (e, k) => { if (!LEN.has(e)) LEN.set(e, e.getTotalLength()); const L = LEN.get(e); e.setAttribute('stroke-dasharray', `${L} ${L}`); e.setAttribute('stroke-dashoffset', L * (1 - k)); };
 if (P.sketch) { $('#sketchImg').setAttribute('href', P.sketch); $('#sketch').style.display = 'none'; }
@@ -302,7 +302,7 @@ window.SCENE = {
     css('#ofCta', { opacity: prog(t, S.of + 1.4, S.of + 1.7) });
   },
 };
-Promise.all(['500 98px "Cormorant Garamond"', 'italic 500 98px "Cormorant Garamond"', '500 33px "DM Sans"', '600 22px In', '600 104px OFr', '600 104px OFrI'].map(f => document.fonts.load(f)))
+Promise.all(['500 98px "Cormorant Garamond"', 'italic 500 98px "Cormorant Garamond"', '500 33px "DM Sans"', '600 22px In', '700 104px OFr'].map(f => document.fonts.load(f)))
   .then(() => Promise.all($$('img').map(i => i.decode().catch(() => {}))))
   .then(() => { SCENE.ready = true; SCENE.seek(0); });
 </script>

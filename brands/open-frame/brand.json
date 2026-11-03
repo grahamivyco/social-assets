@@ -2,7 +2,7 @@
  "id": "open-frame",
  "name": "Open Frame",
  "site": "https://openframe.design",
- "updated": "2026-10-20",
+ "updated": "2026-11-03",
  "colors": [
   {
    "token": "ink",
@@ -70,9 +70,11 @@
  },
  "fonts": {
   "head": {
-   "family": "Fraunces",
-   "weight": 500,
-   "rule": "Serif headings, sentence case. One italic accent word allowed."
+   "family": "Helvetica Neue",
+   "weight": 700,
+   "italic": false,
+   "stack": "\"Helvetica Neue\", Helvetica, Arial, sans-serif",
+   "rule": "Headings: Helvetica Neue Bold, upright, short statements ending with a period. The accent word is a color, never italic. Not free, so never copied into a repo: renderers load the system font (macOS) and fall back to Liberation Sans on Linux. Switched from Fraunces 2026-11 (Open-Frame docs/design-rules.md)."
   },
   "body": {
    "family": "Inter",
@@ -82,6 +84,11 @@
    "family": "Manrope",
    "weight": 600,
    "rule": "Wordmark only. Outlined in logos/open-frame-wordmark*.svg so it renders without the font. TTFs in fonts/."
+  },
+  "caption": {
+   "family": "Manrope",
+   "weight": 800,
+   "rule": "Reel captions: 3 words at a time, the spoken word in yellow, the rest white, no outline (Graham picked 2026-11-03)."
   }
  },
  "logo_rules": "The mark is an open bracket frame with a 4-point spark inside. Always one color: ink on light, cream on dark. Never multicolor, never with shadows or effects. Use the mark on its own most of the time, and the wordmark sparingly: site header, end cards, documents.",

@@ -1,6 +1,6 @@
 /* Renders the pop layer (pop.js) to a transparent .mov with headless Chromium.
    Usage: node pop-render.js spec.json out.mov
-   spec: {W,H,fps,dur,fonts:[{family,weight,style,path}], ...pop.js spec}
+   spec: {W,H,fps,dur,fonts:[{family,weight,style,path|local:[names]}], ...pop.js spec}
    Needs playwright-core (npm i playwright-core@1.56.1) and a Chromium; set CHROMIUM to its path. */
 const fs = require("fs"), path = require("path"), { spawn } = require("child_process");
 const { chromium } = require(process.env.PW_CORE || "playwright-core");
@@ -11,13 +11,14 @@ const exe = process.env.CHROMIUM || "/opt/pw-browsers/chromium_headless_shell-11
 (async () => {
   const browser = await chromium.launch({ executablePath: exe });
   const page = await browser.newPage();
-  const fonts = spec.fonts.map(f => ({ ...f, data: fs.readFileSync(f.path).toString("base64") }));
+  const fonts = spec.fonts.map(f => (f.path ? { ...f, data: fs.readFileSync(f.path).toString("base64") } : f));
   await page.setContent("<canvas id=c></canvas>");
   await page.addScriptTag({ path: path.join(__dirname, "pop.js") });
   await page.evaluate(async ({ spec, fonts }) => {
     for (const f of fonts) {
-      const bin = Uint8Array.from(atob(f.data), ch => ch.charCodeAt(0));
-      const face = new FontFace(f.family, bin, { weight: String(f.weight), style: f.style });
+      // system fonts (Helvetica Neue on the Mac) load by name with local(), others from the file bytes
+      const src = f.data ? Uint8Array.from(atob(f.data), ch => ch.charCodeAt(0)) : f.local.map(n => `local("${n}")`).join(",");
+      const face = new FontFace(f.family, src, { weight: String(f.weight), style: f.style });
       document.fonts.add(await face.load());
     }
     const c = document.getElementById("c"); c.width = spec.W; c.height = spec.H;

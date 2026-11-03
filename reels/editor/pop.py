@@ -20,6 +20,39 @@ KEYWORDS = {
 WIPES = [("circle", "r"), ("square", "b"), ("circle", "y"), ("square", "g")]
 
 
+# System folders searched when a brand font isn't in a fonts/ folder (Helvetica Neue ships with macOS and isn't free
+# to copy, so it is never put in a repo). Liberation Sans has Helvetica's metrics and stands in on Linux previews.
+SYSTEM_FONT_DIRS = [Path("/System/Library/Fonts"), Path("/Library/Fonts"), Path.home() / "Library" / "Fonts",
+                    Path("/usr/share/fonts"), Path.home() / ".fonts"]
+FALLBACK = {"helveticaneue": ["Helvetica Neue", "Helvetica", "Arial", "Liberation Sans"],
+            "helvetica": ["Helvetica", "Helvetica Neue", "Arial", "Liberation Sans"]}
+FONT_INDEX = {}  # path -> face index inside a .ttc collection
+SYSTEM_FONTS = set()  # paths found outside a fonts/ folder: loaded by name, never copied
+
+
+def _system_font(family, weight, italic):
+    from PIL import ImageFont
+    names = {300: "light", 400: "regular", 500: "medium", 600: "semibold", 700: "bold", 800: "extrabold"}
+    style = names.get(weight, "regular") + (" italic" if italic else "")
+    for fam in FALLBACK.get(family.replace(" ", "").lower(), [family]):
+        for d in SYSTEM_FONT_DIRS:
+            if not d.exists():
+                continue
+            for f in sorted(d.rglob("*")):
+                if f.suffix.lower() not in (".ttf", ".otf", ".ttc") or fam.replace(" ", "").lower() not in f.name.replace(" ", "").lower():
+                    continue
+                for i in range(64 if f.suffix.lower() == ".ttc" else 1):
+                    try:
+                        fam_n, sty = ImageFont.truetype(str(f), 20, index=i).getname()
+                    except OSError:
+                        break
+                    sty = sty.lower().replace("oblique", "italic")
+                    if fam_n.lower() == fam.lower() and (sty == style or (style == "regular italic" and sty == "italic")):
+                        FONT_INDEX[f], _ = i, SYSTEM_FONTS.add(f)
+                        return f
+    return None
+
+
 def _find_font(brand_dir, family, weight, italic=False):
     want = family.replace(" ", "").lower()
     names = {300: "light", 400: "regular", 500: "medium", 600: "semibold", 700: "bold", 800: "extrabold"}
@@ -28,7 +61,30 @@ def _find_font(brand_dir, family, weight, italic=False):
             n = f.stem.replace("-", "").replace("_", "").lower()
             if want in n and names.get(weight, "") in n and (("italic" in n) == italic):
                 return f
+    f = _system_font(family, weight, italic)
+    if f:
+        return f
     raise SystemExit(f"missing font file: {family} {weight}{' italic' if italic else ''} (put it in {brand_dir / 'fonts'})")
+
+
+def pil_font(path, size):
+    """PIL font for a path from _find_font, picking the right face inside a .ttc."""
+    from PIL import ImageFont
+    return ImageFont.truetype(str(path), size, index=FONT_INDEX.get(Path(path), 0))
+
+
+def font_name(path):
+    """(family, style) as the font file names itself, e.g. ("Helvetica Neue", "Bold")."""
+    return pil_font(path, 20).getname()
+
+
+def font_spec(family, weight, style, path):
+    """A font for pop-render.js: system fonts load by name (local()), others from the file."""
+    p = Path(path)
+    if p in SYSTEM_FONTS:
+        fam, sty = font_name(p)
+        return {"family": family, "weight": weight, "style": style, "local": [f"{fam} {sty}", fam.replace(" ", "") + "-" + sty.replace(" ", "")]}
+    return {"family": family, "weight": weight, "style": style, "path": str(p)}
 
 
 def load_brand(brand_id, color_fn=lambda h: h):
@@ -50,9 +106,13 @@ def load_brand(brand_id, color_fn=lambda h: h):
     return {
         "pal": {k: "#" + color_fn(v) for k, v in pal.items()},
         "hex": {k: color_fn(v) for k, v in pal.items()},
-        "head": {"family": head["family"], "weight": head.get("weight", 500)},
+        # "italic": false in brand.json (Open Frame since the Helvetica switch): the accent word is a color, never italic
+        "head": {"family": head["family"], "weight": head.get("weight", 500), "italic": head.get("italic", True)},
+        # brand.json fonts.caption: the Reel caption font (Open Frame: Manrope ExtraBold, Graham's pick 2026-11-03)
+        "caption": b["fonts"].get("caption"),
+        "dir": d,
         "files": {"head": _find_font(d, head["family"], head.get("weight", 500)),
-                  "head_italic": _find_font(d, head["family"], head.get("weight", 500), True)},
+                  "head_italic": _find_font(d, head["family"], head.get("weight", 500), head.get("italic", True))},
     }
 
 
@@ -118,10 +178,9 @@ class Pop:
         spec = {"W": self.W, "H": self.H, "fps": fps, "dur": self.dur, "pal": self.brand["pal"],
                 "head": self.brand["head"], "scenes": self.scenes, "wipes": self.wipes, "title": self.title,
                 "intro": self.title["until"] if self.title else 0,
-                "fonts": [{"family": self.brand["head"]["family"], "weight": self.brand["head"]["weight"],
-                           "style": "normal", "path": str(f["head"])},
-                          {"family": self.brand["head"]["family"], "weight": self.brand["head"]["weight"],
-                           "style": "italic", "path": str(f["head_italic"])}]}
+                "fonts": [font_spec(self.brand["head"]["family"], self.brand["head"]["weight"], "normal", f["head"])]
+                + ([font_spec(self.brand["head"]["family"], self.brand["head"]["weight"], "italic", f["head_italic"])]
+                   if self.brand["head"]["italic"] else [])}
         sp = Path(path).with_suffix(".json")
         sp.write_text(json.dumps(spec))
         subprocess.run(["node", str(HERE / "pop-render.js"), str(sp), str(path)], check=True,
