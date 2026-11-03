@@ -23,7 +23,7 @@ Checked and installed 2026-11-03. Free and local tools only, no sudo.
 | HyperFrames skills | PASS | hyperframes, hyperframes-cli, hyperframes-registry, media-use | ~/.claude/skills (also ~/.agents/skills) |
 | HyperFrames sound effects | PASS | 19 mp3 + manifest.json + CREDITS.md | ~/.claude/skills/media-use/audio/assets/sfx |
 | HyperFrames test render | PASS | 1080x1920, 10.0 s, h264 + aac, 3 SFX audible at 0.2/2.1/4.4 s | ~/social-assets/reels/hyperframes/smoke-test/ |
-| WhisperX | PASS | 3.8.6, torch 2.8.0 CPU | Setup/tools/whisperx-venv |
+| WhisperX | PASS | 3.8.6, torch 2.8.0 CPU | ~/.local/share/open-frame-editor/whisperx-venv |
 | WhisperX word timestamps | PASS | base.en + wav2vec2 alignment, word start/end/score | test clip: Parakeet test_wavs/0.wav |
 | Parakeet (sherpa-onnx) | PASS | nemo-parakeet-tdt-0.6b-v2-int8 (631 MB) | ~/.cache/thedit/ |
 | Playwright | PARTIAL | playwright-core 1.56.1 only, chromium_headless_shell-1194 | ~/social-assets/reels/node_modules, ~/Library/Caches/ms-playwright |
@@ -39,24 +39,36 @@ Checked and installed 2026-11-03. Free and local tools only, no sudo.
 
 ## WhisperX
 
-- Lives in its own venv on Python 3.12 (WhisperX needs Python 3.10 to 3.13), separate from everything else.
+- Lives in its own venv on Python 3.12 at ~/.local/share/open-frame-editor/whisperx-venv (WhisperX needs Python 3.10 to 3.13), separate from everything else.
 - CPU mode on the Mac: `"<venv>/bin/whisperx" clip.wav --model base.en --language en --compute_type int8 --device cpu --output_format json`
 - Models download on first use: Whisper base.en and the wav2vec2 alignment model (360 MB, ~/.cache/torch/hub). A 7.5 s clip took about 3 minutes on the first run, mostly the download.
 - Parakeet still does the main transcription for Reels. WhisperX is the backup and the option for speaker diarization (that needs a free Hugging Face token).
 
 ## Folders
 
-Under ~/Downloads/Open Frame LLC & Clients/: Raw, Signature Style and Setup were created. Reels already existed and is used as Projects, one folder per video. Nothing was moved or deleted.
+The folder system lives in iCloud Drive (moved 2026-11-03 at Graham's request, so it is backed up):
+`~/Library/Mobile Documents/com~apple~CloudDocs/Open Frame LLC & Clients/` (Finder: iCloud Drive > Open Frame LLC & Clients).
+
+- Raw: unedited recordings
+- Reels: Projects, one folder per video
+- Signature Style: branding, examples and saved styles
+- Setup: these notes, the install script and logs
+
+`~/Downloads/Open Frame LLC & Clients` is now a symlink to it, so the reel watcher, watch server and loops, which have the Downloads path built in, keep working unchanged.
+
+Kept local on purpose (not in iCloud): the WhisperX venv (~/.local/share/open-frame-editor), the HyperFrames install (~/social-assets/reels/hyperframes) and model caches (~/.cache). The first WhisperX venv from Setup/tools was moved to the Trash.
+
+iCloud "Optimize Mac Storage" is on, so macOS can evict older files to the cloud. Right-click the folder in Finder and choose "Keep Downloaded" so Raw footage is always on disk for rendering.
 
 ## How it was installed
 
 Claude Code's auto-mode safety check blocked package downloads until Graham said "yes install". The installs are in one script that is safe to run again:
 
 ```
-zsh ~/Downloads/"Open Frame LLC & Clients"/Setup/install-editor-tools.sh
+zsh ~/Downloads/"Open Frame LLC & Clients"/Setup/install-editor-tools.sh   # path works through the symlink
 ```
 
-It installs yt-dlp (`uv tool install yt-dlp`), HyperFrames (`npm i -D hyperframes` then `npx hyperframes skills update`) and WhisperX (`uv venv --python python3.12`, then `uv pip install whisperx`, reusing the venv if it already exists), and logs to Setup/install-log.txt.
+It installs yt-dlp (`uv tool install yt-dlp`), HyperFrames (`npm i -D hyperframes` then `npx hyperframes skills update`) and WhisperX (`uv venv --python python3.12` at ~/.local/share/open-frame-editor/whisperx-venv, then `uv pip install whisperx`, reusing the venv if it already exists), and logs to Setup/install-log.txt.
 
 Checks used afterwards:
 
