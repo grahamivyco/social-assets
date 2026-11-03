@@ -512,7 +512,9 @@ const PLATES = ["quarter", "circle", "half", "capsule", "ring", "stripes", "brac
       : sz === "behind" ? [W * (TALL ? .94 : .7), H * (TALL ? .62 : .8)]
       : [W * (TALL ? .78 : .5), H * (TALL ? .5 : .7)];
     const k = Math.min(box[0] / IM.width, box[1] / IM.height), w = IM.width * k, h = IM.height * k, cx = W / 2;
-    const cy = sz === "full" ? pad + box[1] / 2 : sz === "behind" ? H * (TALL ? .03 : .04) + h / 2 : H * (TALL ? .06 : .05) + h / 2;
+    // with the band up, inset and behind screenshots start just under it
+    const y0 = BAND && bandItems().length ? bandH() + H * .015 : 0;
+    const cy = sz === "full" ? pad + box[1] / 2 : sz === "behind" ? y0 + H * (TALL ? .03 : .04) + h / 2 : y0 + H * (TALL ? .06 : .05) + h / 2;
     const q = eOutBack(seg(v, 0, .4)) * (1 - eInBack(seg(t, sc.end - .3, sc.end))), z = q * (1 + .04 * seg(v, 0, sc.end - sc.t));
     if (q <= 0) return false;
     ctx.save(); ctx.translate(cx, cy); ctx.scale(z, z); ctx.drawImage(IM, -w / 2, -h / 2, w, h); ctx.restore();
@@ -606,6 +608,85 @@ const PLATES = ["quarter", "circle", "half", "capsule", "ring", "stripes", "brac
     ctx.restore();
     return true;
   }
+  /* The band (Graham, 2026-11-03: "yes I want that"): with the color field look the top-third band stays up for the
+     whole Reel. It opens with the hook words, then each key point replaces them on the band: a new color shutters
+     down over the old one and that idea's tiles or glyph and label build on it. The last idea stays until the end.
+     Real screenshots stay separate. spec.band false = the band leaves with the hook (cards for key points). */
+  const BAND = spec.title_style !== "box" && spec.band !== false;
+  const bandH = () => H * (TALL ? .34 : .4);
+  function fieldOf(sc) {
+    const gk = glyph[sc.kind] ? sc.kind : GLYPH_ALIAS[sc.kind];
+    return { gk, fk: (gk && GLYPH_FIELD[gk]) || FIELD[sc.kind] || ["r", "b", "y", "g"][hash(sc.kind || sc.label) % 4] };
+  }
+  function bandItems() {
+    if (bandItems.c) return bandItems.c;
+    const out = [];
+    if (spec.title && spec.title.text) out.push({ t: 0, hook: spec.title, fk: spec.title.field || "r" });
+    for (const sc of spec.scenes) if (sc.kind !== "image") out.push({ t: sc.t, sc, fk: fieldOf(sc).fk });
+    out.sort((a, b) => a.t - b.t);
+    for (let i = 1; i < out.length; i++) if (out[i].fk === out[i - 1].fk) // never the same color twice in a row
+      out[i].fk = ["r", "b", "y", "g"].find(c => c !== out[i - 1].fk && (!out[i + 1] || c !== out[i + 1].fk));
+    return (bandItems.c = out);
+  }
+  function hookWords(ctx, T, t, y0, bh) {
+    const maxW = W * .86, parts = T.text.split(/(\*[^*]+\*)/).filter(Boolean);
+    const words = []; parts.forEach(p => { const it = p.startsWith("*"); p.replace(/\*/g, "").split(/\s+/).forEach(w => w && words.push({ w, it })); });
+    let size = (TALL ? 170 : 130) * U, lines;
+    for (;;) {
+      ctx.font = `${HEAD.weight} ${size}px ${FAM}`; const sp = ctx.measureText(" ").width; lines = [[]]; let lw = 0;
+      for (const x of words) { const ww = ctx.measureText(x.w).width;
+        if (lines[lines.length - 1].length && lw + sp + ww > maxW) { lines.push([]); lw = 0; }
+        lines[lines.length - 1].push({ ...x, ww }); lw += (lw ? sp : 0) + ww; }
+      const tall = lines.length * size * 1.02, wide = Math.max(...lines.map(l => l.reduce((a, x) => a + x.ww, 0) + sp * (l.length - 1)));
+      if ((lines.length <= 3 && tall <= bh * .78 && wide <= maxW) || size < 60 * U) { lines.sp = sp; break; } size -= 6 * U; }
+    ctx.save(); ctx.textBaseline = "alphabetic"; ctx.textAlign = "left"; ctx.font = `${HEAD.weight} ${size}px ${FAM}`; let n = 0;
+    const top = y0 + bh / 2 - lines.length * size * 1.02 / 2 + size * .8;
+    lines.forEach((l, i) => { const lw = l.reduce((a, x) => a + x.ww, 0) + lines.sp * (l.length - 1); let x = (W - lw) / 2;
+      l.forEach(wd => { const k = eOutExpo(seg(t, .18 + n * .07, .5 + n * .07)); n++;
+        ctx.globalAlpha = k; ctx.fillStyle = wd.it ? P[T.accent || "y"] : P.cream;
+        ctx.fillText(wd.w, x, top + i * size * 1.02 + (1 - k) * size * .35); x += wd.ww + lines.sp; }); });
+    ctx.restore();
+  }
+  function bandScene(ctx, it, t, y0, bh) { // one key point on the band: art across the band, label underneath
+    const sc = it.sc, v = t - sc.t, fk = it.fk, field = P[fk], { gk } = fieldOf(sc);
+    const R = rnd(hash((sc.kind || "") + (sc.label || ""))), cols = [P.cream, P.ink, P.r, P.b, P.y, P.g].filter(c => c !== field);
+    const ls = String(sc.label || "").split("\n"), lsz = (TALL ? 70 : 60) * U * (ls.length > 1 ? .8 : 1);
+    const pad = 44 * U, gap = 14 * U, aw = W * .9, ah = bh - pad * 2.2 - ls.length * lsz * 1.12, ax = (W - aw) / 2, ay = y0 + pad;
+    if (gk && gk !== "shapes") {
+      const accents = ["r", "b", "y", "g"].filter(c => c !== fk), C = { ...P, field, a: P[accents[0]], b2: P[accents[1]] };
+      const gw = Math.min(aw, ah * 1.7), kf = i => eOutBack(seg(v, .12 + i * .07, .42 + i * .07));
+      glyph[gk](ctx, Math.max(0, v - .3), (W - gw) / 2, ay, gw, ah, C, kf);
+    } else { // one row of 3 wide art plate tiles
+      const order = PLATES.slice().sort(() => R() - .5), n = 3, tw = (aw - (n - 1) * gap) / n;
+      for (let i = 0; i < n; i++) {
+        const tx = ax + i * (tw + gap), bg = cols[Math.floor(R() * cols.length)], fgs = cols.filter(c => c !== bg), fg = fgs[Math.floor(R() * fgs.length)];
+        const q = eOutBack(seg(v, .12 + i * .07, .42 + i * .07)); if (q <= 0) continue;
+        ctx.save(); ctx.translate(tx + tw / 2, ay + ah / 2); ctx.scale(q, q); ctx.translate(-tx - tw / 2, -ay - ah / 2);
+        box(ctx, tx, ay, tw, ah, 12 * U, bg); ctx.beginPath(); ctx.roundRect(tx, ay, tw, ah, 12 * U); ctx.clip();
+        plate(ctx, order[i % order.length], tx, ay, ah, fg, Math.max(0, v - .3 - i * .06), R() * 1.6, tw); ctx.restore();
+      }
+    }
+    ctx.save(); ctx.textAlign = "center";
+    ls.forEach((l, i) => label(ctx, l, W / 2, ay + ah + pad * .7 + lsz * .56 + i * lsz * 1.12, lsz, fk === "y" ? P.ink : P.cream, eOutExpo(seg(v, .45 + i * .08, .75 + i * .08)), aw));
+    ctx.restore();
+  }
+  function band(ctx, t) {
+    const items = bandItems(); if (!items.length) return false;
+    const bh = bandH(), endT = spec.dur || 1e9, pin = eOutExpo(seg(t, items[0].t, items[0].t + .4)), out = eInExpo(seg(t, endT - .35, endT));
+    if (pin <= 0 || out >= 1) return false;
+    const y0 = -bh * (1 - pin) - bh * out;
+    let i = 0; while (i + 1 < items.length && t >= items[i + 1].t) i++;
+    const drawItem = (it, clipH) => {
+      ctx.save(); ctx.beginPath(); ctx.rect(0, y0, W, clipH); ctx.clip();
+      ctx.fillStyle = P[it.fk]; ctx.fillRect(0, y0, W, bh);
+      if (it.hook) hookWords(ctx, it.hook, t - it.t, y0, bh); else bandScene(ctx, it, t, y0, bh);
+      ctx.restore();
+    };
+    const k = i > 0 ? eIO(seg(t, items[i].t, items[i].t + .32)) : 1; // the new color shutters down over the old one
+    if (k < 1) drawItem(items[i - 1], bh);
+    drawItem(items[i], bh * k);
+    return true;
+  }
   function title(ctx, t) {
     const T = spec.title; if (!T || t > T.until + .4) return false;
     if (spec.title_style !== "box") return titleField(ctx, t, T);
@@ -665,9 +746,11 @@ const PLATES = ["quarter", "circle", "half", "capsule", "ring", "stripes", "brac
     // "front" draws only those. No layer = one layer with everything.
     // The color field hook band also goes in front, so the head never covers its words.
     const titleFront = spec.title_style !== "box";
-    if (spec.layer === "front") { for (const sc of spec.scenes) if (FRONT(sc)) drew = scene(ctx, sc, t) || drew; if (titleFront) drew = title(ctx, t) || drew; return drew; }
-    for (const sc of spec.scenes) if (spec.layer !== "back" || !FRONT(sc)) drew = scene(ctx, sc, t) || drew;
-    if (spec.layer !== "back" || !titleFront) drew = title(ctx, t) || drew;
+    // With the band, key points live on the band (front layer too), so only screenshots are drawn as scenes.
+    const asScene = sc => !BAND || sc.kind === "image", top = BAND ? band : title;
+    if (spec.layer === "front") { if (titleFront) drew = top(ctx, t) || drew; for (const sc of spec.scenes) if (FRONT(sc)) drew = scene(ctx, sc, t) || drew; return drew; }
+    for (const sc of spec.scenes) if (asScene(sc) && (spec.layer !== "back" || !FRONT(sc))) drew = scene(ctx, sc, t) || drew;
+    if (spec.layer !== "back" || !titleFront) drew = top(ctx, t) || drew;
     for (const wp of spec.wipes) { // a big shape sweeps corner to corner and covers the cut at its midpoint
       if (t < wp.t - .22 || t > wp.t + .22) continue;
       const p = eIO(seg(t, wp.t - .22, wp.t + .22)), s = Math.hypot(W, H) * 1.15;
