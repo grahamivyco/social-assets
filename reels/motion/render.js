@@ -19,6 +19,7 @@ const params = JSON.parse(opt('params', '{}'));
 (async () => {
   const browser = await chromium.launch(process.env.CHROMIUM ? { executablePath: process.env.CHROMIUM } : {});
   const page = await browser.newPage({ viewport: { width: W, height: H } });
+  page.on('pageerror', e => console.error('scene error:', e.message));
   await page.addInitScript(p => { window.PARAMS = p; }, params);
   await page.goto('file://' + path.resolve(scene));
   await page.waitForFunction(() => window.SCENE && window.SCENE.ready !== false);

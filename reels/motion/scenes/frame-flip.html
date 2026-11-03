@@ -1,0 +1,144 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<!-- Frame flip (Open Frame). Built on the Open Frame mark: a big open frame holds each question, the sparkle waits
+     in the open corner. The sparkle spins to the middle and bursts over the screen in a Bauhaus color, then pulls
+     back into the corner and the answer is in the frame. To move on, the camera flies through the frame into the
+     next question. Ends on the real mark and the free consult.
+     PARAMS: pairs [[question, answer], ...], cta, link -->
+<style>
+  @font-face { font-family: Fr; src: url(../../editor/fonts/Fraunces_600SemiBold.ttf); }
+  @font-face { font-family: FrI; src: url(../../editor/fonts/Fraunces_600SemiBold_Italic.ttf); }
+  @font-face { font-family: In; src: url(../../editor/fonts/Inter-SemiBold.otf); }
+  html, body { margin: 0; width: 1080px; height: 1920px; overflow: hidden; background: #111110; }
+  .layer { position: absolute; inset: 0; transform-origin: 540px 900px; }
+  .layer svg { position: absolute; inset: 0; overflow: visible; }
+  .txt { position: absolute; left: 540px; top: 900px; width: 450px; transform: translate(-50%, -50%); text-align: center; }
+  .q { font: 600 70px/1.1 In; letter-spacing: -1.5px; }
+  .a { font: 600 92px/1.02 Fr; letter-spacing: -2px; }
+  .a i { font-family: FrI; font-style: normal; }
+  #end .cta { position: absolute; left: 0; right: 0; top: 1130px; text-align: center; font: 600 76px/1.05 Fr; color: #F3F1EA; letter-spacing: -1.5px; }
+  #end .link { position: absolute; left: 0; right: 0; top: 1240px; text-align: center; font: 600 30px/1 In; color: #F3F1EA; opacity: .6; letter-spacing: .5px; }
+</style></head>
+<body>
+<div id="stage"></div>
+<svg width="1080" height="1920" style="position:absolute;inset:0;overflow:visible;pointer-events:none;z-index:10"><g id="spark"><path d="M0 -50 C0 -21 21 0 50 0 C21 0 0 21 0 50 C0 21 -21 0 -50 0 C-21 0 0 -21 0 -50 Z"/></g></svg>
+<script src="../lib.js"></script>
+<script>
+const P = Object.assign({
+  pairs: [
+    ['Need a brand?', 'Let’s make it look like <i>you.</i>'],
+    ['Need a website?', 'We’ll design it and <i>build it.</i>'],
+    ['Posts piling up?', 'We plan the month <i>with you.</i>'],
+    ['Want it all to match?', 'That’s the <i>whole idea.</i>'],
+  ],
+  cta: 'Book a free consult', link: 'openframe.design/links',
+}, window.PARAMS || {});
+const { tw, prog, clamp, lerp, $, $$, css, E } = M;
+const INK = '#111110', CREAM = '#F3F1EA';
+// answer colors rotate through the Bauhaus four, text picks the color that passes contrast
+const FIELDS = [['#F24333', CREAM], ['#2F6BF0', CREAM], ['#F4BF3A', INK], ['#33AC66', INK]];
+
+// mark geometry: 120-unit mark drawn 8x, centered on (540, 900)
+const K = 8, CX = 540, CY = 900, X = u => CX + (u - 60) * K, Y = v => CY + (v - 60) * K;
+const FRAME = `M${X(74)} ${Y(22)} H${X(36)} A${14 * K} ${14 * K} 0 0 0 ${X(22)} ${Y(36)} V${Y(84)} A${14 * K} ${14 * K} 0 0 0 ${X(36)} ${Y(98)} H${X(84)} A${14 * K} ${14 * K} 0 0 0 ${X(98)} ${Y(84)} V${Y(48)}`;
+// window: the frame's inside, cut out of the layer's background so we can fly through it
+const IN = 26, R = 10;  // inner edge in mark units
+const HOLE = `M${X(IN + R)} ${Y(IN)} H${X(120 - IN - R)} A${R * K} ${R * K} 0 0 1 ${X(120 - IN)} ${Y(IN + R)} V${Y(120 - IN - R)} A${R * K} ${R * K} 0 0 1 ${X(120 - IN - R)} ${Y(120 - IN)} H${X(IN + R)} A${R * K} ${R * K} 0 0 1 ${X(IN)} ${Y(120 - IN - R)} V${Y(IN + R)} A${R * K} ${R * K} 0 0 1 ${X(IN + R)} ${Y(IN)} Z`;
+const BG = `M-4000 -4000 H5080 V5920 H-4000 Z ` + HOLE;
+const CORNER = [X(90), Y(30)];   // where the sparkle rests, in the open corner
+
+function layer(id, bg, fg, html, cls) {
+  const d = document.createElement('div'); d.className = 'layer'; d.id = id;
+  d.innerHTML = `<svg width="1080" height="1920"><path class="bg" d="${BG}" fill="${bg}" fill-rule="evenodd"/><path class="win" d="${HOLE}" fill="${bg}"/>
+    <path class="frame" d="${FRAME}" fill="none" stroke="${fg}" stroke-width="${8 * K}" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    <div class="txt ${cls}" style="color:${fg}">${html}</div>`;
+  $('#stage').appendChild(d); return d;
+}
+const L = [];
+P.pairs.forEach(([q, a], k) => {
+  L.push({ el: layer('q' + k, INK, CREAM, q, 'q'), kind: 'q', k });
+  L.push({ el: layer('a' + k, FIELDS[k % 4][0], FIELDS[k % 4][1], a, 'a'), kind: 'a', k });
+});
+const end = document.createElement('div'); end.className = 'layer'; end.id = 'end';
+end.innerHTML = `<svg width="1080" height="1920"><rect width="1080" height="1920" fill="${INK}"/>
+  <g transform="translate(${CX - 150} 760) scale(2.5)"><path d="M74 22 H36 A14 14 0 0 0 22 36 V84 A14 14 0 0 0 36 98 H84 A14 14 0 0 0 98 84 V48" fill="none" stroke="${CREAM}" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+  <g id="endSpark" transform="translate(60,60) scale(0.42)"><path d="M0 -50 C0 -21 21 0 50 0 C21 0 0 21 0 50 C0 21 -21 0 -50 0 C-21 0 0 -21 0 -50 Z" fill="${CREAM}"/></g></g></svg>
+  <div class="cta">${P.cta}</div><div class="link">${P.link}</div>`;
+$('#stage').appendChild(end);
+
+// timing per pair
+const S0 = 0.7, PAIR = 2.8, HOLD_Q = 1.15, BURST = 0.42, BACK = 0.36, ZOOM = 0.45;
+const n = P.pairs.length, END = S0 + n * PAIR, DUR = END + 2.6;
+
+function fit(el, max) {               // shrink the answer until it sits in 3 lines inside the frame
+  let f = 92; el.style.fontSize = f + 'px';
+  while ((el.scrollWidth > max || el.offsetHeight > 3 * f * 1.05) && f > 54) { f -= 2; el.style.fontSize = f + 'px'; }
+}
+
+window.SCENE = {
+  dur: DUR, ready: false,
+  seek(t) {
+    L.forEach(l => css(l.el, { display: 'none', transform: 'none', zIndex: 0 }));
+    css(end, { display: 'none', transform: 'none', zIndex: 0 });
+    const sp = $('#spark');
+    sp.style.display = 'none';
+    let spark = null;   // {x, y, s, rot, color}
+
+    if (t < S0 + 0.0001) {
+      // intro: the frame draws on, the sparkle pops into the corner
+      const l = L[0].el; css(l, { display: 'block' });
+      const fr = l.querySelector('.frame'), len = fr.getTotalLength();
+      fr.setAttribute('stroke-dasharray', `${len} ${len}`); fr.setAttribute('stroke-dashoffset', len * (1 - prog(t, 0, 0.6, 'inOutCubic')));
+      css(l.querySelector('.txt'), { opacity: prog(t, 0.35, 0.7) });
+      spark = { x: CORNER[0], y: CORNER[1], s: 0.9 * E.outBack(prog(t, 0.45, 0.7)), rot: t * 40, color: FIELDS[0][0] };
+    } else if (t < END) {
+      const k = Math.min(n - 1, Math.floor((t - S0) / PAIR)), s = S0 + k * PAIR, q = L[2 * k].el, a = L[2 * k + 1].el;
+      const fr = q.querySelector('.frame'); fr.removeAttribute('stroke-dasharray'); fr.removeAttribute('stroke-dashoffset');
+      css(q.querySelector('.txt'), { opacity: 1 });
+      const tb = s + HOLD_Q, tr = tb + BURST, td = tr + BACK, tz = s + PAIR - ZOOM;
+      const col = FIELDS[k % 4][0];
+      if (t < tr) {
+        // question on screen; in the burst the sparkle spins to the middle and grows over everything
+        css(q, { display: 'block' });
+        if (k > 0) css(q, { transform: `scale(${lerp(0.55, 1, prog(t, s - 0.05, s + 0.35, 'outExpo'))})` });
+        const b = prog(t, tb, tr, 'inExpo');
+        spark = { x: lerp(CORNER[0], CX, prog(t, tb, tb + BURST * 0.7, 'inOutCubic')), y: lerp(CORNER[1], CY, prog(t, tb, tb + BURST * 0.7, 'inOutCubic')), s: lerp(0.9, 130, b), rot: (t - s) * 40 + 180 * prog(t, tb, tr, 'inCubic'), color: col };
+      } else {
+        // answer in its color field; the sparkle pulls back into the corner (in the answer's text color)
+        css(a, { display: 'block' });
+        const bk = prog(t, tr, td, 'outExpo');
+        const fg = FIELDS[k % 4][1];
+        spark = { x: lerp(CX, CORNER[0], bk), y: lerp(CY, CORNER[1], bk), s: lerp(130, 0.9, bk), rot: (t - s) * 40 + 180 + 90 * bk, color: lerp(130, 0.9, bk) > 2.5 ? col : fg };
+        css(a.querySelector('.txt'), { opacity: prog(t, tr + 0.05, tr + 0.3), transform: `translate(-50%, -50%) translateY(${lerp(24, 0, prog(t, tr + 0.05, td + 0.1, 'outExpo'))}px)` });
+        if (t >= tz) {
+          // fly through the frame into what comes next
+          const z = prog(t, tz, s + PAIR, 'inExpo');
+          css(a, { transform: `scale(${lerp(1, 7, z)})`, zIndex: 2 });
+          a.querySelector('.win').setAttribute('opacity', 1 - prog(t, tz, tz + 0.08));
+          css(a.querySelector('.txt'), { opacity: 1 - prog(t, tz, tz + 0.12) });
+          spark.s = 0.9 * (1 - prog(t, tz, tz + 0.15));
+          const next = k < n - 1 ? L[2 * k + 2].el : end;
+          css(next, { display: 'block', zIndex: 1, transform: `scale(${lerp(0.55, 0.8, z)})` });
+          if (next !== end) { css(next.querySelector('.txt'), { opacity: 1 }); next.querySelector('.frame').removeAttribute('stroke-dasharray'); }
+        } else { a.querySelector('.win').setAttribute('opacity', 1); css(a, { zIndex: 2 }); }
+      }
+    } else {
+      // end: the real mark, sparkle settles in the middle, then the call to action
+      css(end, { display: 'block', transform: `scale(${lerp(0.8, 1, prog(t, END, END + 0.45, 'outExpo'))})` });
+      $('#endSpark').setAttribute('transform', `translate(60,60) scale(${0.42 * (1 + 0.25 * (1 - M.spring(t, END + 0.1, 2.2, 6)))}) rotate(${90 * prog(t, END, END + 0.6, 'outExpo')})`);
+      css(end.querySelector('.cta'), { opacity: prog(t, END + 0.35, END + 0.7), transform: `translateY(${lerp(20, 0, prog(t, END + 0.35, END + 0.8, 'outExpo'))}px)` });
+      css(end.querySelector('.link'), { opacity: 0.6 * prog(t, END + 0.6, END + 0.95) });
+    }
+    if (spark && spark.s > 0.01) {
+      sp.style.display = 'block';
+      sp.setAttribute('transform', `translate(${spark.x} ${spark.y}) rotate(${spark.rot}) scale(${spark.s})`);
+      sp.setAttribute('fill', spark.color);
+    }
+  },
+};
+Promise.all(['600 92px Fr', '600 92px FrI', '600 70px In'].map(f => document.fonts.load(f))).then(() => {
+  L.forEach(l => { css(l.el, { display: 'block' }); if (l.kind === 'a') fit(l.el.querySelector('.txt'), 450); css(l.el, { display: 'none' }); });
+  SCENE.ready = true; SCENE.seek(0);
+});
+</script>
+</body></html>
