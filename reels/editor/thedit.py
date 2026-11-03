@@ -691,7 +691,7 @@ def cmd_render(work):
         # full-screen screenshots (beats "size": "full") go over the speaker, on their own front layer
         # and so does the color field hook band (title_style other than "box"), so the head never covers its words
         front = bool(mat) and (any(b.get("kind") == "image" and b.get("size") == "full" for b in edit.get("beats") or [])
-                               or (bool(edit.get("hook")) and edit.get("title_style") != "box"))
+                               or (edit.get("title_style") != "box" and (bool(edit.get("hook")) or edit.get("band") is not False)))
         li = (3 if edit.get("endcard") else 1) + (1 if edit.get("pop") else 0) + (1 if mat else 0) + (1 if front else 0)
         lchain = lambda a, b: list_chain(cards, li, a, b, W, H, cconv)
         pills = item_pills(work, edit["items"], tw, dur, W, H, FONTS / "Inter-SemiBold.otf", hdr) if edit.get("items") else []
@@ -715,6 +715,7 @@ def cmd_render(work):
             fx = Pop(W, H, tw, pieces, part_starts, dur, brand, edit.get("hook", ""),
                      edit["hook_seconds"] if edit.get("hook") else 0, edit.get("keywords"), edit.get("beats"))
             fx.frame_intro = bool(edit.get("frame_intro"))  # off by default (Graham, 2026-11-03)
+            fx.band = edit.get("band")  # false: the band leaves with the hook (key points become cards again)
             fx.title_style = edit.get("title_style")  # default color field band (Graham picked C, 2026-11-03); "box" = old
             gfx = work / f"pop-{name}.mov"
             print(f"drawing graphics for {name}...")
