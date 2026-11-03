@@ -263,7 +263,7 @@ def cmd_transcribe(video, work):
         "hook": "",            # big title over the first seconds, e.g. "Great work. Nobody knows about it."
         "hook_seconds": 2.5,
         "endcard": True,       # Open Frame mark + free consult CTA, 2.5 s
-        "endcard_lines": ["Book a free 30-min consult", "openframe.design/links"],
+        "endcard_lines": ["Book a free 30-min consult", "openframe.design"],
         "max_gap": 0.35,       # longer silences get cut down
         "pad_before": 0.08, "pad_after": 0.14,
         "cut_fillers": True,
@@ -688,7 +688,11 @@ def cmd_render(work):
         inputs = ["-i", str(cut)]
         subs = f"subtitles=filename='{ass}':fontsdir='{fdir}'"
         cconv = ("scale=out_color_matrix=bt2020:out_range=tv,format=yuva420p10le" if hdr else "format=rgba")
-        li = (3 if edit.get("endcard") else 1) + (1 if edit.get("pop") else 0) + (1 if mat else 0)
+        # full-screen screenshots (beats "size": "full") go over the speaker, on their own front layer
+        # and so does the color field hook band (title_style other than "box"), so the head never covers its words
+        front = bool(mat) and (any(b.get("kind") == "image" and b.get("size") == "full" for b in edit.get("beats") or [])
+                               or (bool(edit.get("hook")) and edit.get("title_style") != "box"))
+        li = (3 if edit.get("endcard") else 1) + (1 if edit.get("pop") else 0) + (1 if mat else 0) + (1 if front else 0)
         lchain = lambda a, b: list_chain(cards, li, a, b, W, H, cconv)
         pills = item_pills(work, edit["items"], tw, dur, W, H, FONTS / "Inter-SemiBold.otf", hdr) if edit.get("items") else []
         pi = li + len(cards)
@@ -711,9 +715,13 @@ def cmd_render(work):
             fx = Pop(W, H, tw, pieces, part_starts, dur, brand, edit.get("hook", ""),
                      edit["hook_seconds"] if edit.get("hook") else 0, edit.get("keywords"), edit.get("beats"))
             fx.frame_intro = bool(edit.get("frame_intro"))  # off by default (Graham, 2026-11-03)
+            fx.title_style = edit.get("title_style")  # default color field band (Graham picked C, 2026-11-03); "box" = old
             gfx = work / f"pop-{name}.mov"
             print(f"drawing graphics for {name}...")
-            fx.render(gfx, FPS)
+            fx.render(gfx, FPS, "back" if front else None)
+            gfx_front = work / f"pop-{name}-front.mov"
+            if front:
+                fx.render(gfx_front, FPS, "front")
             gi = 3 if edit.get("endcard") else 1
             gconv = ("scale=out_color_matrix=bt2020:out_range=tv,format=yuva420p10le" if hdr else "format=rgba")
             zp = f"zoompan=z='{fx.zoom_expr()}':x='iw/2-iw/zoom/2':y='(ih-ih/zoom)*0.35':d=1:s={W}x{H}:fps={FPS}"
@@ -723,7 +731,9 @@ def cmd_render(work):
                        f"scale={W}:{H}:flags=bicubic,setsar=1,{zp},format=gray[mm];"
                        f"[fg][mm]alphamerge,format={AF}[person];[{gi}:v]{gconv}[gfx];"
                        f"[bg][gfx]overlay=eof_action=pass:format=auto[back0];{lchain('back0', 'back')};"
-                       f"[back][person]overlay=format=auto[comp]{tail}")
+                       + (f"[back][person]overlay=format=auto[comp0];[{gi + 2}:v]{gconv}[gfxf];"
+                          f"[comp0][gfxf]overlay=eof_action=pass:format=auto[comp]{tail}" if front else
+                          f"[back][person]overlay=format=auto[comp]{tail}"))
             else:
                 vf += (f"{zp},format={PF}[base];[{gi}:v]{gconv}[gfx];"
                        f"[base][gfx]overlay=eof_action=pass:format=auto[main0];{lchain('main0', 'comp')}{tail}")
@@ -743,6 +753,8 @@ def cmd_render(work):
             inputs += ["-i", str(gfx)]
             if mat:
                 inputs += ["-i", str(mat)]
+            if front:
+                inputs += ["-i", str(gfx_front)]
         for png, _, _ in cards + pills:
             inputs += ["-loop", "1", "-framerate", str(FPS), "-t", f"{dur:.3f}", "-i", str(png)]
         if tbox:

@@ -110,6 +110,7 @@ def load_brand(brand_id, color_fn=lambda h: h):
         "head": {"family": head["family"], "weight": head.get("weight", 500), "italic": head.get("italic", True)},
         # brand.json fonts.caption: the Reel caption font (Open Frame: Manrope ExtraBold, Graham's pick 2026-11-03)
         "caption": b["fonts"].get("caption"),
+        "site": b.get("site", ""),  # the website glyph's address bar shows this
         "dir": d,
         "files": {"head": _find_font(d, head["family"], head.get("weight", 500)),
                   "head_italic": _find_font(d, head["family"], head.get("weight", 500), head.get("italic", True))},
@@ -163,7 +164,8 @@ class Pop:
             t, data = at[b["w"]], dict(b.get("data") or {})
             if "at_w" in data:
                 data["at"] = [max(0.0, at.get(i, t) - t) for i in data.pop("at_w")]
-            out.append({"t": t, "kind": b["kind"], "label": b.get("label", ""), "data": data, "dur": b.get("dur", 2.4)})
+            out.append({"t": t, "kind": b["kind"], "label": b.get("label", ""), "data": data, "dur": b.get("dur", 2.4),
+                        **{k: b[k] for k in ("src", "size") if k in b}})  # kind "image": file + inset/full/behind
         out.sort(key=lambda s: s["t"])
         for k, s in enumerate(out):  # the next graphic slides in over the last one
             nxt = out[k + 1]["t"] + 0.3 if k + 1 < len(out) else self.dur
@@ -174,12 +176,16 @@ class Pop:
         terms = [f"between(it,{a:.3f},{b:.3f})*{z - 1:.3f}" for a, b, z in self.zooms if z != 1.0]
         return "1+" + "+".join(terms) if terms else "1"
 
-    def render(self, path, fps):
+    def has_front(self):
+        return any(s["kind"] == "image" and s.get("size") == "full" for s in self.scenes)
+
+    def render(self, path, fps, layer=None):
         f = self.brand["files"]
         spec = {"W": self.W, "H": self.H, "fps": fps, "dur": self.dur, "pal": self.brand["pal"],
                 "head": self.brand["head"], "scenes": self.scenes, "wipes": self.wipes, "title": self.title,
                 "intro": self.title["until"] if self.title else 0,
-                "frame_intro": self.frame_intro,
+                "frame_intro": self.frame_intro, "layer": layer, "site": self.brand.get("site", ""),
+                "title_style": getattr(self, "title_style", None),
                 "fonts": [font_spec(self.brand["head"]["family"], self.brand["head"]["weight"], "normal", f["head"])]
                 + ([font_spec(self.brand["head"]["family"], self.brand["head"]["weight"], "italic", f["head_italic"])]
                    if self.brand["head"]["italic"] else [])}

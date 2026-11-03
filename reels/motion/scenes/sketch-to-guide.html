@@ -151,7 +151,7 @@
 <script>
 const P = Object.assign({ sketch: null, pages: [1, 2, 3, 4, 5].map(n => `../assets/ngm/page-${n}.jpg`),
   // real product photos with the brand put on them (tools/mockup-art.py + tools/mockup-composite.py), one per beat
-  mockups: ['tee', 'sign', 'stickers', 'phone', 'tote', 'hoop', 'badge', 'cards'].map(n => `../assets/mockups/ngm/${n}.jpg`), credit: 'Brand kit by Open Frame', tag: 'Mark', question: 'Want your brand<br>to be <i>next?</i>', cta: 'Book a free consult<br><span style="opacity:.6">openframe.design/links</span>' }, window.PARAMS || {});
+  mockups: ['tee', 'sign', 'stickers', 'phone', 'tote', 'hoop', 'badge', 'cards'].map(n => `../assets/mockups/ngm/${n}.jpg`), credit: 'Brand kit by Open Frame', tag: 'Mark', question: 'Want your brand<br>to be <i>next?</i>', cta: 'Book a free consult<br><span style="opacity:.6">openframe.design</span>' }, window.PARAMS || {});
 const { tw, prog, clamp, lerp, spring, $, $$, css } = M;
 $('#credit').textContent = P.credit;
 $('#ofQ').innerHTML = P.question.replace(/<i>/g, '<i style="font-style:normal;color:#F24333">'); $('#ofCta').innerHTML = P.cta;
