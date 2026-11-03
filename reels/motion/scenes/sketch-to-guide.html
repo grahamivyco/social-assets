@@ -3,7 +3,7 @@
 <!-- Sketch -> design file -> brand guide. Branding Reel structure studied from a studio Reel:
      pencil sketch draws on, construction guides and anchor points snap over it, the design-tool panels slide in,
      the clean vector replaces the sketch, then lockup, color versions, palette, the real brand guide pages
-     (tilted grid), flat mockups with whip cuts on the beat, and an end card.
+     (tilted grid), real product photo mockups with whip cuts on the beat, and an end card.
      Default client: Needlework Guild of Minnesota, using its real mark, colors, fonts and brand guide pages.
      The pencil stage is traced from the final mark. If there is a real sketch, pass PARAMS.sketch (an image path)
      and it is used instead. Don't caption the traced version as the original sketch. -->
@@ -47,7 +47,7 @@
   #grid { position: absolute; left: 540px; top: 960px; width: 0; height: 0; perspective: 2600px; }
   #plane { position: absolute; transform-style: preserve-3d; }
   #plane img { position: absolute; width: 467px; height: 605px; border-radius: 6px; }
-  #whip .mock { position: absolute; left: 0; top: 0; transform-origin: 540px 960px; }
+  #whip .mock { position: absolute; left: 0; top: 0; width: 1080px; height: 1920px; object-fit: cover; transform-origin: 540px 960px; }
   #end .big { position: absolute; right: -260px; bottom: -200px; width: 1000px; opacity: .1; }
   #end p { position: absolute; left: 0; right: 0; top: 1240px; text-align: center; font: 500 26px/1 'DM Sans'; letter-spacing: 6px; text-transform: uppercase; color: var(--cream); opacity: .7; margin: 0; }
   #flash { background: #fff; opacity: 0; }
@@ -148,9 +148,10 @@
 <div class="full" id="fadeIn"></div>
 
 <script src="../lib.js"></script>
-<script src="mockups-ngm.js"></script>
 <script>
-const P = Object.assign({ sketch: null, pages: [1, 2, 3, 4, 5].map(n => `../assets/ngm/page-${n}.jpg`), credit: 'Brand kit by Open Frame', tag: 'Mark', question: 'Want your brand<br>to be <i>next?</i>', cta: 'Book a free consult<br><span style="opacity:.6">openframe.design/links</span>' }, window.PARAMS || {});
+const P = Object.assign({ sketch: null, pages: [1, 2, 3, 4, 5].map(n => `../assets/ngm/page-${n}.jpg`),
+  // real product photos with the brand put on them (tools/mockup-art.py + tools/mockup-composite.py), one per beat
+  mockups: ['tee', 'sign', 'stickers', 'phone', 'tote', 'hoop', 'badge', 'cards'].map(n => `../assets/mockups/ngm/${n}.jpg`), credit: 'Brand kit by Open Frame', tag: 'Mark', question: 'Want your brand<br>to be <i>next?</i>', cta: 'Book a free consult<br><span style="opacity:.6">openframe.design/links</span>' }, window.PARAMS || {});
 const { tw, prog, clamp, lerp, spring, $, $$, css } = M;
 $('#credit').textContent = P.credit;
 $('#ofQ').innerHTML = P.question.replace(/<i>/g, '<i style="font-style:normal;color:#F24333">'); $('#ofCta').innerHTML = P.cta;
@@ -194,7 +195,7 @@ $('#bars').innerHTML = PAL.map(([n, h, t], i) => `<div class="bar" style="left:$
 let gi = 0, ghtml = '';
 for (let r = -3; r <= 3; r++) for (let c = -3; c <= 3; c++) { ghtml += `<img src="${P.pages[(gi++) % P.pages.length]}" style="left:${c * 500 - 233}px;top:${r * 640 - 302}px">`; }
 $('#plane').innerHTML = ghtml;
-$('#whip').innerHTML = MOCKUPS.map(f => f()).join('');
+$('#whip').innerHTML = P.mockups.map(src => `<img class="mock" src="${src}">`).join('');
 
 window.SCENE = {
   dur: S.dur, ready: false,

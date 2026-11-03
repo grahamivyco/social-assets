@@ -21,9 +21,12 @@ A thin, wide version of the mark (same open top-right corner) holds the words. T
 - Timing: 0.62 s sweep, 1.05 s hold on a question, 1.25 s on an answer; 4 pairs = 18 s.
 
 ### `sketch-to-guide.html` (any client with a mark, default NGM)
-Pencil sketch draws on, construction guides and anchor points snap over it, design-tool panels slide in, the clean vector replaces the sketch, a flash through white into the lockup, color versions slide in as bands, palette bars rise, the real brand guide pages drift on a tilted plane, then flat mockups (tee, hanging sign, stickers, app, tote, embroidery hoop, name badge, business cards, from `mockups-ngm.js`) with whip cuts on the beat (117 BPM), the guild end card, and an Open Frame sign-off question ("Want your brand to be next?"). 22.2 s.
+Pencil sketch draws on, construction guides and anchor points snap over it, design-tool panels slide in, the clean vector replaces the sketch, a flash through white into the lockup, color versions slide in as bands, palette bars rise, the real brand guide pages drift on a tilted plane, then real product photo mockups (tee, hanging sign, pin buttons, phone, tote, embroidery hoop, name badge, business cards, from `assets/mockups/ngm/`) with whip cuts on the beat (117 BPM), the guild end card, and an Open Frame sign-off question ("Want your brand to be next?"). 22.2 s.
 - Params: `sketch` (path to a real sketch photo, used instead of the traced pencil), `pages[]` (brand guide page images), `credit`, `question`, `cta`.
-- Mockups are drawn flat shapes in the client's brand (no stock photos, no outlines). For a new client, copy `mockups-ngm.js` and swap colors and copy.
+- Mockups are real, free product photos (`assets/mockups/*.jpg`, licenses in `assets/mockups/sources.md`) with the client's brand put on them (Graham, 2026-11-03: "actual mockup images not graphic generated ones"). Two steps, free tools only:
+  1. `python3 tools/mockup-art.py /tmp/art` renders the brand art for each product as a transparent PNG (mark, colors, fonts, copy).
+  2. `python3 tools/mockup-composite.py /tmp/art assets/mockups/<client>` puts it on the photos and frames each 1080x1920. `assets/mockups/mockups.json` says where it goes on each photo: `print` (ink on fabric, multiply), `surface` (a flat face by its 4 corners, keeps the photo's light), `screen` (phone screen pixels only, so the notch stays).
+  For a new client, copy `mockup-art.py` and change the colors, fonts and copy, then pass `--params '{"mockups":[...]}'` or change the default list in the scene.
 - Guild fonts load from Google Fonts at render time (fonts are never mirrored in this repo). The Open Frame sign-off card is Helvetica Neue Bold with the accent word in red, no italics.
 - The pencil stage is traced from the final mark. If it's used as is, don't caption it as the original sketch.
 - Guide pages: `assets/ngm/page-N.jpg`, from `brands/ngm/kit/guidelines.pdf` (`pdftoppm -r 110 -jpeg`).
