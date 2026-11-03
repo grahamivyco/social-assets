@@ -15,7 +15,7 @@ Videos are silent. Add the trending sound in the Instagram app. For Facebook 1:1
 ## Scenes
 
 ### `frame-flip.html` (Open Frame)
-A thin rectangle holds the words. The sparkle sweeps across it, left to right for each question and back for its answer, and the new line is revealed behind it as it passes. At the end the rectangle shrinks into the Open Frame mark: its top-right corner opens and the sparkle settles in the middle, so the logo is fixed. Then the free consult. (v3, Graham 2026-11-03.)
+A thin, wide version of the mark (same open top-right corner) holds the words. The sparkle sweeps across it, left to right for each question and back for its answer, and the new line is revealed behind it as it passes. At the end the rectangle shrinks into the Open Frame mark: its top-right corner opens and the sparkle settles in the middle, so the logo is fixed. Then the free consult. (v3, Graham 2026-11-03.)
 - Params: `pairs` ([[question, answer], ...]), `cta`, `link`.
 - Questions are cream, answers take the pair's accent (red, blue, yellow, green). Helvetica Neue Bold, upright (system font on the Mac, Liberation Sans on Linux).
 - Timing: 0.62 s sweep, 1.05 s hold on a question, 1.25 s on an answer; 4 pairs = 18 s.
