@@ -80,5 +80,6 @@ Every key point visual is one of two things:
 ## Hook title (Graham picked C, color field, 2026-11-03)
 
 - The hook is a solid band in the topic color across the top third, edge to edge, with the hook in huge Helvetica Bold words (up to 3 lines), the `*accent*` word in yellow. It drops in, words land one by one, and it slides back up. It sits in front of the speaker so the head never covers the words. edit.json/spec `"title_style": "box"` brings back the old centered box.
+- The band stays up for the whole Reel (Graham, 2026-11-03). After the hook, each key point replaces the hook words on the band: the new idea's color shutters down over the old one and its tiles or glyph and label build on it. The last idea holds until the end. No separate key point cards. Inset and behind screenshots sit just under the band; full screenshots go over everything. Spec `"band": false` makes the band leave with the hook.
 - On-screen links say `openframe.design` (Graham, 2026-11-03). Caption links still use https://openframe.design/links.
 
