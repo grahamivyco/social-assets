@@ -3,14 +3,14 @@
 <!-- Sketch -> design file -> brand guide. Branding Reel structure studied from a studio Reel:
      pencil sketch draws on, construction guides and anchor points snap over it, the design-tool panels slide in,
      the clean vector replaces the sketch, then lockup, color versions, palette, the real brand guide pages
-     (tilted grid, then whip cuts on the beat) and an end card.
+     (tilted grid), flat mockups with whip cuts on the beat, and an end card.
      Default client: Needlework Guild of Minnesota, using its real mark, colors, fonts and brand guide pages.
      The pencil stage is traced from the final mark. If there is a real sketch, pass PARAMS.sketch (an image path)
      and it is used instead. Don't caption the traced version as the original sketch. -->
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;1,500&family=DM+Sans:wght@500&display=block">
 <style>
-  @font-face { font-family: 'Cormorant Garamond'; src: url(../../../brands/ngm/fonts/CormorantGaramond-500.woff2); font-weight: 500; }
-  @font-face { font-family: 'Cormorant Garamond'; src: url(../../../brands/ngm/fonts/CormorantGaramond-500-Italic.woff2); font-weight: 500; font-style: italic; }
-  @font-face { font-family: 'DM Sans'; src: url(../../../brands/ngm/fonts/DMSans.woff2); font-weight: 100 900; }
+  @font-face { font-family: OFr; src: url(../../editor/fonts/Fraunces_600SemiBold.ttf); }
+  @font-face { font-family: OFrI; src: url(../../editor/fonts/Fraunces_600SemiBold_Italic.ttf); }
   @font-face { font-family: In; src: url(../../editor/fonts/Inter-SemiBold.otf); }
   :root { --sage: #3E5538; --mid: #5C7A52; --pale: #EEF3EC; --rose: #B87260; --cream: #FAF7F2; --linen: #F0EAE0; --ink: #242424; --ui: #0D99FF; }
   html, body { margin: 0; width: 1080px; height: 1920px; overflow: hidden; background: var(--linen); }
@@ -18,7 +18,7 @@
   .full { position: absolute; inset: 0; }
   #paper { background: var(--linen); }
   #canvasBg { background: #E7E4DE; opacity: 0; }
-  #art { position: absolute; left: 170px; top: 470px; width: 740px; height: 780px; transform-origin: 370px 390px; }
+  #art { position: absolute; left: 188px; top: 576px; width: 740px; height: 780px; transform-origin: 352px 384px; } /* mark's drawn center sits on 540,960 */
   #mk { width: 740px; height: 780px; overflow: visible; }
   /* design tool chrome: flat panels, no brand marks */
   .panel { position: absolute; background: #FFFFFF; font: 600 22px/1 In; color: #2C2C2C; }
@@ -47,7 +47,7 @@
   #grid { position: absolute; left: 540px; top: 960px; width: 0; height: 0; perspective: 2600px; }
   #plane { position: absolute; transform-style: preserve-3d; }
   #plane img { position: absolute; width: 467px; height: 605px; border-radius: 6px; }
-  #whip img { position: absolute; left: 90px; top: 380px; width: 900px; height: 1165px; border-radius: 10px; }
+  #whip .mock { position: absolute; left: 0; top: 0; transform-origin: 540px 960px; }
   #end .big { position: absolute; right: -260px; bottom: -200px; width: 1000px; opacity: .1; }
   #end p { position: absolute; left: 0; right: 0; top: 1240px; text-align: center; font: 500 26px/1 'DM Sans'; letter-spacing: 6px; text-transform: uppercase; color: var(--cream); opacity: .7; margin: 0; }
   #flash { background: #fff; opacity: 0; }
@@ -63,6 +63,7 @@
     <pattern id="hatch" width="0.5" height="0.5" patternUnits="userSpaceOnUse" patternTransform="rotate(35)">
       <line x1="0" y1="0" x2="0" y2="0.5" stroke="#6E6A63" stroke-width="0.1"/>
     </pattern>
+    <symbol id="M" viewBox="-3 -3 37 39" overflow="visible"><use href="#thread" fill="none" style="stroke:var(--t)" stroke-width="1.10903" stroke-linecap="round"/><use href="#needle" style="fill:var(--n)"/></symbol>
     <filter id="hblur" x="-30%" y="0" width="160%" height="100%"><feGaussianBlur id="hb" stdDeviation="0 0"/></filter>
   </defs>
 </svg>
@@ -123,7 +124,7 @@
 <div class="full" id="bars" style="opacity:0;background:var(--cream)"></div>
 <!-- guide pages, tilted grid -->
 <div class="full" id="gridScene" style="background:var(--sage);opacity:0"><div id="grid"><div id="plane"></div></div></div>
-<!-- guide pages, whip cuts -->
+<!-- mockups, whip cuts on the beat -->
 <div class="full" id="whip" style="background:var(--pale);opacity:0;filter:url(#hblur)"></div>
 <!-- end card -->
 <div class="full" id="end" style="background:var(--sage);opacity:0">
@@ -134,20 +135,31 @@
   </div>
   <p id="credit">Brand kit by Open Frame</p>
 </div>
+<!-- Open Frame sign-off: the question -->
+<div class="full" id="of" style="background:#111110;opacity:0">
+  <svg id="ofMark" width="200" height="200" viewBox="0 0 120 120" style="position:absolute;left:440px;top:560px;overflow:visible">
+    <path id="ofFrame" d="M74 22 H36 A14 14 0 0 0 22 36 V84 A14 14 0 0 0 36 98 H84 A14 14 0 0 0 98 84 V48" fill="none" stroke="#F3F1EA" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+    <g id="ofSpark"><path d="M0 -50 C0 -21 21 0 50 0 C21 0 0 21 0 50 C0 21 -21 0 -50 0 C-21 0 0 -21 0 -50 Z" fill="#F3F1EA"/></g>
+  </svg>
+  <div id="ofQ" style="position:absolute;left:0;right:0;top:850px;text-align:center;font:600 104px/1.04 OFr;letter-spacing:-2.5px;color:#F3F1EA"></div>
+  <div id="ofCta" style="position:absolute;left:0;right:0;top:1150px;text-align:center;font:600 34px/1.4 In;color:#F3F1EA"></div>
+</div>
 <div class="full" id="flash"></div>
 <div class="full" id="fadeIn"></div>
 
 <script src="../lib.js"></script>
+<script src="mockups-ngm.js"></script>
 <script>
-const P = Object.assign({ sketch: null, pages: [1, 2, 3, 4, 5].map(n => `../assets/ngm/page-${n}.jpg`), credit: 'Brand kit by Open Frame', tag: 'Mark' }, window.PARAMS || {});
+const P = Object.assign({ sketch: null, pages: [1, 2, 3, 4, 5].map(n => `../assets/ngm/page-${n}.jpg`), credit: 'Brand kit by Open Frame', tag: 'Mark', question: 'Want your brand<br>to be <i>next?</i>', cta: 'Book a free consult<br><span style="opacity:.6">openframe.design/links</span>' }, window.PARAMS || {});
 const { tw, prog, clamp, lerp, spring, $, $$, css } = M;
 $('#credit').textContent = P.credit;
+$('#ofQ').innerHTML = P.question.replace(/<i>/g, '<i style="font-family:OFrI;font-style:normal;color:#F24333">'); $('#ofCta').innerHTML = P.cta;
 $$('[data-src]').forEach(e => e.setAttribute('d', document.getElementById(e.dataset.src).getAttribute('d')));
 const LEN = new Map(); const draw = (e, k) => { if (!LEN.has(e)) LEN.set(e, e.getTotalLength()); const L = LEN.get(e); e.setAttribute('stroke-dasharray', `${L} ${L}`); e.setAttribute('stroke-dashoffset', L * (1 - k)); };
 if (P.sketch) { $('#sketchImg').setAttribute('href', P.sketch); $('#sketch').style.display = 'none'; }
 
 // timeline (seconds). Roughly on a 117 BPM grid so a trending sound lines up.
-const S = { paper: 0, pen: 0.35, penEnd: 2.9, guide: 2.9, ui: 4.1, vec: 4.9, vecEnd: 6.1, lock: 6.4, wm: 7.0, bands: 8.3, bars: 9.6, grid: 10.9, whip: 12.9, end: 14.9, dur: 16.9 };
+const S = { paper: 0, pen: 0.35, penEnd: 2.9, guide: 2.9, ui: 4.1, vec: 4.9, vecEnd: 6.1, lock: 6.4, wm: 7.0, bands: 8.3, bars: 9.6, grid: 10.9, whip: 12.9, end: 17.25, of: 18.9, dur: 22.2 };
 const WHIP = 0.513;  // one beat per page
 
 // construction guides + anchor points, built once
@@ -182,7 +194,7 @@ $('#bars').innerHTML = PAL.map(([n, h, t], i) => `<div class="bar" style="left:$
 let gi = 0, ghtml = '';
 for (let r = -3; r <= 3; r++) for (let c = -3; c <= 3; c++) { ghtml += `<img src="${P.pages[(gi++) % P.pages.length]}" style="left:${c * 500 - 233}px;top:${r * 640 - 302}px">`; }
 $('#plane').innerHTML = ghtml;
-$('#whip').innerHTML = P.pages.slice(0, 4).map(src => `<img src="${src}">`).join('');
+$('#whip').innerHTML = MOCKUPS.map(f => f()).join('');
 
 window.SCENE = {
   dur: S.dur, ready: false,
@@ -217,8 +229,8 @@ window.SCENE = {
     css('#art', { transform: `scale(${sc})` });
     // tag above the box follows the scale
     const tagK = prog(t, S.guide + 0.8, S.guide + 1.0, 'outExpo') * (1 - guidesOut);
-    const top = 470 + 390 - 390 * sc + (bb.y + 3) * 20 * sc - 54;
-    css('#tag', { left: (170 + 370 - 370 * sc + (bb.x + 3) * 20 * sc) + 'px', top: top + 'px', opacity: tagK, transform: `scale(${lerp(0.6, 1, tagK)})`, transformOrigin: '0 100%' });
+    const top = 576 + 384 - 384 * sc + (bb.y + 3) * 20 * sc - 54;
+    css('#tag', { left: (188 + 352 - 352 * sc + (bb.x + 3) * 20 * sc) + 'px', top: top + 'px', opacity: tagK, transform: `scale(${lerp(0.6, 1, tagK)})`, transformOrigin: '0 100%' });
 
     // 4. clean vector replaces the sketch
     const th = prog(t, S.vec, S.vec + 0.7, 'outExpo');
@@ -236,12 +248,11 @@ window.SCENE = {
     css('#lockScene', { opacity: t >= S.lock ? 1 : 0 });
     // mark starts centered and big, slides left as the name wipes in
     const wmK = prog(t, S.wm, S.wm + 0.7, 'inOutExpo');
-    const lockW = $('#lock').getBoundingClientRect().width / ($('#lock')._s || 1);
+    const lockW = $('#lock').offsetWidth;
     css('#wm', { clipPath: `inset(0 ${100 - 100 * prog(t, S.wm + 0.2, S.wm + 0.9, 'outExpo')}% 0 0)` });
-    const markOnlyShift = (lockW - 170) / 2;
+    const markOnlyShift = (lockW - 2 * 80.9) / 2;  // 80.9 = drawn center of the mark inside its 170px box
     const s5 = lerp(2.6, 0.8, wmK);
-    $('#lock')._s = 1;
-    css('#lock', { transform: `translate(-50%,-50%) translateX(${lerp(markOnlyShift, 0, wmK)}px) scale(${s5})` });
+        css('#lock', { transform: `translate(-50%,-50%) translateX(${lerp(markOnlyShift * s5, 0, wmK)}px) scale(${s5})` });
 
     // 6. color versions, bands slide in from alternating sides on the beat
     css('#bands', { opacity: t >= S.bands ? 1 : 0 });
@@ -256,15 +267,19 @@ window.SCENE = {
     const g = prog(t, S.grid, S.whip, 'linear'), gin = prog(t, S.grid, S.grid + 0.6, 'outExpo');
     css('#plane', { transform: `rotateX(52deg) rotateZ(-32deg) translate(${lerp(-200, 260, g)}px, ${lerp(500, -300, g)}px) scale(${lerp(1.6, 1, gin)})` });
 
-    // 9. whip cuts through the pages, one per beat, horizontal motion blur on each move
+    // 9. mockups: one per beat, whip in from the right with horizontal motion blur, slow push in while held
     css('#whip', { opacity: t >= S.whip ? 1 : 0 });
     let blur = 0;
-    $$('#whip img').forEach((im, i) => {
-      const a = S.whip + i * WHIP;                     // this page arrives at a
-      const kin = prog(t, a - 0.18, a + 0.12, 'outExpo'), kout = i < 3 ? prog(t, a + WHIP - 0.18, a + WHIP + 0.12, 'inExpo') : 0;
-      const x = i === 0 ? -1080 * kout : (1 - kin) * 1080 - 1080 * kout;
-      im.style.transform = `translateX(${x}px)`;
-      if (t > a - 0.18 && t < a + 0.12) blur = Math.max(blur, 60 * (1 - Math.abs((t - (a - 0.03)) / 0.15)));
+    const mocks = $$('#whip .mock'), nM = mocks.length;
+    mocks.forEach((im, i) => {
+      const a = S.whip + i * WHIP;                     // this mockup lands at a
+      const kin = i === 0 ? 1 : prog(t, a - 0.16, a + 0.06, 'outExpo');
+      const kout = i < nM - 1 ? prog(t, a + WHIP - 0.16, a + WHIP + 0.06, 'inExpo') : 0;
+      const x = (1 - kin) * 1080 - 1080 * kout;
+      const push = 1 + 0.06 * prog(t, a - 0.1, a + WHIP + 0.1, 'linear');
+      im.style.transform = `translateX(${x}px) scale(${push})`;
+      im.style.visibility = t > a - 0.2 && t < a + WHIP + 0.1 || (i === nM - 1 && t >= a) ? 'visible' : 'hidden';
+      if (i > 0 && t > a - 0.16 && t < a + 0.06) blur = Math.max(blur, 55 * (1 - Math.abs((t - (a - 0.05)) / 0.12)));
     });
     $('#hb').setAttribute('stdDeviation', `${Math.max(0, blur)} 0`);
 
@@ -274,9 +289,20 @@ window.SCENE = {
     css('#endLock', { transform: `translate(-50%,-50%) scale(${lerp(0.62, 0.7, e)})`, opacity: e });
     css('#end .big', { transform: `translate(${lerp(120, 0, e)}px, ${lerp(120, 0, e)}px)` });
     css('#credit', { opacity: 0.7 * prog(t, S.end + 0.5, S.end + 0.9) });
+
+    // 11. Open Frame sign-off: guild card slides up, the frame draws on, the sparkle pops, then the question
+    const o = prog(t, S.of - 0.05, S.of + 0.45, 'inOutExpo');
+    css('#end', { transform: `translateY(${-1920 * o}px)` });
+    css('#of', { opacity: t >= S.of - 0.05 ? 1 : 0, transform: `translateY(${1920 * (1 - o)}px)` });
+    const ofr = $("#ofFrame"), ofl = 265;
+    ofr.setAttribute("stroke-dasharray", `${ofl} ${ofl}`); ofr.setAttribute("stroke-dashoffset", ofl * (1 - prog(t, S.of + 0.3, S.of + 0.9, 'inOutCubic')));
+    const spk = t < S.of + 0.75 ? 0 : M.spring(t, S.of + 0.75, 2.4, 6);
+    $('#ofSpark').setAttribute('transform', `translate(60,60) scale(${0.42 * spk}) rotate(${90 * prog(t, S.of + 0.75, S.of + 1.3, 'outExpo')})`);
+    css('#ofQ', { opacity: prog(t, S.of + 0.9, S.of + 1.2), transform: `translateY(${lerp(30, 0, prog(t, S.of + 0.9, S.of + 1.4, 'outExpo'))}px)` });
+    css('#ofCta', { opacity: prog(t, S.of + 1.4, S.of + 1.7) });
   },
 };
-Promise.all(['500 98px "Cormorant Garamond"', '500 33px "DM Sans"', '600 22px In'].map(f => document.fonts.load(f)))
+Promise.all(['500 98px "Cormorant Garamond"', 'italic 500 98px "Cormorant Garamond"', '500 33px "DM Sans"', '600 22px In', '600 104px OFr', '600 104px OFrI'].map(f => document.fonts.load(f)))
   .then(() => Promise.all($$('img').map(i => i.decode().catch(() => {}))))
   .then(() => { SCENE.ready = true; SCENE.seek(0); });
 </script>
