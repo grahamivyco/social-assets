@@ -388,7 +388,9 @@ function makePop(W, H, spec) {
      a 3x2 grid of art plate tiles (circle, capsule, quarter round, half disc, ring, stripes, bracket), each popping in on
      a stagger and then moving on its own loop, with the label set underneath. No pictograms, no outlines. The old
      illustrated cards are still there with spec.scene_style = "illustrated". */
-  const PLATES = ["quarter", "circle", "half", "capsule", "ring", "stripes", "bracket"];
+  // art plates. Grid rules borrowed from boguz/bauhaus-illustration-generator (MIT): each tile is one of a few
+// primitives (circle, half, quarter, square) in a quarter-turn rotation, two colors per tile.
+const PLATES = ["quarter", "circle", "half", "capsule", "ring", "stripes", "bracket", "square", "halves", "petals", "triangle"];
   function hash(str) { let h = 2166136261; for (const c of String(str)) h = Math.imul(h ^ c.charCodeAt(0), 16777619); return h >>> 0; }
   function rnd(seed) { let x = seed || 1; return () => (x = Math.imul(x ^ (x >>> 15), 2246822507) ^ Math.imul(x ^ (x >>> 13), 3266489909), ((x >>>= 0) % 1e6) / 1e6); }
   function plate(ctx, kind, x, y, s, fg, v, ph) {
@@ -406,6 +408,16 @@ function makePop(W, H, spec) {
     } else if (kind === "ring") { const k = 1 + .12 * Math.sin(beat(.6) * Math.PI); ctx.lineWidth = s * .13; ctx.arc(cx, cy, s * .28 * k, 0, Math.PI * 2); ctx.stroke();
     } else if (kind === "stripes") { // three bars that shift in turn
       for (let i = 0; i < 3; i++) { const o = Math.sin(beat(.1 + i * .12) * Math.PI) * s * .12; ctx.roundRect(x + s * .12 + o, y + s * (.2 + i * .23), s * .76, s * .14, s * .07); } ctx.fill();
+    } else if (kind === "square") { // a smaller square that turns a quarter each beat
+      const r = (Math.floor((v + ph) / 1.6) + eIO(beat(.45))) * Math.PI / 2; ctx.translate(cx, cy); ctx.rotate(r); ctx.fillRect(-s * .27, -s * .27, s * .54, s * .54);
+    } else if (kind === "halves") { // two half discs back to back that slide apart and meet again
+      const o = Math.sin(beat(.35) * Math.PI) * s * .08; ctx.translate(cx, cy);
+      ctx.arc(-o, 0, s * .38, Math.PI / 2, Math.PI * 1.5); ctx.closePath(); ctx.fill(); ctx.beginPath(); ctx.arc(o, 0, s * .38, -Math.PI / 2, Math.PI / 2); ctx.closePath(); ctx.fill();
+    } else if (kind === "petals") { // four quarter circles from the corners that breathe in turn
+      for (let i = 0; i < 4; i++) { const k = s * .5 * (1 - .18 * Math.sin(beat(.1 + i * .12) * Math.PI)); const ox = i % 2 ? x + s : x, oy = i > 1 ? y + s : y;
+        ctx.beginPath(); ctx.moveTo(ox, oy); ctx.arc(ox, oy, k, [0, Math.PI / 2, -Math.PI / 2, Math.PI][i], [Math.PI / 2, Math.PI, 0, -Math.PI / 2][i]); ctx.closePath(); ctx.fill(); }
+    } else if (kind === "triangle") { // half the tile on the diagonal, flipping corner to corner
+      const f = Math.floor((v + ph) / 1.6) + beat(.55); ctx.translate(cx, cy); ctx.rotate(f * Math.PI / 2); ctx.moveTo(-s / 2, -s / 2); ctx.lineTo(s / 2, -s / 2); ctx.lineTo(-s / 2, s / 2); ctx.closePath(); ctx.fill();
     } else { // bracket: the Open Frame open corner, drawing on
       const m = s * .2, w = s - 2 * m, k = eOutExpo(seg(v, .1 + ph * .1, .6 + ph * .1)); ctx.lineWidth = s * .1; ctx.lineCap = "round"; ctx.lineJoin = "round";
       ctx.moveTo(x + m + w * .68, y + m); ctx.lineTo(x + m, y + m); ctx.lineTo(x + m, y + m + w); ctx.lineTo(x + m + w, y + m + w); ctx.lineTo(x + m + w, y + m + w * .34);
