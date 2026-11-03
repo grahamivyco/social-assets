@@ -477,10 +477,23 @@ function makePop(W, H, spec) {
       popAt(ctx, k(1), bx + bw / 2, by, () => { ctx.save(); ctx.translate(bx + bw * 1.05, by - h * .02); ctx.rotate(open * .55); rr(ctx, -bw * 1.1, -h * .1, bw * 1.1, h * .1, h * .05, C.b2); rr(ctx, -bw * .7, -h * .17, bw * .3, h * .1, h * .04, C.b2); ctx.restore(); });
     },
   };
+  /* a real screenshot or photo (Graham, 2026-11-03): just the image, no border, background or title. Whole image,
+     centered in the top part of the frame, pops in, slow push in while held, then out. */
+  function shot(ctx, sc, t, v) {
+    const IM = typeof window !== "undefined" && window.POP_IMAGES && window.POP_IMAGES[sc.src];
+    if (!IM) return false;
+    const maxW = W * (TALL ? .78 : .5), maxH = H * (TALL ? .5 : .7), k = Math.min(maxW / IM.width, maxH / IM.height);
+    const w = IM.width * k, h = IM.height * k, cx = W / 2, cy = H * (TALL ? .06 : .05) + h / 2;
+    const q = eOutBack(seg(v, 0, .4)) * (1 - eInBack(seg(t, sc.end - .3, sc.end))), z = q * (1 + .04 * seg(v, 0, sc.end - sc.t));
+    if (q <= 0) return false;
+    ctx.save(); ctx.translate(cx, cy); ctx.scale(z, z); ctx.drawImage(IM, -w / 2, -h / 2, w, h); ctx.restore();
+    return true;
+  }
   function scene(ctx, sc, t) {
     if (spec.scene_style === "illustrated") return sceneIll(ctx, sc, t);
     const v = t - sc.t, outv = seg(t, sc.end - .35, sc.end);
     if (v < 0 || outv >= 1) return false;
+    if (sc.kind === "image") return shot(ctx, sc, t, v);
     const gk = glyph[sc.kind] ? sc.kind : GLYPH_ALIAS[sc.kind];
     const fk = (gk && GLYPH_FIELD[gk]) || FIELD[sc.kind] || ["r", "b", "y", "g"][hash(sc.kind || sc.label) % 4], field = P[fk];
     const R = rnd(hash((sc.kind || "") + (sc.label || "")));
@@ -495,17 +508,7 @@ function makePop(W, H, spec) {
     ctx.translate(0, (1 - inK) * 60 * U - outK * 60 * U);
     box(ctx, cx - cw / 2, top, cw, ch, 24 * U, field);
     const order = PLATES.slice().sort(() => R() - .5);
-    const IM = sc.kind === "image" && typeof window !== "undefined" && window.POP_IMAGES && window.POP_IMAGES[sc.src];
-    if (sc.kind === "image") { // a real screenshot or photo in the same card: cropped to fill the art area, slow push in
-      const ax = cx - cw / 2 + pad, aw = cw - 2 * pad, q = eOutBack(seg(v, .1, .45)) * (1 - eInBack(seg(t, sc.end - .32, sc.end - .05)));
-      if (IM && q > 0) {
-        ctx.save(); ctx.translate(ax + aw / 2, top + pad + gh / 2); ctx.scale(q, q); ctx.translate(-ax - aw / 2, -top - pad - gh / 2);
-        ctx.beginPath(); ctx.roundRect(ax, top + pad, aw, gh, 14 * U); ctx.clip();
-        const fx = sc.focus ? sc.focus[0] : .5, fy = sc.focus ? sc.focus[1] : .5, z = 1 + .05 * seg(v, 0, sc.end - sc.t);
-        const sc2 = Math.max(aw / IM.width, gh / IM.height) * z, dw = IM.width * sc2, dh = IM.height * sc2;
-        ctx.drawImage(IM, ax - (dw - aw) * fx, top + pad - (dh - gh) * fy, dw, dh); ctx.restore();
-      }
-    } else if (gk && gk !== "shapes") { // a topic glyph in the art area, pieces popping in on a stagger, then out together
+    if (gk && gk !== "shapes") { // a topic glyph in the art area, pieces popping in on a stagger, then out together
       const accents = ["r", "b", "y", "g"].filter(c => c !== fk);
       const C = { ...P, field, a: P[accents[0]], b2: P[accents[1]] };
       const ax = cx - cw / 2 + pad, aw = cw - 2 * pad, gone = eInBack(seg(t, sc.end - .32, sc.end - .05));

@@ -60,9 +60,9 @@ Use the hook bank and rules in `/mnt/project-files/lessons/ad-attention-videos.m
 
 ## Graphic or real image (Graham, 2026-11-03)
 
-Every key point card is one of two things, in the same centered card with the label underneath:
+Every key point visual is one of two things:
 
-- **Real screenshot or photo** (`"kind": "image", "src": "file.png", "label": "...", "focus": [x, y]`) when the line is about a specific real thing a viewer could check:
+- **Real screenshot or photo** (`"kind": "image", "src": "file.png"`): just the screenshot, centered near the top, no border, background or title (Graham, 2026-11-03) when the line is about a specific real thing a viewer could check:
   - a client's actual website, post, ad, email or app screen
   - a real number or result from a dashboard (Instagram insights, Search Console, Calendly)
   - a before and after, a real product, a real place or event
@@ -70,5 +70,5 @@ Every key point card is one of two things, in the same centered card with the la
   - a real person, only with their OK
 - **Motion graphic** (topic glyphs: `website`, `phone`, `branding`, `people`, `computer`, `shapes`, `trash`) when the line is general advice or an idea ("your website needs one job"), when no real asset exists, or when the real one would show private info.
 - Never fake a screenshot or mock up a result that didn't happen. Captions and graphics never invent claims.
-- Screenshots: crop to the part that matters (`focus` picks the spot), blur names, emails, DMs and anything private, max about 2.5 s on screen, slow push in. Graham drops them in the Reel's folder; the plan names them line by line.
+- Screenshots: crop the file to the part that matters before it goes in, blur names, emails, DMs and anything private, max about 2.5 s on screen, slow push in. Graham drops them in the Reel's folder; the plan names them line by line.
 - If unsure, ask Graham in the graphics plan step instead of guessing.

@@ -11,7 +11,7 @@
   @font-face { font-family: In; src: url(../../editor/fonts/Inter-SemiBold.otf); }
   html, body { margin: 0; width: 1080px; height: 1920px; overflow: hidden; background: #111110; }
   svg { position: absolute; inset: 0; overflow: visible; }
-  .txt { position: absolute; left: 540px; top: 900px; width: 600px; transform: translate(-50%, -50%); text-align: center; font: 700 96px/1.02 Fr; letter-spacing: -3px; }
+  .txt { position: absolute; left: 540px; top: 900px; width: 600px; transform: translate(-50%, -50%); text-align: center; text-wrap: balance; font: 700 96px/1.02 Fr; letter-spacing: -3px; }
   #cta { position: absolute; left: 0; right: 0; top: 1130px; text-align: center; font: 700 76px/1.05 Fr; color: #F3F1EA; letter-spacing: -2px; }
   #link { position: absolute; left: 0; right: 0; top: 1240px; text-align: center; font: 600 30px/1 In; color: #F3F1EA; letter-spacing: .5px; }
 </style></head>
@@ -40,17 +40,18 @@ const ITEMS = P.pairs.flatMap(([q, a], k) => [{ html: q, col: CREAM }, { html: a
 
 // rectangle while the words play, the mark at the end (mark box 22..98 of 120, drawn 2.5x, centred on 540,860)
 // a squashed, wide version of the mark with the same open corner (Graham, 2026-11-03)
-const RECT = { x: 70, y: 640, w: 940, h: 520, r: 40, sw: 14 };   // thicker line (Graham, 2026-11-03)
+const RECT = { x: 70, y: 640, w: 940, h: 520, r: 40, sw: 20 };   // line as thick as the logo's (Graham, 2026-11-03)
 const MS = 2.5, MARK = { x: 540 - 38 * MS, y: 860 - 38 * MS, w: 76 * MS, h: 76 * MS, r: 14 * MS, sw: 8 * MS };
 const GT = 0.316, GR = 0.342;   // the mark's open corner: 24/76 of the top edge, 26/76 of the right edge
 
 // closed rounded rect starting where the mark's top line ends, running counter-clockwise back to it,
 // so a dash that leaves out the last stretch opens the top-right corner exactly like the logo
 function framePath(b) {
-  const { x, y, w, h, r } = b, x1 = x + w, y1 = y + h, sx = x1 - GT * w;
+  const { x, y, w, h, r } = b, x1 = x + w, y1 = y + h, sx = x1 - GT * Math.min(w, h);
   return `M${sx} ${y} H${x + r} A${r} ${r} 0 0 0 ${x} ${y + r} V${y1 - r} A${r} ${r} 0 0 0 ${x + r} ${y1} H${x1 - r} A${r} ${r} 0 0 0 ${x1} ${y1 - r} V${y + r} A${r} ${r} 0 0 0 ${x1 - r} ${y} H${sx}`;
 }
-const gapLen = b => (GR * b.h - b.r) + Math.PI * b.r / 2 + (GT * b.w - b.r);
+// the open corner is the same size on the top and the side, like the logo, however wide the frame (Graham, 2026-11-03)
+const gapLen = b => (GR * Math.min(b.w, b.h) - b.r) + Math.PI * b.r / 2 + (GT * Math.min(b.w, b.h) - b.r);
 const mix = (a, b, k) => Object.fromEntries(Object.keys(a).map(n => [n, lerp(a[n], b[n], k)]));
 
 // timing
