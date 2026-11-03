@@ -1,0 +1,13 @@
+# Motion quality standard
+
+The bar for every caption, graphic, cutaway, camera move and sound in Graham's Reels (2026-11-03). The look comes from the Reel's signature style and that video's direction; this file is how well it's done.
+
+1. **Show what he's saying.** Graphics act out the point: an option gets picked, a stack builds, a number counts, a panel opens to show the useful thing. No screens full of unrelated icons, and captions alone are not a graphic.
+2. **Connect the moments.** Where it helps the story, hand something forward: a word becomes the title, a line becomes a divider, a card grows into the next clip, a shape becomes the next scene's frame. Let other moments simply hold.
+3. **Give things weight.** Decide how each object starts, speeds up, lands and settles. A heavy card, a paper note and a small tag move differently. Use anticipation, overlap, recoil, motion blur and depth where they fit. Not one shared bounce for everything.
+4. **Objects move, the camera mostly doesn't.** Hold the shot steady while a graphic builds. Reframe, zoom or reveal only for a reason. Use layers, masks, and captions in front of or behind him when it helps, and check cutout edges in motion.
+5. **Captions are designed for a phone.** Exact words, exact timing, clean line breaks, deliberate placement, strong contrast, clear of his face and the app's buttons. Size, weight and reveals support the sentence; a strong line can sit still long enough to read.
+6. **Pace follows delivery.** Fast talk gets tighter cuts and denser builds; calm parts get room. Avoid nonstop camera moves, endless pop-ins, generic gradients and clutter. Backgrounds have a clear design.
+7. **Sound lands on contact.** Put each hit on the visible landing or change. Mix a few textures with restraint, keep speech clear, leave quiet moments, never a sound on every word. (Trending audio is added by Graham in the app; exports are voice plus any agreed effects.)
+8. **Learn from his examples.** Watch them in motion, then frame by frame around the key builds and handoffs. Write down the timing, spacing, size changes, overlap, settle and sound that make them work, then make original moments in his style (never copy another creator's signature look).
+9. **Inspect before showing.** Watch the actual render: step through fast transitions frame by frame, check caption timing, edges, readability and sync. Fix jumps, overlaps, clipped words and unfinished graphics first. If a check can't be done with the tools at hand (for example listening to the mix), say so and ask Graham to check that part. Never claim a review that didn't happen.
