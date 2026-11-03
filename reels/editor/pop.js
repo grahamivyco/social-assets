@@ -384,7 +384,151 @@ function makePop(W, H, spec) {
   }
   Object.assign(FIELD, { pdfs: "y", menu: "b", stock: "g", door: "r", timer: "y", num: "b", headline: "g", people: "r", button: "b", sticky: "g", nav: "y", trash: "r", peek: "y", belong: "b", tuesday: "g", friends: "y" });
 
+  /* key point graphic (Graham, 2026-11-03): centered, abstract, in the design system. A card in the topic's color holds
+     a 3x2 grid of art plate tiles (circle, capsule, quarter round, half disc, ring, stripes, bracket), each popping in on
+     a stagger and then moving on its own loop, with the label set underneath. No pictograms, no outlines. The old
+     illustrated cards are still there with spec.scene_style = "illustrated". */
+  const PLATES = ["quarter", "circle", "half", "capsule", "ring", "stripes", "bracket"];
+  function hash(str) { let h = 2166136261; for (const c of String(str)) h = Math.imul(h ^ c.charCodeAt(0), 16777619); return h >>> 0; }
+  function rnd(seed) { let x = seed || 1; return () => (x = Math.imul(x ^ (x >>> 15), 2246822507) ^ Math.imul(x ^ (x >>> 13), 3266489909), ((x >>>= 0) % 1e6) / 1e6); }
+  function plate(ctx, kind, x, y, s, fg, v, ph) {
+    // one art plate shape in a square tile of size s at (x, y) top-left; v = local time, ph = phase for its loop
+    const cx = x + s / 2, cy = y + s / 2, beat = k => eIO(seg(((v + ph) % 1.6) / 1.6, k, k + .25)); // a move every 1.6 s
+    ctx.save(); ctx.fillStyle = fg; ctx.strokeStyle = fg; ctx.beginPath();
+    if (kind === "quarter") { // quarter round that turns a corner each beat
+      const r = Math.floor((v + ph) / 1.6) + beat(.5); ctx.translate(cx, cy); ctx.rotate(r * Math.PI / 2); ctx.translate(-s / 2, -s / 2);
+      ctx.moveTo(0, 0); ctx.arc(0, 0, s, 0, Math.PI / 2); ctx.closePath(); ctx.fill();
+    } else if (kind === "circle") { const k = 1 - .14 * Math.sin(beat(.2) * Math.PI); ctx.arc(cx, cy, s * .36 * k, 0, Math.PI * 2); ctx.fill();
+    } else if (kind === "half") { // half disc that flips over
+      const f = Math.floor((v + ph) / 1.6) % 2 + beat(.4); ctx.translate(cx, cy); ctx.rotate(f * Math.PI); ctx.arc(0, s * .18, s * .4, Math.PI, 0); ctx.closePath(); ctx.fill();
+    } else if (kind === "capsule") { // capsule that slides side to side
+      const d = (Math.floor((v + ph) / 1.6) % 2 ? 1 : -1) * (1 - 2 * beat(.3)); ctx.roundRect(x + s * .22 + d * s * .1, cy - s * .17, s * .56, s * .34, s * .17); ctx.fill();
+    } else if (kind === "ring") { const k = 1 + .12 * Math.sin(beat(.6) * Math.PI); ctx.lineWidth = s * .13; ctx.arc(cx, cy, s * .28 * k, 0, Math.PI * 2); ctx.stroke();
+    } else if (kind === "stripes") { // three bars that shift in turn
+      for (let i = 0; i < 3; i++) { const o = Math.sin(beat(.1 + i * .12) * Math.PI) * s * .12; ctx.roundRect(x + s * .12 + o, y + s * (.2 + i * .23), s * .76, s * .14, s * .07); } ctx.fill();
+    } else { // bracket: the Open Frame open corner, drawing on
+      const m = s * .2, w = s - 2 * m, k = eOutExpo(seg(v, .1 + ph * .1, .6 + ph * .1)); ctx.lineWidth = s * .1; ctx.lineCap = "round"; ctx.lineJoin = "round";
+      ctx.moveTo(x + m + w * .68, y + m); ctx.lineTo(x + m, y + m); ctx.lineTo(x + m, y + m + w); ctx.lineTo(x + m + w, y + m + w); ctx.lineTo(x + m + w, y + m + w * .34);
+      ctx.setLineDash([w * 3.7 * k, w * 8]); ctx.stroke();
+    }
+    ctx.restore();
+  }
+  /* topic glyphs (Graham, 2026-11-03: website, phones, branding, people, computers, shapes, trash): each one is built
+     only from art plate shapes, flat, in the brand colors, pieces pop in on a stagger, then one small loop. Drawn in
+     the card's art area (x, y, w, h); `k(i)` is piece i's pop, `v` local time. Colors avoid the card's field color. */
+  const GLYPH_FIELD = { website: "b", phone: "g", branding: "r", people: "y", computer: "y", shapes: "b", trash: "g" };
+  const GLYPH_ALIAS = { phones: "phone", brand: "branding", assets: "branding", person: "people", computers: "computer", laptop: "computer", bin: "trash", web: "website", site: "website" };
+  function popAt(ctx, k, px, py, fn) { if (k <= 0) return; ctx.save(); ctx.translate(px, py); ctx.scale(k, k); ctx.translate(-px, -py); fn(); ctx.restore(); }
+  function rr(ctx, x, y, w, h, r, col) { if (w <= 0 || h <= 0) return; ctx.beginPath(); ctx.roundRect(x, y, w, h, Math.min(r, w / 2, h / 2)); ctx.fillStyle = col; ctx.fill(); }
+  function disc(ctx, x, y, r, col, a0 = 0, a1 = Math.PI * 2) { ctx.beginPath(); if (a1 - a0 < 6.28) ctx.moveTo(x, y); ctx.arc(x, y, r, a0, a1); ctx.closePath(); ctx.fillStyle = col; ctx.fill(); }
+  const loop = (v, per, a, b) => eIO(seg(((v % per) + per) % per / per, a, b));
+  const glyph = {
+    website(ctx, v, x, y, w, h, C, k) {
+      const bw = w * .92, bh = h * .92, bx = x + (w - bw) / 2, by = y + (h - bh) / 2, bar = bh * .14;
+      popAt(ctx, k(0), x + w / 2, y + h / 2, () => { rr(ctx, bx, by, bw, bh, 18 * U, C.cream); rr(ctx, bx, by, bw, bar, 18 * U, C.ink); ctx.fillStyle = C.ink; ctx.fillRect(bx, by + bar / 2, bw, bar / 2);
+        [C.r, C.y, C.g].forEach((c, i) => disc(ctx, bx + bar * (.7 + i * .6), by + bar / 2, bar * .2, c)); });
+      const ix = bx + bw * .06, iy = by + bar + bh * .1, ih = bh - bar - bh * .2;
+      popAt(ctx, k(1), ix + ih * .42, iy + ih * .42, () => disc(ctx, ix + ih * .42, iy + ih * .42, ih * .4, C.a));
+      [0, 1, 2].forEach(i => popAt(ctx, k(2 + i), ix + ih * .95, iy + ih * (.12 + i * .2), () => rr(ctx, ix + ih * .95, iy + ih * (.06 + i * .2), bw * (.42 - i * .08) * (1 - .15 * Math.sin(loop(v, 1.8, i * .15, i * .15 + .3) * Math.PI)), ih * .12, ih * .06, C.ink)));
+      popAt(ctx, k(5), ix + ih * .95, iy + ih * .86, () => { const q = 1 + .08 * Math.sin(loop(v, 1.6, .6, .9) * Math.PI); rr(ctx, ix + ih * .95, iy + ih * .72, bw * .3 * q, ih * .26 * q, ih * .13, C.b2); });
+    },
+    phone(ctx, v, x, y, w, h, C, k) {
+      const ph = h * .96, pw = ph * .5, px = x + w / 2 - pw / 2, py = y + (h - ph) / 2;
+      popAt(ctx, k(1), px + pw / 2, py + ph / 2, () => { rr(ctx, px, py, pw, ph, pw * .2, C.ink); rr(ctx, px + pw * .07, py + pw * .07, pw * .86, ph - pw * .14, pw * .15, C.cream); rr(ctx, px + pw * .36, py + pw * .1, pw * .28, pw * .07, pw * .035, C.ink); });
+      popAt(ctx, k(2), px + pw / 2, py + ph * .3, () => disc(ctx, px + pw / 2, py + ph * .3, pw * .24, C.b2));
+      [0, 1].forEach(i => popAt(ctx, k(3 + i), px + pw / 2, py + ph * (.56 + i * .1), () => rr(ctx, px + pw * (.18 + i * .1), py + ph * (.53 + i * .1), pw * (.64 - i * .2), ph * .05, ph * .025, C.ink)));
+      // a notification capsule slides out from the phone and back
+      const n = loop(v, 2.2, .1, .4) * (1 - loop(v, 2.2, .7, .95));
+      popAt(ctx, k(5), px + pw, py + ph * .78, () => rr(ctx, px + pw * .55 + n * pw * .55, py + ph * .72, pw * .9, ph * .12, ph * .06, C.a));
+    },
+    branding(ctx, v, x, y, w, h, C, k) {
+      const s = h * .8, mx = x + w * .06, my = y + (h - s) / 2, lw = s * .1, kk = eOutExpo(seg(v, .1, .7));
+      if (k(0) > 0) { ctx.save(); ctx.beginPath(); const m = lw / 2, iw = s - lw;
+        ctx.moveTo(mx + m + iw * .68, my + m); ctx.lineTo(mx + m, my + m); ctx.lineTo(mx + m, my + m + iw); ctx.lineTo(mx + m + iw, my + m + iw); ctx.lineTo(mx + m + iw, my + m + iw * .34);
+        ctx.setLineDash([iw * 3.7 * kk, iw * 8]); ctx.lineWidth = lw; ctx.lineCap = "round"; ctx.lineJoin = "round"; ctx.strokeStyle = C.cream; ctx.stroke(); ctx.restore(); }
+      popAt(ctx, k(1), mx + s / 2, my + s / 2, () => { ctx.save(); ctx.translate(mx + s / 2, my + s / 2); ctx.rotate(loop(v, 2, .5, .8) * Math.PI / 2); ctx.translate(-s * .19, -s * .19); disc(ctx, 0, 0, s * .38, C.a, 0, Math.PI / 2); ctx.restore(); });
+      const sx = mx + s + w * .07, sw = x + w - sx;
+      [C.r, C.b, C.y, C.g].filter(c => c !== C.field).slice(0, 3).forEach((c, i) => popAt(ctx, k(2 + i), sx + sw * (.17 + i * .32), my + s * .2, () => disc(ctx, sx + sw * (.17 + i * .32), my + s * .2, sw * .14, c)));
+      popAt(ctx, k(5), sx + sw / 2, my + s * .7, () => { rr(ctx, sx, my + s * .44, sw, s * .56, 14 * U, C.cream); ctx.font = `${HEAD.weight} ${s * .36}px ${FAM}`; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillStyle = C.ink; ctx.fillText("Aa", sx + sw / 2, my + s * .73); });
+    },
+    people(ctx, v, x, y, w, h, C, k) {
+      const cols = [C.b2, C.a, C.cream];
+      [[.2, .8, 0], [.5, 1, 1], [.8, .8, 2]].forEach(([fx, sc, i]) => {
+        const r = h * .2 * sc, cx = x + w * fx, base = y + h * .98, bob = Math.sin(loop(v, 1.8, i * .2, i * .2 + .3) * Math.PI) * h * .05;
+        popAt(ctx, k(i * 2), cx, base, () => disc(ctx, cx, base, r * 1.9, cols[i], Math.PI, Math.PI * 2));
+        popAt(ctx, k(i * 2 + 1), cx, base - r * 3.1, () => disc(ctx, cx, base - r * 3.05 - bob, r, i === 2 ? C.ink : cols[(i + 1) % 3] === C.cream && i === 1 ? C.cream : C.ink));
+      });
+    },
+    computer(ctx, v, x, y, w, h, C, k) {
+      const mw = w * .78, mh = h * .7, mx = x + (w - mw) / 2, my = y + h * .02;
+      popAt(ctx, k(0), x + w / 2, my + mh / 2, () => { rr(ctx, mx, my, mw, mh, 16 * U, C.ink); rr(ctx, mx + mw * .04, my + mw * .04, mw * .92, mh - mw * .08, 10 * U, C.cream); });
+      popAt(ctx, k(1), x + w / 2, my + mh + h * .1, () => { rr(ctx, x + w / 2 - w * .05, my + mh, w * .1, h * .16, 0, C.ink); rr(ctx, x + w / 2 - w * .17, y + h * .86, w * .34, h * .1, h * .05, C.ink); });
+      const sx = mx + mw * .1, sy = my + mh * .2, sh = mh * .6;
+      popAt(ctx, k(2), sx + sh * .35, sy + sh * .5, () => { ctx.save(); ctx.translate(sx + sh * .35, sy + sh * .5); ctx.rotate(loop(v, 2, .4, .7) * Math.PI / 2); disc(ctx, -sh * .35, -sh * .35, sh * .7, C.a, 0, Math.PI / 2); ctx.restore(); });
+      [0, 1, 2].forEach(i => popAt(ctx, k(3 + i), sx + sh, sy + sh * (.15 + i * .35), () => rr(ctx, sx + sh * .95, sy + sh * (.08 + i * .34), mw * (.42 - i * .1), sh * .16, sh * .08, i === 0 ? C.b2 : C.ink)));
+    },
+    trash(ctx, v, x, y, w, h, C, k) {
+      const bw = h * .62, bh = h * .66, bx = x + w / 2 - bw / 2, by = y + h - bh - h * .02;
+      const per = 2.2, drop = loop(v - .5, per, .18, .5), open = Math.sin(loop(v - .5, per, 0, .7) * Math.PI);
+      if (k(2) > 0 && v > .5 && drop > 0 && drop < 1) { // a tile tips in and drops behind the bin's front
+        const tsz = bw * .42, ty = lerp(y + tsz * .45, by + bh * .4, eInExpo(drop)); ctx.save(); ctx.beginPath(); ctx.rect(x - w, y - h, w * 3, by + bh * .2 - y + h); ctx.clip();
+        ctx.translate(x + w / 2, ty); ctx.rotate(drop * 1.4); ctx.globalAlpha = 1 - seg(drop, .85, 1); rr(ctx, -tsz / 2, -tsz / 2, tsz, tsz, 8 * U, C.a); ctx.restore(); }
+      popAt(ctx, k(0), x + w / 2, by + bh / 2, () => { rr(ctx, bx, by, bw, bh, 14 * U, C.cream); [0, 1, 2].forEach(i => rr(ctx, bx + bw * (.2 + i * .25), by + bh * .16, bw * .1, bh * .68, bw * .05, C.ink)); });
+      popAt(ctx, k(1), bx + bw / 2, by, () => { ctx.save(); ctx.translate(bx + bw * 1.05, by - h * .02); ctx.rotate(open * .55); rr(ctx, -bw * 1.1, -h * .1, bw * 1.1, h * .1, h * .05, C.b2); rr(ctx, -bw * .7, -h * .17, bw * .3, h * .1, h * .04, C.b2); ctx.restore(); });
+    },
+  };
   function scene(ctx, sc, t) {
+    if (spec.scene_style === "illustrated") return sceneIll(ctx, sc, t);
+    const v = t - sc.t, outv = seg(t, sc.end - .35, sc.end);
+    if (v < 0 || outv >= 1) return false;
+    const gk = glyph[sc.kind] ? sc.kind : GLYPH_ALIAS[sc.kind];
+    const fk = (gk && GLYPH_FIELD[gk]) || FIELD[sc.kind] || ["r", "b", "y", "g"][hash(sc.kind || sc.label) % 4], field = P[fk];
+    const R = rnd(hash((sc.kind || "") + (sc.label || "")));
+    const cols = [P.cream, P.ink, P.r, P.b, P.y, P.g].filter(c => c !== field);
+    // the grid: 3 x 2 tiles, centered
+    const n = 3, m = 2, ts = (TALL ? 200 : 160) * U, gap = 14 * U, pad = 34 * U;
+    const ls = String(sc.label || "").split("\n"), lsz = (TALL ? 64 : 56) * U * (ls.length > 1 ? .82 : 1);
+    const cw = n * ts + (n - 1) * gap + 2 * pad, gh = m * ts + (m - 1) * gap, ch = pad + gh + pad * .9 + ls.length * lsz * 1.12 + pad;
+    const cx = W / 2, top = H * (TALL ? .06 : .05);
+    const inK = eOutExpo(seg(v, 0, .4)), outK = eInExpo(outv);
+    ctx.save(); ctx.globalAlpha = Math.min(1, inK * 1.5) * (1 - outK);
+    ctx.translate(0, (1 - inK) * 60 * U - outK * 60 * U);
+    box(ctx, cx - cw / 2, top, cw, ch, 24 * U, field);
+    const order = PLATES.slice().sort(() => R() - .5);
+    const IM = sc.kind === "image" && typeof window !== "undefined" && window.POP_IMAGES && window.POP_IMAGES[sc.src];
+    if (sc.kind === "image") { // a real screenshot or photo in the same card: cropped to fill the art area, slow push in
+      const ax = cx - cw / 2 + pad, aw = cw - 2 * pad, q = eOutBack(seg(v, .1, .45)) * (1 - eInBack(seg(t, sc.end - .32, sc.end - .05)));
+      if (IM && q > 0) {
+        ctx.save(); ctx.translate(ax + aw / 2, top + pad + gh / 2); ctx.scale(q, q); ctx.translate(-ax - aw / 2, -top - pad - gh / 2);
+        ctx.beginPath(); ctx.roundRect(ax, top + pad, aw, gh, 14 * U); ctx.clip();
+        const fx = sc.focus ? sc.focus[0] : .5, fy = sc.focus ? sc.focus[1] : .5, z = 1 + .05 * seg(v, 0, sc.end - sc.t);
+        const sc2 = Math.max(aw / IM.width, gh / IM.height) * z, dw = IM.width * sc2, dh = IM.height * sc2;
+        ctx.drawImage(IM, ax - (dw - aw) * fx, top + pad - (dh - gh) * fy, dw, dh); ctx.restore();
+      }
+    } else if (gk && gk !== "shapes") { // a topic glyph in the art area, pieces popping in on a stagger, then out together
+      const accents = ["r", "b", "y", "g"].filter(c => c !== fk);
+      const C = { ...P, field, a: P[accents[0]], b2: P[accents[1]] };
+      const ax = cx - cw / 2 + pad, aw = cw - 2 * pad, gone = eInBack(seg(t, sc.end - .32, sc.end - .05));
+      const kf = i => eOutBack(seg(v, .12 + i * .07, .42 + i * .07)) * (1 - gone);
+      glyph[gk](ctx, Math.max(0, v - .3), ax, top + pad, aw, gh, C, kf);
+    } else
+    for (let j = 0; j < m; j++) for (let i = 0; i < n; i++) {
+      const k = j * n + i, tx = cx - cw / 2 + pad + i * (ts + gap), ty = top + pad + j * (ts + gap);
+      const bg = cols[Math.floor(R() * cols.length)], fgs = cols.filter(c => c !== bg), fg = fgs[Math.floor(R() * fgs.length)];
+      const q = eOutBack(seg(v, .12 + k * .06, .42 + k * .06)) * (1 - eInBack(seg(t, sc.end - .3 + (5 - k) * .02, sc.end - .05)));
+      if (q <= 0) continue;
+      ctx.save(); ctx.translate(tx + ts / 2, ty + ts / 2); ctx.scale(q, q); ctx.translate(-tx - ts / 2, -ty - ts / 2);
+      box(ctx, tx, ty, ts, ts, 12 * U, bg);
+      ctx.beginPath(); ctx.roundRect(tx, ty, ts, ts, 12 * U); ctx.clip();
+      plate(ctx, order[k % order.length], tx, ty, ts, fg, Math.max(0, v - .3 - k * .06), R() * 1.6);
+      ctx.restore();
+    }
+    ctx.textAlign = "center";
+    ls.forEach((l, i) => label(ctx, l, cx, top + pad + gh + pad * .9 + lsz * .56 + i * lsz * 1.12, lsz, fk === "y" ? P.ink : P.cream, eOutExpo(seg(v, .45 + i * .08, .75 + i * .08)), cw - 2 * pad));
+    ctx.restore();
+    return true;
+  }
+  function sceneIll(ctx, sc, t) {
     const v = t - sc.t, outv = seg(t, sc.end - .25, sc.end);
     if (v < 0 || outv >= 1) return false;
     const pw = W * (TALL ? .88 : .92), ph = H * (TALL ? .27 : .3), px0 = (W - pw) / 2, py = H * (TALL ? .05 : .03);

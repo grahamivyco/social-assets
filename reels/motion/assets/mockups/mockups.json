@@ -1,7 +1,7 @@
 {
   "note": "Where the brand art goes on each photo, in photo pixels. Order = the order they whip in. See tools/mockup-composite.py.",
   "photos": {
-    "tee":      { "photo": "tee.jpg",      "frame": [780, 560, 900],  "pieces": [{ "art": "tee", "kind": "print", "center": [768, 410], "width": 170 }] },
+    "tee":      { "photo": "tee.jpg",      "frame": [812, 560, 900],  "pieces": [{ "art": "tee", "kind": "print", "center": [812, 410], "width": 170 }] },
     "sign":     { "photo": "sign.jpg",     "frame": [655, 800, 900],  "pieces": [{ "art": "sign", "kind": "surface", "quad": [[383, 463], [931, 451], [936, 1002], [373, 1002]] }] },
     "stickers": { "photo": "stickers.jpg", "frame": [800, 533, 1000], "pieces": [{ "art": "button", "kind": "surface", "quad": [[364, 337], [756, 337], [756, 729], [364, 729]] }] },
     "phone":    { "photo": "phone.jpg",    "frame": [820, 800, 900],  "pieces": [{ "art": "phone", "kind": "screen", "quad": [[539, 145], [1103, 145], [1103, 1379], [539, 1379]] }] },
