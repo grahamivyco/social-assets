@@ -29,7 +29,7 @@ const P = Object.assign({
     ['Posts piling up?', 'We plan the month with you.'],
     ['Want it all to match?', 'That’s the whole idea.'],
   ],
-  cta: 'Book a free consult', link: 'openframe.design/links',
+  cta: 'Book a free consult', link: 'openframe.design',
 }, window.PARAMS || {});
 const { prog, lerp, $, css, E } = M;
 const CREAM = '#F3F1EA', ACC = ['#F24333', '#2F6BF0', '#F4BF3A', '#33AC66'];
@@ -60,7 +60,7 @@ const starts = []; let tt = S0;
 ITEMS.forEach((it, i) => { starts.push(tt); tt += SWEEP + HOLD[i % 2]; });
 const END = tt, SHRINK = 0.7, DUR = END + SHRINK + 2.2;
 
-const TW = 600;   // text box: clear of the sparkle where it rests at either end (Graham, 2026-11-03: "adjust the font size so it fits")
+const TW = 600;   // text box, centred in the frame; the sparkle only shows while it sweeps (Graham, 2026-11-03: "adjust the font size so it fits")
 function fit(el) {   // shrink a line until it fits on 2 lines, every word inside the box
   let f = 96; el.style.fontSize = f + 'px';
   const over = () => el.offsetHeight > 2 * f * 1.02 + 2 || el.scrollWidth > TW + 1;
@@ -96,7 +96,10 @@ window.SCENE = {
       const oldClip = ltr ? `inset(-50px -50px -50px ${lx}px)` : `inset(-50px ${TW - lx}px -50px -50px)`;
       show(t1, ITEMS[i], k >= 1 ? 'none' : newClip);
       if (i > 0 && k < 1) show(t0, ITEMS[i - 1], oldClip);
-      spark = { x, y: midY, s: 1.1, rot: (ltr ? 1 : -1) * 180 * k, col: ACC[Math.floor(i / 2) % 4] };
+      // the sparkle pops in for the sweep and out once it is done, so the words sit alone, centred
+      // (Graham, 2026-11-03: "centered aligned never left aligned")
+      const sIn = E.outBack(prog(t, starts[i], starts[i] + 0.18)), sOut = prog(t, starts[i] + SWEEP, starts[i] + SWEEP + 0.22, 'inOutCubic');
+      spark = { x, y: midY, s: 1.1 * sIn * (1 - sOut), rot: (ltr ? 1 : -1) * 180 * k, col: ACC[Math.floor(i / 2) % 4] };
     } else {
       // the last answer clears, the rectangle shrinks into the mark, its corner opens, the sparkle centres
       const k = prog(t, END + 0.12, END + SHRINK, 'outExpo');
@@ -104,7 +107,7 @@ window.SCENE = {
       const last = ITEMS[ITEMS.length - 1];
       t1.innerHTML = last.html; t1.style.color = last.col; t1.style.clipPath = 'none';
       t1.style.display = 'block'; t1.style.opacity = 1 - prog(t, END, END + 0.12);
-      spark = { x: lerp(L, 540, k), y: lerp(midY, 860, k), s: lerp(1.1, 0.42 * MS, k), rot: 90 * k, col: k > 0.6 ? CREAM : ACC[(P.pairs.length - 1) % 4] };
+      spark = { x: 540, y: lerp(midY, 860, k), s: 0.42 * MS * E.outBack(prog(t, END + 0.3, END + SHRINK + 0.2)), rot: 90 * k, col: k > 0.6 ? CREAM : ACC[(P.pairs.length - 1) % 4] };
       css($('#cta'), { opacity: prog(t, END + SHRINK, END + SHRINK + 0.35), transform: `translateY(${lerp(20, 0, prog(t, END + SHRINK, END + SHRINK + 0.5, 'outExpo'))}px)` });
       css($('#link'), { opacity: 0.6 * prog(t, END + SHRINK + 0.25, END + SHRINK + 0.6) });
     }

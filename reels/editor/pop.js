@@ -15,6 +15,7 @@ function makePop(W, H, spec) {
   const eIO = x => x < .5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2;
   const LW = 7 * U, HEAD = spec.head || { family: "Helvetica Neue", weight: 700, italic: false };
   const FAM = `"${HEAD.family}", "Helvetica Neue", Helvetica, Arial, "Liberation Sans", sans-serif`;
+  const SITE = String(spec.site || "openframe.design").replace(/^https?:\/\//, "").replace(/\/$/, ""); // brand.json "site"
   const IT = HEAD.italic !== false; // brands with an italic accent (NGM); Open Frame accents by color only
   const FLAT = spec.flat !== false; // no ink outlines (Graham, 2026-11-03); details inside shapes stay
   function outline(ctx, lw) { ctx.lineWidth = lw; ctx.lineJoin = "round"; ctx.strokeStyle = P.ink; if (!FLAT) ctx.stroke(); }
@@ -393,8 +394,10 @@ function makePop(W, H, spec) {
 const PLATES = ["quarter", "circle", "half", "capsule", "ring", "stripes", "bracket", "square", "halves", "petals", "triangle"];
   function hash(str) { let h = 2166136261; for (const c of String(str)) h = Math.imul(h ^ c.charCodeAt(0), 16777619); return h >>> 0; }
   function rnd(seed) { let x = seed || 1; return () => (x = Math.imul(x ^ (x >>> 15), 2246822507) ^ Math.imul(x ^ (x >>> 13), 3266489909), ((x >>>= 0) % 1e6) / 1e6); }
-  function plate(ctx, kind, x, y, s, fg, v, ph) {
-    // one art plate shape in a square tile of size s at (x, y) top-left; v = local time, ph = phase for its loop
+  function plate(ctx, kind, x, y, s, fg, v, ph, tw = s) {
+    // one art plate shape in a tile s tall and tw wide at (x, y) top-left; v = local time, ph = phase for its loop.
+    // Round shapes sit in the centered s x s square; the corner shapes (quarter, petals, triangle) use the whole tile.
+    const X = x, TW = tw; x += (tw - s) / 2;
     const cx = x + s / 2, cy = y + s / 2, beat = k => eIO(seg(((v + ph) % 1.6) / 1.6, k, k + .25)); // a move every 1.6 s
     ctx.save(); ctx.fillStyle = fg; ctx.strokeStyle = fg; ctx.beginPath();
     if (kind === "quarter") { // quarter round that turns a corner each beat
@@ -414,10 +417,10 @@ const PLATES = ["quarter", "circle", "half", "capsule", "ring", "stripes", "brac
       const o = Math.sin(beat(.35) * Math.PI) * s * .08; ctx.translate(cx, cy);
       ctx.arc(-o, 0, s * .38, Math.PI / 2, Math.PI * 1.5); ctx.closePath(); ctx.fill(); ctx.beginPath(); ctx.arc(o, 0, s * .38, -Math.PI / 2, Math.PI / 2); ctx.closePath(); ctx.fill();
     } else if (kind === "petals") { // four quarter circles from the corners that breathe in turn
-      for (let i = 0; i < 4; i++) { const k = s * .5 * (1 - .18 * Math.sin(beat(.1 + i * .12) * Math.PI)); const ox = i % 2 ? x + s : x, oy = i > 1 ? y + s : y;
+      for (let i = 0; i < 4; i++) { const k = s * .5 * (1 - .18 * Math.sin(beat(.1 + i * .12) * Math.PI)); const ox = i % 2 ? X + TW : X, oy = i > 1 ? y + s : y;
         ctx.beginPath(); ctx.moveTo(ox, oy); ctx.arc(ox, oy, k, [0, Math.PI / 2, -Math.PI / 2, Math.PI][i], [Math.PI / 2, Math.PI, 0, -Math.PI / 2][i]); ctx.closePath(); ctx.fill(); }
     } else if (kind === "triangle") { // half the tile on the diagonal, flipping corner to corner
-      const f = Math.floor((v + ph) / 1.6) + beat(.55); ctx.translate(cx, cy); ctx.rotate(f * Math.PI / 2); ctx.moveTo(-s / 2, -s / 2); ctx.lineTo(s / 2, -s / 2); ctx.lineTo(-s / 2, s / 2); ctx.closePath(); ctx.fill();
+      const f = Math.floor((v + ph) / 1.6) + beat(.55), D = Math.hypot(TW, s); ctx.translate(X + TW / 2, cy); ctx.rotate(f * Math.PI / 2); ctx.moveTo(-D / 2, -D / 2); ctx.lineTo(D / 2, -D / 2); ctx.lineTo(-D / 2, D / 2); ctx.closePath(); ctx.fill();
     } else { // bracket: the Open Frame open corner, drawing on
       const m = s * .2, w = s - 2 * m, k = eOutExpo(seg(v, .1 + ph * .1, .6 + ph * .1)); ctx.lineWidth = s * .1; ctx.lineCap = "round"; ctx.lineJoin = "round";
       ctx.moveTo(x + m + w * .68, y + m); ctx.lineTo(x + m, y + m); ctx.lineTo(x + m, y + m + w); ctx.lineTo(x + m + w, y + m + w); ctx.lineTo(x + m + w, y + m + w * .34);
@@ -438,7 +441,12 @@ const PLATES = ["quarter", "circle", "half", "capsule", "ring", "stripes", "brac
     website(ctx, v, x, y, w, h, C, k) {
       const bw = w * .92, bh = h * .92, bx = x + (w - bw) / 2, by = y + (h - bh) / 2, bar = bh * .14;
       popAt(ctx, k(0), x + w / 2, y + h / 2, () => { rr(ctx, bx, by, bw, bh, 18 * U, C.cream); rr(ctx, bx, by, bw, bar, 18 * U, C.ink); ctx.fillStyle = C.ink; ctx.fillRect(bx, by + bar / 2, bw, bar / 2);
-        [C.r, C.y, C.g].forEach((c, i) => disc(ctx, bx + bar * (.7 + i * .6), by + bar / 2, bar * .2, c)); });
+        [C.r, C.y, C.g].forEach((c, i) => disc(ctx, bx + bar * (.7 + i * .6), by + bar / 2, bar * .2, c));
+        // the address bar always shows the brand's own site (Graham, 2026-11-03: "always openframe.design")
+        const ux = bx + bar * 2.3, uw = bw - bar * 2.3 - bar * .45, uh = bar * .62;
+        rr(ctx, ux, by + (bar - uh) / 2, uw, uh, uh / 2, C.cream);
+        let fs = uh * .62; ctx.font = `${HEAD.weight} ${fs}px ${FAM}`; const tw0 = ctx.measureText(SITE).width; if (tw0 > uw * .88) fs *= uw * .88 / tw0;
+        ctx.font = `${HEAD.weight} ${fs}px ${FAM}`; ctx.fillStyle = C.ink; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(SITE, ux + uw / 2, by + bar / 2 + fs * .04); });
       const ix = bx + bw * .06, iy = by + bar + bh * .1, ih = bh - bar - bh * .2;
       popAt(ctx, k(1), ix + ih * .42, iy + ih * .42, () => disc(ctx, ix + ih * .42, iy + ih * .42, ih * .4, C.a));
       [0, 1, 2].forEach(i => popAt(ctx, k(2 + i), ix + ih * .95, iy + ih * (.12 + i * .2), () => rr(ctx, ix + ih * .95, iy + ih * (.06 + i * .2), bw * (.42 - i * .08) * (1 - .15 * Math.sin(loop(v, 1.8, i * .15, i * .15 + .3) * Math.PI)), ih * .12, ih * .06, C.ink)));
@@ -489,13 +497,22 @@ const PLATES = ["quarter", "circle", "half", "capsule", "ring", "stripes", "brac
       popAt(ctx, k(1), bx + bw / 2, by, () => { ctx.save(); ctx.translate(bx + bw * 1.05, by - h * .02); ctx.rotate(open * .55); rr(ctx, -bw * 1.1, -h * .1, bw * 1.1, h * .1, h * .05, C.b2); rr(ctx, -bw * .7, -h * .17, bw * .3, h * .1, h * .04, C.b2); ctx.restore(); });
     },
   };
-  /* a real screenshot or photo (Graham, 2026-11-03): just the image, no border, background or title. Whole image,
-     centered in the top part of the frame, pops in, slow push in while held, then out. */
+  /* a real screenshot or photo (Graham, 2026-11-03): just the image, no border, background or title. Pops in,
+     slow push in while held, then out. sc.size (Graham, 2026-11-03, "sometimes almost the full screen with some
+     padding and sometimes behind my head"):
+       "inset"  (default) centered in the top part of the frame
+       "full"   almost the whole screen, even padding all round, in FRONT of the speaker
+       "behind" big and high, BEHIND the speaker's head (needs the cut-out pass) */
+  const FRONT = sc => sc.kind === "image" && sc.size === "full";
   function shot(ctx, sc, t, v) {
     const IM = typeof window !== "undefined" && window.POP_IMAGES && window.POP_IMAGES[sc.src];
     if (!IM) return false;
-    const maxW = W * (TALL ? .78 : .5), maxH = H * (TALL ? .5 : .7), k = Math.min(maxW / IM.width, maxH / IM.height);
-    const w = IM.width * k, h = IM.height * k, cx = W / 2, cy = H * (TALL ? .06 : .05) + h / 2;
+    const pad = Math.min(W, H) * .06, sz = sc.size || "inset";
+    const box = sz === "full" ? [W - 2 * pad, H - 2 * pad - (TALL ? H * .14 : 0)]   // leave room for captions
+      : sz === "behind" ? [W * (TALL ? .94 : .7), H * (TALL ? .62 : .8)]
+      : [W * (TALL ? .78 : .5), H * (TALL ? .5 : .7)];
+    const k = Math.min(box[0] / IM.width, box[1] / IM.height), w = IM.width * k, h = IM.height * k, cx = W / 2;
+    const cy = sz === "full" ? pad + box[1] / 2 : sz === "behind" ? H * (TALL ? .03 : .04) + h / 2 : H * (TALL ? .06 : .05) + h / 2;
     const q = eOutBack(seg(v, 0, .4)) * (1 - eInBack(seg(t, sc.end - .3, sc.end))), z = q * (1 + .04 * seg(v, 0, sc.end - sc.t));
     if (q <= 0) return false;
     ctx.save(); ctx.translate(cx, cy); ctx.scale(z, z); ctx.drawImage(IM, -w / 2, -h / 2, w, h); ctx.restore();
@@ -511,9 +528,11 @@ const PLATES = ["quarter", "circle", "half", "capsule", "ring", "stripes", "brac
     const R = rnd(hash((sc.kind || "") + (sc.label || "")));
     const cols = [P.cream, P.ink, P.r, P.b, P.y, P.g].filter(c => c !== field);
     // the grid: 3 x 2 tiles, centered
+    // tiles are wide (Graham, 2026-11-03: "I want the tiles to be wider"): the card spans ~90% of a tall frame
     const n = 3, m = 2, ts = (TALL ? 200 : 160) * U, gap = 14 * U, pad = 34 * U;
+    const tw = TALL ? (W * .9 - 2 * pad - (n - 1) * gap) / n : ts * 1.4;
     const ls = String(sc.label || "").split("\n"), lsz = (TALL ? 64 : 56) * U * (ls.length > 1 ? .82 : 1);
-    const cw = n * ts + (n - 1) * gap + 2 * pad, gh = m * ts + (m - 1) * gap, ch = pad + gh + pad * .9 + ls.length * lsz * 1.12 + pad;
+    const cw = n * tw + (n - 1) * gap + 2 * pad, gh = m * ts + (m - 1) * gap, ch = pad + gh + pad * .9 + ls.length * lsz * 1.12 + pad;
     const cx = W / 2, top = H * (TALL ? .06 : .05);
     const inK = eOutExpo(seg(v, 0, .4)), outK = eInExpo(outv);
     ctx.save(); ctx.globalAlpha = Math.min(1, inK * 1.5) * (1 - outK);
@@ -528,14 +547,14 @@ const PLATES = ["quarter", "circle", "half", "capsule", "ring", "stripes", "brac
       glyph[gk](ctx, Math.max(0, v - .3), ax, top + pad, aw, gh, C, kf);
     } else
     for (let j = 0; j < m; j++) for (let i = 0; i < n; i++) {
-      const k = j * n + i, tx = cx - cw / 2 + pad + i * (ts + gap), ty = top + pad + j * (ts + gap);
+      const k = j * n + i, tx = cx - cw / 2 + pad + i * (tw + gap), ty = top + pad + j * (ts + gap);
       const bg = cols[Math.floor(R() * cols.length)], fgs = cols.filter(c => c !== bg), fg = fgs[Math.floor(R() * fgs.length)];
       const q = eOutBack(seg(v, .12 + k * .06, .42 + k * .06)) * (1 - eInBack(seg(t, sc.end - .3 + (5 - k) * .02, sc.end - .05)));
       if (q <= 0) continue;
-      ctx.save(); ctx.translate(tx + ts / 2, ty + ts / 2); ctx.scale(q, q); ctx.translate(-tx - ts / 2, -ty - ts / 2);
-      box(ctx, tx, ty, ts, ts, 12 * U, bg);
-      ctx.beginPath(); ctx.roundRect(tx, ty, ts, ts, 12 * U); ctx.clip();
-      plate(ctx, order[k % order.length], tx, ty, ts, fg, Math.max(0, v - .3 - k * .06), R() * 1.6);
+      ctx.save(); ctx.translate(tx + tw / 2, ty + ts / 2); ctx.scale(q, q); ctx.translate(-tx - tw / 2, -ty - ts / 2);
+      box(ctx, tx, ty, tw, ts, 12 * U, bg);
+      ctx.beginPath(); ctx.roundRect(tx, ty, tw, ts, 12 * U); ctx.clip();
+      plate(ctx, order[k % order.length], tx, ty, ts, fg, Math.max(0, v - .3 - k * .06), R() * 1.6, tw);
       ctx.restore();
     }
     ctx.textAlign = "center";
@@ -559,8 +578,37 @@ const PLATES = ["quarter", "circle", "half", "capsule", "ring", "stripes", "brac
   }
 
   /* video title: brand head font on a background shape, *word* in the accent color (italic too where the brand has one) */
+  /* C, color field (Graham picked 2026-11-03): a solid band in the field color fills the top third, edge to edge,
+     with the hook in huge words on it. Drops in from the top, words land one by one, slides back up at the end.
+     spec.title_style "box" brings back the old centered box. */
+  function titleField(ctx, t, T) {
+    const pin = eOutExpo(seg(t, 0, .4)), out = eInExpo(seg(t, T.until, T.until + .32));
+    if (out >= 1) return false;
+    const bh = H * (TALL ? .34 : .4), maxW = W * .86, parts = T.text.split(/(\*[^*]+\*)/).filter(Boolean);
+    const words = []; parts.forEach(p => { const it = p.startsWith("*"); p.replace(/\*/g, "").split(/\s+/).forEach(w => w && words.push({ w, it })); });
+    let size = (TALL ? 170 : 130) * U, lines;
+    for (;;) { // the biggest size that fits in 3 lines inside the band
+      ctx.font = `${HEAD.weight} ${size}px ${FAM}`; const sp = ctx.measureText(" ").width; lines = [[]]; let lw = 0;
+      for (const x of words) { const ww = ctx.measureText(x.w).width;
+        if (lines[lines.length - 1].length && lw + sp + ww > maxW) { lines.push([]); lw = 0; }
+        lines[lines.length - 1].push({ ...x, ww }); lw += (lw ? sp : 0) + ww; }
+      const tall = lines.length * size * 1.02, wide = Math.max(...lines.map(l => l.reduce((a, x) => a + x.ww, 0) + sp * (l.length - 1)));
+      if ((lines.length <= 3 && tall <= bh * .78 && wide <= maxW) || size < 60 * U) { lines.sp = sp; break; } size -= 6 * U; }
+    const y0 = -bh * (1 - pin) - bh * out;
+    ctx.save(); ctx.fillStyle = P[T.field || "r"]; ctx.fillRect(0, y0, W, bh);
+    ctx.beginPath(); ctx.rect(0, y0, W, bh); ctx.clip(); ctx.textBaseline = "alphabetic"; ctx.textAlign = "left";
+    ctx.font = `${HEAD.weight} ${size}px ${FAM}`; let n = 0;
+    const top = y0 + bh / 2 - lines.length * size * 1.02 / 2 + size * .8;
+    lines.forEach((l, i) => { const lw = l.reduce((a, x) => a + x.ww, 0) + lines.sp * (l.length - 1); let x = (W - lw) / 2;
+      l.forEach(wd => { const k = eOutExpo(seg(t, .18 + n * .07, .5 + n * .07)); n++;
+        ctx.globalAlpha = k; ctx.fillStyle = wd.it ? P[T.accent || "y"] : P.cream;
+        ctx.fillText(wd.w, x, top + i * size * 1.02 + (1 - k) * size * .35); x += wd.ww + lines.sp; }); });
+    ctx.restore();
+    return true;
+  }
   function title(ctx, t) {
     const T = spec.title; if (!T || t > T.until + .4) return false;
+    if (spec.title_style !== "box") return titleField(ctx, t, T);
     const size = (TALL ? 92 : 80) * U, maxW = W * .8, parts = T.text.split(/(\*[^*]+\*)/).filter(Boolean);
     const words = []; parts.forEach(p => { const it = p.startsWith("*"); p.replace(/\*/g, "").split(/(\s+)/).forEach(w => w && words.push({ w, it })); });
     const font = it => `${it && IT ? "italic " : ""}${HEAD.weight} ${size}px ${FAM}`;
@@ -613,8 +661,13 @@ const PLATES = ["quarter", "circle", "half", "capsule", "ring", "stripes", "brac
     // art-plate intro is opt-in (edit.json "frame_intro": true). Graham, 2026-11-03: "I hate the blue rim",
     // "take out my logo", so by default no frame around the screen and no mark or spark on the video.
     if (spec.frame_intro && spec.intro && t < spec.intro + .4) { drawFrame(ctx, t, spec.intro); drew = true; }
-    for (const sc of spec.scenes) drew = scene(ctx, sc, t) || drew;
-    drew = title(ctx, t) || drew;
+    // spec.layer (2026-11-03): "back" draws everything except full-screen images (they go over the speaker),
+    // "front" draws only those. No layer = one layer with everything.
+    // The color field hook band also goes in front, so the head never covers its words.
+    const titleFront = spec.title_style !== "box";
+    if (spec.layer === "front") { for (const sc of spec.scenes) if (FRONT(sc)) drew = scene(ctx, sc, t) || drew; if (titleFront) drew = title(ctx, t) || drew; return drew; }
+    for (const sc of spec.scenes) if (spec.layer !== "back" || !FRONT(sc)) drew = scene(ctx, sc, t) || drew;
+    if (spec.layer !== "back" || !titleFront) drew = title(ctx, t) || drew;
     for (const wp of spec.wipes) { // a big shape sweeps corner to corner and covers the cut at its midpoint
       if (t < wp.t - .22 || t > wp.t + .22) continue;
       const p = eIO(seg(t, wp.t - .22, wp.t + .22)), s = Math.hypot(W, H) * 1.15;

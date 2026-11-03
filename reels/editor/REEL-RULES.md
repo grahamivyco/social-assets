@@ -68,7 +68,17 @@ Every key point visual is one of two things:
   - a before and after, a real product, a real place or event
   - a tool's screen when the Reel teaches how to use it
   - a real person, only with their OK
-- **Motion graphic** (topic glyphs: `website`, `phone`, `branding`, `people`, `computer`, `shapes`, `trash`) when the line is general advice or an idea ("your website needs one job"), when no real asset exists, or when the real one would show private info.
+  - Size (`"size"`, Graham 2026-11-03: "sometimes almost the full screen with some padding and sometimes behind my head"). Mix them across a Reel:
+    - `"inset"` (default): centered near the top.
+    - `"full"`: almost the whole screen with even padding, over the speaker. Use it when the detail matters (a dashboard number, a before and after).
+    - `"behind"`: big and high, behind the head (needs the cut-out pass). Use it when the screenshot is context and the face should stay the focus.
+- **Motion graphic** (topic glyphs: `website`, `phone`, `branding`, `people`, `computer`, `shapes`, `trash`; wide tiles; the website's address bar always shows the brand's own site from brand.json `site`, openframe.design for Open Frame) when the line is general advice or an idea ("your website needs one job"), when no real asset exists, or when the real one would show private info.
 - Never fake a screenshot or mock up a result that didn't happen. Captions and graphics never invent claims.
 - Screenshots: crop the file to the part that matters before it goes in, blur names, emails, DMs and anything private, max about 2.5 s on screen, slow push in. Graham drops them in the Reel's folder; the plan names them line by line.
 - If unsure, ask Graham in the graphics plan step instead of guessing.
+
+## Hook title (Graham picked C, color field, 2026-11-03)
+
+- The hook is a solid band in the topic color across the top third, edge to edge, with the hook in huge Helvetica Bold words (up to 3 lines), the `*accent*` word in yellow. It drops in, words land one by one, and it slides back up. It sits in front of the speaker so the head never covers the words. edit.json/spec `"title_style": "box"` brings back the old centered box.
+- On-screen links say `openframe.design` (Graham, 2026-11-03). Caption links still use https://openframe.design/links.
+
