@@ -411,10 +411,11 @@ function makePop(W, H, spec) {
       if (!(lw === 0 && !x.w.trim())) { lines[lines.length - 1].push({ ...x, ww }); lw += ww; } }
     const widths = lines.map(l => l.reduce((a, x) => a + x.ww, 0)), bw = Math.max(...widths) + 90 * U, bh = lines.length * size * 1.15 + 70 * U;
     const cx = W / 2, cy = H * (TALL ? .2 : .18);
-    const pin = eOutBack(seg(t, 0, .35)), out = eInBack(seg(t, T.until, T.until + .35));
+    // Graham, 2026-11-03: no tilt, no circle, no outline, no sparkle. Straight box that slides up and fades in
+    // with the brand ease, then slides away.
+    const pin = eOutExpo(seg(t, 0, .45)), out = eInExpo(seg(t, T.until, T.until + .3));
     if (out >= 1) return false;
-    ctx.save(); ctx.translate(cx, cy); ctx.rotate(lerp(-.08, -.03, pin) + out * .2); ctx.scale(pin * (1 - out), pin * (1 - out));
-    if (!(spec.frame_intro && spec.intro)) shape(ctx, "circle", bw / 2 - 10 * U, -bh / 2 + 6 * U, 110 * U, 0, P[T.dot || "y"], P.ink); // the art plate circle stands in for it
+    ctx.save(); ctx.translate(cx, cy + (1 - pin) * 40 * U - out * 40 * U); ctx.globalAlpha = pin * (1 - out);
     box(ctx, -bw / 2, -bh / 2, bw, bh, 18 * U, P[T.field || "r"], P.ink);
     ctx.textBaseline = "middle";
     lines.forEach((l, i) => { let x = -widths[i] / 2; const y = -bh / 2 + 35 * U + size * 1.15 * (i + .5);
