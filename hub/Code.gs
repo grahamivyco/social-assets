@@ -153,6 +153,14 @@ function doPost(e) {
 // delete a row to sign that device out. Removing someone from contact_email cuts them off on their next tap.
 
 const STUDIO_URL = 'https://openframe.design/studio/';
+// Studio is paused (Graham, 2026-11-03): he works from Claude, not Studio. false = no client gets Studio emails or the
+// studio flag, so clients fall back to the old review-link email, and Graham's emails point at Claude.
+const STUDIO_ON = false;
+// Where Graham's emails send him: his Claude project. He asks "what needs me?" there (see CLAUDE-INBOX.md).
+// Script Property CLAUDE_URL overrides it (another studio using this Hub sets its own).
+const CLAUDE_URL_DEFAULT = 'https://claude.ai/code/project/chan_01YPuXoKeryjgPCUEZnhKmkf';
+function claudeUrl_() { return PropertiesService.getScriptProperties().getProperty('CLAUDE_URL') || CLAUDE_URL_DEFAULT; }
+function claudeLine_() { return 'Open Claude and ask "what needs me?":\n\n' + claudeUrl_(); }
 const STUDIO_ADMINS = [];   // extra admin emails, e.g. a VA. The script owner is always an admin.
 const STUDIO_DAYS = 30;
 const STUDIO_CODE_MIN = 15;
@@ -986,7 +994,10 @@ function adminLead(key, id, action, text) {
 // ---------- email (Mail tab) ----------
 
 function triageMail() {
+  try { claudeAnswers_(); } catch (e) { console.error('claudeAnswers_: ' + e.message); }   // Graham's answers from Claude first
+  try { withLock_(noAutoApprove_); } catch (e) { console.error('noAutoApprove_: ' + e.message); }
   try { withLock_(phoneReels_); } catch (e) { console.error('phoneReels_: ' + e.message); }   // rides this 10-minute trigger, no setup re-run
+  try { withLock_(needsYou_); } catch (e) { console.error('needsYou_: ' + e.message); }
   withLock_(() => {
     const t = hubTab_('Mail', MAIL_HEAD), now = new Date().toISOString();
     const clientEmails = [].concat.apply([], clients_().map(c => emails_(c.contact_email)));
@@ -1266,7 +1277,7 @@ function clientDecide_(c, ids, decision, note) {
     });
     if (map[0] === 'approved') phoneReels_();
     if (decision === 'change') {
-      MailApp.sendEmail(me_(), c.client + ' asked for a change', c.email + ' wrote: ' + note + '\n\nOpen your dashboard:\n\n' + adminUrl_());
+      MailApp.sendEmail(me_(), c.client + ' asked for a change', c.email + ' wrote: ' + note + '\n\n' + claudeLine_());
     }
     return map[0];
   });
@@ -2056,6 +2067,141 @@ function phonePosted_(queueId) {
   });
 }
 
+// ---------- Claude inbox: Graham answers in Claude, not Studio (2026-11-03) ----------
+// Graham doesn't open Studio or the Hub. He asks Claude "what needs me?". Two tabs make that work, no keys needed:
+// - "Needs you": rebuilt every 10 minutes (triageMail). One row per thing waiting on Graham, from every source,
+//   with the exact button words he can answer with. Claude reads only this tab.
+// - "Claude answers": Claude appends one row per answer Graham gives in chat. The next 10-minute run applies it
+//   through the same functions Studio's buttons called, so every side effect still happens (Queue moves, emails send,
+//   calendar events, phone Reel marked posted). status/result say what happened.
+// Full how-to for Claude: social-assets hub/CLAUDE-INBOX.md.
+const NEEDS_HEAD = ['source', 'id', 'client', 'kind', 'title', 'body', 'preview', 'link', 'buttons', 'due', 'ref', 'built'];
+const CLAUDE_HEAD = ['at', 'source', 'id', 'answer', 'note', 'status', 'result'];
+const LOOP_BUTTONS_ = { card: [['Yes', 'yes'], ['Change', 'change'], ['Pass', 'pass']], email: [['Send', 'send'], ['Change', 'change'], ['Pass', 'pass']], todo: [['Got it', 'done']] };
+const MAIL_BUTTONS_ = [['Send', 'send'], ['Skip', 'skip'], ['Done', 'done']];
+const LEAD_BUTTONS_ = [['Send', 'send'], ['Skip', 'skip'], ['Done', 'done']];
+const INBOX_BUTTONS_ = [['Send', 'send'], ["I'll handle it", 'done']];
+
+// Queue rows behind an Approvals row (posts and Reels): caption and every media link, so Claude can show the real thing.
+function queueFor_(id, queues) {
+  const base = String(id).replace(/-r\d+$/, '');
+  const rows = [];
+  queues.forEach(q => q.rows.forEach(r => { if (r.id && (r.id === base || String(r.id).indexOf(base + '-') === 0) && !/^(posted|skipped)$/.test(r.status)) rows.push(r); }));
+  const ig = rows.find(r => r.platform === 'instagram') || rows[0];
+  if (!ig) return null;
+  const media = [];
+  rows.forEach(r => String(r.media_url || '').split(/\s+/).filter(u => /^https:/.test(u)).forEach(u => { if (media.indexOf(u) < 0) media.push(u); }));
+  return { caption: ig.caption || '', media };
+}
+
+function needsYou_() {
+  const out = [], now = new Date().toISOString();
+  const add = (o, buttons) => out.push(Object.assign({ client: '', kind: '', body: '', preview: '', link: '', due: '', ref: '' }, o,
+    { buttons: buttons.map(b => b[0]).join(' | '), built: now }));
+  const queues = uniq_(clients_().map(c => c.sheet_id)).map(sid => table_(sid, 'Queue')).filter(Boolean);
+
+  approvalsTable_().rows.filter(r => r.id && r.status === 'draft').forEach(r => {
+    const q = (r.kind === 'post' || r.kind === 'reel') ? queueFor_(r.id, queues) : null;
+    const body = q ? [r.detail, 'Caption:\n' + q.caption].filter(Boolean).join('\n\n') : (r.detail || '');
+    add({ source: 'approvals', id: r.id, client: r.client, kind: r.kind, title: r.title, body,
+      preview: r.preview || '', link: q ? q.media.join('\n') : (/^https:/.test(r.preview) ? r.preview : ''), due: r.due || '' }, approvalButtons_(r));
+  });
+
+  const ss = SpreadsheetApp.openById(hubId_());
+  if (ss.getSheetByName('Loops')) table_(hubId_(), 'Loops').rows.filter(r => r.id && (r.status === 'card' || r.status === 'todo')).forEach(r => {
+    const type = r.status === 'todo' ? 'todo' : r.to ? 'email' : 'card';
+    add({ source: 'loops', id: r.id, client: r.client, kind: r.loop + (r.kind ? ' / ' + r.kind : ''), title: r.title,
+      body: [r.body, r.why ? 'Why: ' + r.why : '', r.ask, r.to ? 'To: ' + r.to + (r.subject ? '\nSubject: ' + r.subject : '') : ''].filter(Boolean).join('\n\n'),
+      link: r.link || '' }, LOOP_BUTTONS_[type]);
+  });
+
+  if (ss.getSheetByName('Mail')) table_(hubId_(), 'Mail').rows.filter(r => r.message_id && r.status === 'drafted').forEach(r => add({
+    source: 'mail', id: r.message_id, kind: 'email to answer (' + (r.type || '') + ')', title: (r.from_name || r.from_email) + ': ' + (r.subject || ''),
+    body: [r.snippet, r.draft_id && r.draft ? 'Draft reply:\n' + r.draft : ''].filter(Boolean).join('\n\n'),
+    link: r.thread_id ? 'https://mail.google.com/mail/u/0/#all/' + r.thread_id : '' }, MAIL_BUTTONS_));
+
+  const leads = table_(OUTREACH_SHEET_ID, 'Leads');
+  if (leads) leads.rows.filter(r => r.id && r.status === 'drafted').forEach(r => add({
+    source: 'leads', id: r.id, kind: 'lead ' + (r.kind || ''), title: (r.name || r.org || r.handle || r.email) + (r.step ? ' (' + r.step + ')' : ''),
+    body: [r.card, r.subject ? 'Subject: ' + r.subject : '', r.body].filter(Boolean).join('\n\n'), link: r.handle ? 'https://www.instagram.com/' + String(r.handle).replace(/^@/, '') + '/' : '' }, LEAD_BUTTONS_));
+
+  uniq_(clients_().map(c => c.sheet_id)).forEach(sid => {
+    const ib = table_(sid, 'Inbox');
+    if (ib) ib.rows.filter(r => r.id && r.status === 'needs_reply').forEach(r => add({
+      source: 'inbox', id: r.id, kind: (r.kind || 'dm') + (r.intent ? ' / ' + r.intent : ''), title: (r.username || r.sender_name || 'Someone') + ': ' + String(r.text || '').slice(0, 120),
+      body: ['Message:\n' + (r.text || ''), [r.option_1, r.option_2, r.option_3].filter(Boolean).map((o, i) => 'Option ' + (i + 1) + ':\n' + o).join('\n\n')].filter(Boolean).join('\n\n'),
+      ref: sid }, INBOX_BUTTONS_));
+  });
+
+  health_().cards.forEach((h, i) => add({ source: 'health', id: h.key || 'health-' + i, kind: 'fix', title: h.text, link: h.link || '' }, []));
+
+  const t = hubTab_('Needs you', NEEDS_HEAD);
+  if (t.sh.getLastRow() > 1) t.sh.getRange(2, 1, t.sh.getLastRow() - 1, NEEDS_HEAD.length).clearContent();
+  if (out.length) t.sh.getRange(2, 1, out.length, NEEDS_HEAD.length).setValues(out.map(o => NEEDS_HEAD.map(h => safeCell_(o[h]))));
+  return out.length;
+}
+
+// Button words are matched loosely: "looks good", "yes", "ok" all count for the first button where it fits.
+function pickButton_(buttons, answer) {
+  const a = String(answer || '').trim().toLowerCase();
+  const exact = buttons.find(b => b[0].toLowerCase() === a || b[1] === a);
+  if (exact) return exact;
+  const yes = /^(y|yes|ok|okay|approve|approved|good|looks good|go|send it|post it)$/.test(a), no = /^(no|skip|pass|nope)$/.test(a);
+  return (yes && buttons.find(b => ['ok', 'yes', 'send', 'done'].indexOf(b[1]) >= 0)) || (no && buttons.find(b => ['skip', 'pass'].indexOf(b[1]) >= 0)) || null;
+}
+
+function claudeAnswers_() {
+  const t = hubTab_('Claude answers', CLAUDE_HEAD), K = adminKey_();
+  t.rows.filter(r => r.id && !r.status).slice(0, 40).forEach(r => {
+    let result = 'ok';
+    try {
+      const src = String(r.source || '').toLowerCase(), note = String(r.note || '');
+      if (src === 'approvals') {
+        const row = findRow_(approvalsTable_(), 'id', r.id), b = pickButton_(approvalButtons_(row), r.answer);
+        if (!b) throw new Error('answer must be one of: ' + approvalButtons_(row).map(x => x[0]).join(', '));
+        adminApproval(K, r.id, b[0], note);
+        result = b[0];
+      } else if (src === 'loops') {
+        const row = findRow_(hubTab_('Loops', LOOP_HEAD), 'id', r.id);
+        const bs = LOOP_BUTTONS_[row.status === 'todo' ? 'todo' : row.to ? 'email' : 'card'], b = pickButton_(bs, r.answer);
+        if (!b) throw new Error('answer must be one of: ' + bs.map(x => x[0]).join(', '));
+        adminLoop(K, r.id, b[1], note);
+        result = b[0];
+      } else if (src === 'mail' || src === 'leads') {
+        const b = pickButton_(src === 'mail' ? MAIL_BUTTONS_ : LEAD_BUTTONS_, r.answer);
+        if (!b) throw new Error('answer must be Send, Skip or Done');
+        (src === 'mail' ? adminMail : adminLead)(K, r.id, b[1], note);
+        result = b[0];
+      } else if (src === 'inbox') {
+        const n = needsRef_(r.id), b = pickButton_(INBOX_BUTTONS_, r.answer);
+        if (!b) throw new Error("answer must be Send or I'll handle it");
+        if (b[1] === 'send' && !note) throw new Error('Send needs the reply text in note');
+        adminReply(K, n, r.id, note, b[1]);
+        result = b[0];
+      } else throw new Error('source must be approvals, loops, mail, leads or inbox');
+      setCells_(t, r._row, { status: 'done', result });
+    } catch (e) { setCells_(t, r._row, { status: 'error', result: String(e.message || e).slice(0, 300) }); }
+  });
+}
+
+// Which Sheet an Inbox row lives in (the Needs you tab keeps it in ref).
+function needsRef_(id) {
+  const t = hubTab_('Needs you', NEEDS_HEAD), r = t.rows.find(x => x.source === 'inbox' && String(x.id) === String(id));
+  if (!r || !r.ref) throw new Error('That message is no longer waiting');
+  return r.ref;
+}
+
+// No post goes out on silence (Graham, 2026-11-03: "I don't know if I ever agreed for it to be posted").
+// The old silence rule marked rows answered_by "auto: no answer". Any such row that hasn't posted goes back to waiting
+// on Graham, flagged sensitive so nothing auto-approves it again.
+function noAutoApprove_() {
+  uniq_(clients_().map(c => c.sheet_id)).forEach(sid => {
+    const q = table_(sid, 'Queue');
+    if (q) q.rows.filter(r => r.id && r.status === 'approved' && !r.posted_at && /^auto/i.test(String(r.answered_by || ''))).forEach(r =>
+      setCells_(q, r._row, { status: 'in_review', sensitive: 'yes', client_decision: '', answered_by: '', decided_at: '' }));
+  });
+}
+
 // ---------- check-in emails ----------
 
 function checkIn() {
@@ -2088,7 +2234,7 @@ function checkInNow() {
   ].filter(p => p[0]).map(p => p[0] + ' ' + (p[0] === 1 ? p[1] : p[2]));
   const total = d.topics.length + d.approve.length + d.inbox.length + d.engage.length + d.photos.length + d.mail.length + d.leads.length + d.graphics.length + d.failed.length + d.fixes.length;
   const lines = total
-    ? ['You have ' + total + ' to go through: ' + parts.join(', ') + '.', '', 'Tap Yes or Change on each one:', '', adminUrl_()]
+    ? ['You have ' + total + ' to go through: ' + parts.join(', ') + '.', '', claudeLine_()]
     : ['Nothing needs you this time.'];
   const fyi = [];
   if (d.upcoming.length) fyi.push(d.upcoming.length + (d.upcoming.length === 1 ? ' post' : ' posts') + ' going out this week');
@@ -2114,7 +2260,7 @@ function urgentCheck() {
   props.setProperty('URGENT_SEEN', JSON.stringify(items.map(x => x[0]).slice(-200)));
   if (!fresh.length) return;
   MailApp.sendEmail(me_(), fresh.length === 1 ? 'One thing can\'t wait' : fresh.length + " things can't wait",
-    fresh.map(x => '- ' + x[1]).join('\n') + '\n\nHandle it here:\n\n' + adminUrl_());
+    fresh.map(x => '- ' + x[1]).join('\n') + '\n\n' + claudeLine_());
 }
 
 // Hourly. Emails health problems marked email = yes once per check + since + status, and a long Mac outage once.
@@ -2128,7 +2274,7 @@ function healthCheck() {
   if (!fresh.length) return;
   props.setProperty('HEALTH_SEEN', JSON.stringify(seen.concat(fresh.map(x => x[0])).slice(-200)));
   MailApp.sendEmail(me_(), fresh.length === 1 ? 'Something stopped working' : fresh.length + ' things stopped working',
-    fresh.map(x => '- ' + x[1]).join('\n') + '\n\nYour check-in page:\n\n' + adminUrl_());
+    fresh.map(x => '- ' + x[1]).join('\n') + '\n\n' + claudeLine_());
 }
 
 // Current non-ok rows from the latest run, plus a card when the run itself stopped (Mac off or asleep).
@@ -2162,7 +2308,7 @@ function macCards_() {
   if (m.stale) return [];   // Mac off or asleep: the n8n heartbeat card covers that
   return table_(hubId_(), 'Mac status').rows.filter(r => r.check && r.status === 'fail' && !within_(r.since, MAC_FAIL_MIN / 1440))
     .map(r => ({ key: ['mac', r.check, r.since].join('|'), text: (r.label || r.check) + ': ' + (r.detail || 'stopped') + (r.fix ? ' ' + r.fix : ''),
-      link: STUDIO_URL + '?tab=status', email: true }));
+      link: claudeUrl_(), email: true }));
 }
 
 function leadLine_(l) {
@@ -2218,7 +2364,7 @@ function clients_() {
   if (!t) return [];
   return t.rows.filter(r => r.brand).map(r => ({
     client: r.client || r.brand, brand: r.brand, sheet_id: r.sheet_id || hubId_(),
-    contact_email: r.contact_email || '', report_url: r.report_url || '', client_approves: /^(y|yes|true)$/i.test(r.client_approves || ''), studio: /^(y|yes|true)$/i.test(r.studio || ''),
+    contact_email: r.contact_email || '', report_url: r.report_url || '', client_approves: /^(y|yes|true)$/i.test(r.client_approves || ''), studio: STUDIO_ON && /^(y|yes|true)$/i.test(r.studio || ''),
     pay_url: /^https:\/\//.test(r.pay_url || '') ? r.pay_url : '', files_url: /^https:\/\//.test(r.files_url || '') ? r.files_url : '',
     notes: r.notes || '', paused: /^paused$/i.test(r.studio || ''),
     reel_music: String(r.reel_music || (r.brand === 'open-frame' ? 'app' : 'auto')).toLowerCase(),
