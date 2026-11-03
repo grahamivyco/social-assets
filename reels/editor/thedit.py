@@ -29,10 +29,11 @@ FORMATS = {  # name: (w, h, crop focus 0=top 1=bottom, caption y as share of hei
 # edit.json "preset" (2026-10-21). These settings win over the rest of edit.json.
 # "one-take", from @nategaffney's Reel (references/nategaffney-one-take-recipe.md): one locked-off take, only the
 # head and tail trimmed, no punch-ins, graphics, cut-out, sound effects or end card, ends on the last word so it
-# loops. Small white one-word captions ~55% down, static title on a white rounded box for 4 s.
+# loops. Small white captions ~55% down (3 words, the spoken one in the brand yellow since 2026-11-03), static
+# title on a white rounded box for 4 s.
 PRESETS = {
     "one-take": {"one_take": True, "pop": False, "cutout": False, "sfx": False, "endcard": False,
-                 "cut_fillers": False, "cut": [], "hook_seconds": 4.0, "caption_words": 1,
+                 "cut_fillers": False, "cut": [], "hook_seconds": 4.0, "caption_words": 3,
                  "caption_color": "ffffff", "caption_y": 0.556, "caption_size": 0.04, "title_box": True},
 }
 
@@ -338,9 +339,13 @@ def clean(w):
 def write_ass(path, words, W, H, cap_y, edit):
     br = edit["_brand"]  # brand colors (already in the footage's color space) and head font
     INK, CREAM, YELLOW = br["hex"]["ink"], br["hex"]["cream"], br["hex"]["y"]
-    wname = {300: "Light", 400: "Regular", 500: "Medium", 600: "SemiBold", 700: "Bold", 800: "ExtraBold"}
-    font = f"{br['head']['family']} {wname.get(br['head']['weight'], '')}".strip()
-    fs = round(H * edit["caption_size"]) if edit.get("caption_size") else round(W * (0.10 if H > W else 0.075))
+    # edit.json "caption_font" / "caption_weight" (Graham, 2026-11-03: "a font i choose"): any family in the brand's
+    # fonts/ folder, editor/fonts or the system fonts. Default: the brand head font.
+    from pop import font_name
+    fam, sty = font_name(edit["_cap_font"])
+    font = f"{fam} {sty}".replace(" Regular", "").strip()
+    per = edit.get("caption_words", 3)
+    fs = round(H * edit["caption_size"]) if edit.get("caption_size") else round(W * (0.10 if per == 1 else 0.075) * (1 if H > W else 0.75))
     hook_fs = round(W * (0.078 if H > W else 0.062))
     pad = round(fs * 0.22)
     hdr = f"""[Script Info]
@@ -374,11 +379,13 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                   + "\\N".join(ass_text(k.strip()) for k in edit['topic_line'].split("·")))
     seam = f"{{\\an5\\pos({W // 2},{H // 2})}}"
     on_split = lambda t: any(a <= t < b for a, b in edit.get("_split", []))
-    # Graham, 2026-10-20: one word at a time, just the word being said, plain letters in the brand accent
-    per = edit.get("caption_words", 1)
-    # single-word captions are white (Graham, 2026-10-20); "caption_color" overrides, as sRGB hex
+    # Graham, 2026-11-03: a few words at a time (default 3), the word being said in another color, plain letters,
+    # no outline, box or shadow. "caption_words": 1 brings back one word at a time.
+    # "caption_color" is the other words, "caption_hi" the word being said (sRGB hex; default the brand yellow).
     cc = edit.get("caption_color", "ffffff").lstrip("#")
     WORD = hlg_hex(cc) if edit.get("hdr") else cc
+    hc = edit.get("caption_hi", "").lstrip("#")
+    HI = (hlg_hex(hc) if edit.get("hdr") else hc) if hc else YELLOW
     chunks = caption_chunks(words, max_words=per)
     for n, ch in enumerate(chunks):
         nxt = chunks[n + 1][0]["start"] if n + 1 < len(chunks) else 1e9
@@ -392,9 +399,9 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                 ev.append(f"Dialogue: 0,{ts(max(a, edit['hook_seconds'] if edit.get('hook') else 0))},{ts(b)},Cap,,0,0,0,,"
                           f"{seam if on_split(a) else pos}{{\\c{ass_color(WORD)}}}{ass_text(clean(w['w']))}")
                 continue
-            parts = [(f"{{\\i1\\c{ass_color(YELLOW)}}}" if j == k else "") + ass_text(clean(x["w"])) +
-                     (f"{{\\i0\\c{ass_color(CREAM)}}}" if j == k else "") for j, x in enumerate(ch)]
-            ev.append(f"Dialogue: 0,{ts(max(a, edit['hook_seconds'] if edit.get('hook') else 0))},{ts(b)},Cap,,0,0,0,,{seam if on_split(a) else pos}{' '.join(parts)}")
+            parts = [(f"{{\\c{ass_color(HI)}}}" if j == k else "") + ass_text(clean(x["w"])) +
+                     (f"{{\\c{ass_color(WORD)}}}" if j == k else "") for j, x in enumerate(ch)]
+            ev.append(f"Dialogue: 0,{ts(max(a, edit['hook_seconds'] if edit.get('hook') else 0))},{ts(b)},Cap,,0,0,0,,{seam if on_split(a) else pos}{{\\c{ass_color(WORD)}}}{' '.join(parts)}")
     Path(path).write_text(hdr + "\n".join(ev) + "\n")
 
 
@@ -410,7 +417,8 @@ def endcard_png(path, W, H, lines, bg=None, fg=None, head_font=None, hdr=False):
     top = round(H * (0.32 if H > W else 0.20))
     im.paste(Image.new("RGB", (s, s), "#" + fg), ((W - s) // 2, top), mask)
     d = ImageDraw.Draw(im)
-    f1 = ImageFont.truetype(str(head_font or FONTS / "Fraunces_500Medium.ttf"), round(W * (0.064 if H > W else 0.062)))
+    from pop import pil_font
+    f1 = pil_font(head_font or FONTS / "Fraunces_500Medium.ttf", round(W * (0.064 if H > W else 0.062)))
     f2 = ImageFont.truetype(str(FONTS / "Inter-SemiBold.otf"), round(W * (0.056 if H > W else 0.048)))
     y = top + s + round(min(W, H) * 0.08)
     for n, line in enumerate(lines):
@@ -433,7 +441,8 @@ def title_png(path, W, H, text, brand, hdr=False):
     size = round(H * 0.052)
     toks = [(t.strip("*"), t.startswith("*")) for t in re.findall(r"\*[^*]+\*|[^\s*]+", text)]
     while True:
-        reg, ita = ImageFont.truetype(str(f["head"]), size), ImageFont.truetype(str(f["head_italic"]), size)
+        from pop import pil_font
+        reg, ita = pil_font(f["head"], size), pil_font(f["head_italic"], size)
         gap = reg.getlength(" ")
         widths = [(ita if it else reg).getlength(w) for w, it in toks]
         total = sum(widths) + gap * (len(toks) - 1)
@@ -647,6 +656,12 @@ def cmd_render(work):
     brand = load_brand(edit.get("brand", "open-frame"), hlg_hex if hdr else (lambda h: h))
     sdr_brand = load_brand(edit.get("brand", "open-frame"))
     edit["_brand"] = brand
+    from pop import _find_font, SYSTEM_FONTS
+    cap = ({"family": edit["caption_font"], "weight": edit.get("caption_weight", 700)} if edit.get("caption_font")
+           else brand["caption"])  # edit.json wins, then brand.json fonts.caption, then the head font
+    edit["_cap_font"] = _find_font(brand["dir"], cap["family"], cap.get("weight", 700)) if cap else brand["files"]["head"]
+    # libass finds system fonts itself; brand font files need their folder
+    fdir = next((p.parent for p in (edit["_cap_font"], brand["files"]["head"]) if p not in SYSTEM_FONTS), FONTS)
     covers = make_covers(work, cut, out, stem, edit.get("cover"), edit.get("hook", "").replace("*", ""), hdr)
     PF = "yuv420p10le" if hdr else "yuv420p"
     # pass 2 (2026-10-21): cut the speaker out so titles and graphics sit behind the head
@@ -671,7 +686,7 @@ def cmd_render(work):
         write_ass(ass, tw, W, H, cap_y, edit)
         vf = f"[0:v]crop={cw}:{ch}:{cx}:{cy},scale={W}:{H}:flags=lanczos,setsar=1,"
         inputs = ["-i", str(cut)]
-        subs = f"subtitles=filename='{ass}':fontsdir='{brand['files']['head'].parent}'"
+        subs = f"subtitles=filename='{ass}':fontsdir='{fdir}'"
         cconv = ("scale=out_color_matrix=bt2020:out_range=tv,format=yuva420p10le" if hdr else "format=rgba")
         li = (3 if edit.get("endcard") else 1) + (1 if edit.get("pop") else 0) + (1 if mat else 0)
         lchain = lambda a, b: list_chain(cards, li, a, b, W, H, cconv)

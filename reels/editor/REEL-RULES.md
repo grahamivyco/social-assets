@@ -9,8 +9,8 @@ These apply to every talking head Reel, for Open Frame and for every client. Gra
 - Punch in on every other jump cut.
 
 ## Text
-- All text uses the client's brand fonts and colors from `/mnt/project-files/brands/<client>/brand.json` (fonts in `fonts/`). For Open Frame that's Fraunces for headings and captions and Inter for small text, plus the Open Frame palette.
-- Captions (updated 2026-10-20): one word at a time, only the word being spoken. Just the letters, in the brand head font, in white (Graham, 2026-10-20; edit.json "caption_color" overrides). No outline, no shadow, no box. Word starts snap to the audio.
+- All text uses the client's brand fonts and colors from `/mnt/project-files/brands/<client>/brand.json` (fonts in `fonts/`). For Open Frame that's Helvetica Neue Bold for headings and captions (upright, the accent word is a color, never italic; since 2026-11-03, was Fraunces) and Inter for small text, plus the Open Frame palette. Helvetica Neue is a macOS system font, so it's never copied into a repo; Linux previews use Liberation Sans.
+- Captions (updated 2026-11-03, replaces one word at a time): 3 words at a time, the word being spoken in a different brand color (Open Frame: yellow #F4BF3A, rest white). No black outline, no shadow, no box, no italics. Font: brand.json `fonts.caption` (Open Frame: Manrope ExtraBold, Graham picked 2026-11-03), else the head font. edit.json `"caption_font"`/`"caption_weight"` override it (any family in the brand's fonts/ folder, editor/fonts or the Mac's system fonts), `"caption_color"`/`"caption_hi"` change the two colors, `"caption_words": 1` brings back one word at a time. Word timing snaps to the audio. Motion graphics use the current brand design: flat shapes, no ink outlines (see brands/design-notes.md).
 - All other on-screen text also has no outline and no shadow (Graham, 2026-10-20).
 - Video titles are styled: brand head font, one *italic accent word*, on a background shape. They pop in, then animate out.
 
@@ -45,7 +45,7 @@ These apply to every talking head Reel, for Open Frame and for every client. Gra
 Use the hook bank and rules in `/mnt/project-files/lessons/ad-attention-videos.md`. Skeleton: Hook, Problem, Story, Payoff. Record 3 openings per Reel.
 
 ## Presets (2026-10-21)
-- `"preset": "one-take"` in edit.json (or `"preset"` in the Mac watcher's config.json): one take with only head and tail trimmed, no punch-ins, graphics, cut-out, sound effects or end card, small white one-word captions 55.6% down, static title on a white rounded box for 4 s. Frame with the face in the top third or set `caption_y`.
+- `"preset": "one-take"` in edit.json (or `"preset"` in the Mac watcher's config.json): one take with only head and tail trimmed, no punch-ins, graphics, cut-out, sound effects or end card, small white 3-word captions 55.6% down (spoken word in yellow), static title on a white rounded box for 4 s. Frame with the face in the top third or set `caption_y`.
 
 ## Keywords (Graham, 2026-10-21)
 - Every Reel gets 15 search keywords from the local AI: the main one in the hook and the first caption sentence, 1 or 2 more worked into the caption, and all 15 as one plain line above the call to action.
