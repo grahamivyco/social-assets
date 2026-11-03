@@ -384,7 +384,69 @@ function makePop(W, H, spec) {
   }
   Object.assign(FIELD, { pdfs: "y", menu: "b", stock: "g", door: "r", timer: "y", num: "b", headline: "g", people: "r", button: "b", sticky: "g", nav: "y", trash: "r", peek: "y", belong: "b", tuesday: "g", friends: "y" });
 
+  /* key point graphic (Graham, 2026-11-03): centered, abstract, in the design system. A card in the topic's color holds
+     a 3x2 grid of art plate tiles (circle, capsule, quarter round, half disc, ring, stripes, bracket), each popping in on
+     a stagger and then moving on its own loop, with the label set underneath. No pictograms, no outlines. The old
+     illustrated cards are still there with spec.scene_style = "illustrated". */
+  const PLATES = ["quarter", "circle", "half", "capsule", "ring", "stripes", "bracket"];
+  function hash(str) { let h = 2166136261; for (const c of String(str)) h = Math.imul(h ^ c.charCodeAt(0), 16777619); return h >>> 0; }
+  function rnd(seed) { let x = seed || 1; return () => (x = Math.imul(x ^ (x >>> 15), 2246822507) ^ Math.imul(x ^ (x >>> 13), 3266489909), ((x >>>= 0) % 1e6) / 1e6); }
+  function plate(ctx, kind, x, y, s, fg, v, ph) {
+    // one art plate shape in a square tile of size s at (x, y) top-left; v = local time, ph = phase for its loop
+    const cx = x + s / 2, cy = y + s / 2, beat = k => eIO(seg(((v + ph) % 1.6) / 1.6, k, k + .25)); // a move every 1.6 s
+    ctx.save(); ctx.fillStyle = fg; ctx.strokeStyle = fg; ctx.beginPath();
+    if (kind === "quarter") { // quarter round that turns a corner each beat
+      const r = Math.floor((v + ph) / 1.6) + beat(.5); ctx.translate(cx, cy); ctx.rotate(r * Math.PI / 2); ctx.translate(-s / 2, -s / 2);
+      ctx.moveTo(0, 0); ctx.arc(0, 0, s, 0, Math.PI / 2); ctx.closePath(); ctx.fill();
+    } else if (kind === "circle") { const k = 1 - .14 * Math.sin(beat(.2) * Math.PI); ctx.arc(cx, cy, s * .36 * k, 0, Math.PI * 2); ctx.fill();
+    } else if (kind === "half") { // half disc that flips over
+      const f = Math.floor((v + ph) / 1.6) % 2 + beat(.4); ctx.translate(cx, cy); ctx.rotate(f * Math.PI); ctx.arc(0, s * .18, s * .4, Math.PI, 0); ctx.closePath(); ctx.fill();
+    } else if (kind === "capsule") { // capsule that slides side to side
+      const d = (Math.floor((v + ph) / 1.6) % 2 ? 1 : -1) * (1 - 2 * beat(.3)); ctx.roundRect(x + s * .22 + d * s * .1, cy - s * .17, s * .56, s * .34, s * .17); ctx.fill();
+    } else if (kind === "ring") { const k = 1 + .12 * Math.sin(beat(.6) * Math.PI); ctx.lineWidth = s * .13; ctx.arc(cx, cy, s * .28 * k, 0, Math.PI * 2); ctx.stroke();
+    } else if (kind === "stripes") { // three bars that shift in turn
+      for (let i = 0; i < 3; i++) { const o = Math.sin(beat(.1 + i * .12) * Math.PI) * s * .12; ctx.roundRect(x + s * .12 + o, y + s * (.2 + i * .23), s * .76, s * .14, s * .07); } ctx.fill();
+    } else { // bracket: the Open Frame open corner, drawing on
+      const m = s * .2, w = s - 2 * m, k = eOutExpo(seg(v, .1 + ph * .1, .6 + ph * .1)); ctx.lineWidth = s * .1; ctx.lineCap = "round"; ctx.lineJoin = "round";
+      ctx.moveTo(x + m + w * .68, y + m); ctx.lineTo(x + m, y + m); ctx.lineTo(x + m, y + m + w); ctx.lineTo(x + m + w, y + m + w); ctx.lineTo(x + m + w, y + m + w * .34);
+      ctx.setLineDash([w * 3.7 * k, w * 8]); ctx.stroke();
+    }
+    ctx.restore();
+  }
   function scene(ctx, sc, t) {
+    if (spec.scene_style === "illustrated") return sceneIll(ctx, sc, t);
+    const v = t - sc.t, outv = seg(t, sc.end - .35, sc.end);
+    if (v < 0 || outv >= 1) return false;
+    const fk = FIELD[sc.kind] || ["r", "b", "y", "g"][hash(sc.kind || sc.label) % 4], field = P[fk];
+    const R = rnd(hash((sc.kind || "") + (sc.label || "")));
+    const cols = [P.cream, P.ink, P.r, P.b, P.y, P.g].filter(c => c !== field);
+    // the grid: 3 x 2 tiles, centered
+    const n = 3, m = 2, ts = (TALL ? 200 : 160) * U, gap = 14 * U, pad = 34 * U;
+    const ls = String(sc.label || "").split("\n"), lsz = (TALL ? 64 : 56) * U * (ls.length > 1 ? .82 : 1);
+    const cw = n * ts + (n - 1) * gap + 2 * pad, gh = m * ts + (m - 1) * gap, ch = pad + gh + pad * .9 + ls.length * lsz * 1.12 + pad;
+    const cx = W / 2, top = H * (TALL ? .06 : .05);
+    const inK = eOutExpo(seg(v, 0, .4)), outK = eInExpo(outv);
+    ctx.save(); ctx.globalAlpha = Math.min(1, inK * 1.5) * (1 - outK);
+    ctx.translate(0, (1 - inK) * 60 * U - outK * 60 * U);
+    box(ctx, cx - cw / 2, top, cw, ch, 24 * U, field);
+    const order = PLATES.slice().sort(() => R() - .5);
+    for (let j = 0; j < m; j++) for (let i = 0; i < n; i++) {
+      const k = j * n + i, tx = cx - cw / 2 + pad + i * (ts + gap), ty = top + pad + j * (ts + gap);
+      const bg = cols[Math.floor(R() * cols.length)], fgs = cols.filter(c => c !== bg), fg = fgs[Math.floor(R() * fgs.length)];
+      const q = eOutBack(seg(v, .12 + k * .06, .42 + k * .06)) * (1 - eInBack(seg(t, sc.end - .3 + (5 - k) * .02, sc.end - .05)));
+      if (q <= 0) continue;
+      ctx.save(); ctx.translate(tx + ts / 2, ty + ts / 2); ctx.scale(q, q); ctx.translate(-tx - ts / 2, -ty - ts / 2);
+      box(ctx, tx, ty, ts, ts, 12 * U, bg);
+      ctx.beginPath(); ctx.roundRect(tx, ty, ts, ts, 12 * U); ctx.clip();
+      plate(ctx, order[k % order.length], tx, ty, ts, fg, Math.max(0, v - .3 - k * .06), R() * 1.6);
+      ctx.restore();
+    }
+    ctx.textAlign = "center";
+    ls.forEach((l, i) => label(ctx, l, cx, top + pad + gh + pad * .9 + lsz * .56 + i * lsz * 1.12, lsz, fk === "y" ? P.ink : P.cream, eOutExpo(seg(v, .45 + i * .08, .75 + i * .08)), cw - 2 * pad));
+    ctx.restore();
+    return true;
+  }
+  function sceneIll(ctx, sc, t) {
     const v = t - sc.t, outv = seg(t, sc.end - .25, sc.end);
     if (v < 0 || outv >= 1) return false;
     const pw = W * (TALL ? .88 : .92), ph = H * (TALL ? .27 : .3), px0 = (W - pw) / 2, py = H * (TALL ? .05 : .03);
