@@ -15,11 +15,10 @@ Videos are silent. Add the trending sound in the Instagram app. For Facebook 1:1
 ## Scenes
 
 ### `frame-flip.html` (Open Frame)
-Built on the Open Frame mark. A big open frame holds each question and the sparkle waits in the open corner. The sparkle spins to the middle and bursts over the screen in a Bauhaus color, then pulls back into the corner and that question's own answer is in the frame. To move on, the camera flies through the frame into the next question. Ends on the real mark and the free consult.
+A thin rectangle holds the words. The sparkle sweeps across it, left to right for each question and back for its answer, and the new line is revealed behind it as it passes. At the end the rectangle shrinks into the Open Frame mark: its top-right corner opens and the sparkle settles in the middle, so the logo is fixed. Then the free consult. (v3, Graham 2026-11-03.)
 - Params: `pairs` ([[question, answer], ...]), `cta`, `link`.
-- Type: Helvetica Neue Bold, upright (Open Frame brand since 2026-11-03). Loaded by name from the Mac's system fonts (it isn't free to copy into a repo); Linux previews fall back to Liberation Sans.
-- Timing: 2.8 s per pair, 4 pairs = 14.5 s. Answer colors rotate red, blue, yellow, green with the text color that passes contrast.
-- Replaced the pendulum wipe (2026-11-03): Graham felt the pendulum was too much the reference studio's own look.
+- Questions are cream, answers take the pair's accent (red, blue, yellow, green). Helvetica Neue Bold, upright (system font on the Mac, Liberation Sans on Linux).
+- Timing: 0.62 s sweep, 1.05 s hold on a question, 1.25 s on an answer; 4 pairs = 18 s.
 
 ### `sketch-to-guide.html` (any client with a mark, default NGM)
 Pencil sketch draws on, construction guides and anchor points snap over it, design-tool panels slide in, the clean vector replaces the sketch, a flash through white into the lockup, color versions slide in as bands, palette bars rise, the real brand guide pages drift on a tilted plane, then flat mockups (tee, hanging sign, stickers, app, tote, embroidery hoop, name badge, business cards, from `mockups-ngm.js`) with whip cuts on the beat (117 BPM), the guild end card, and an Open Frame sign-off question ("Want your brand to be next?"). 22.2 s.
