@@ -193,6 +193,7 @@ class Pop:
                 "intro": self.title["until"] if self.title else 0,
                 "frame_intro": self.frame_intro, "layer": layer, "site": self.brand.get("site", ""),
                 "title_style": getattr(self, "title_style", None),
+                "band": getattr(self, "band", None),
                 "fonts": [font_spec(self.brand["head"]["family"], self.brand["head"]["weight"], "normal", f["head"])]
                 + ([font_spec(self.brand["head"]["family"], self.brand["head"]["weight"], "italic", f["head_italic"])]
                    if self.brand["head"]["italic"] else [])}
