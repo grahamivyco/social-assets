@@ -76,3 +76,6 @@
 {"at":"2026-11-02T23:11:47.295Z","loop":"magnet","client":"","status":"fail","made":0,"kept":0,"cards":0,"note":"Hub: Hub busy, try again"}
 {"at":"2026-11-03T06:24:42.752Z","loop":"engage","client":"open-frame","status":"ok","made":5,"kept":3,"cards":0,"note":"2 skipped as sensitive, 0 failed the check, 0 sent today"}
 {"at":"2026-11-03T09:03:29.868Z","loop":"directories","client":"open-frame","status":"ok","made":2,"kept":2,"cards":2,"note":"google-business, bing-places"}
+{"at":"2026-11-03T11:07:52.251Z","loop":"key","client":"open-frame","status":"ok","made":0,"kept":0,"cards":0,"note":"0 touches from 0 key accounts this week"}
+{"at":"2026-11-04T02:24:19.439Z","loop":"reel-ask","client":"","status":"fail","made":0,"kept":0,"cards":0,"note":"fetch failed"}
+{"at":"2026-11-04T06:30:53.182Z","loop":"engage","client":"open-frame","status":"ok","made":5,"kept":3,"cards":0,"note":"2 skipped as sensitive, 0 failed the check, 0 sent today"}
