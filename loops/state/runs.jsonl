@@ -84,3 +84,6 @@
 {"at":"2026-11-04T17:25:52.402Z","loop":"reel-ask","client":"","status":"fail","made":0,"kept":0,"cards":0,"note":"Hub: Hub busy, try again"}
 {"at":"2026-11-05T06:24:32.806Z","loop":"engage","client":"open-frame","status":"ok","made":5,"kept":0,"cards":0,"note":"5 skipped as sensitive, 0 failed the check, 0 sent today"}
 {"at":"2026-11-05T09:15:40.706Z","loop":"gbp","client":"open-frame","status":"ok","made":1,"kept":1,"cards":1,"note":""}
+{"at":"2026-11-05T11:00:31.426Z","loop":"key","client":"open-frame","status":"ok","made":0,"kept":0,"cards":0,"note":"0 touches from 0 key accounts this week"}
+{"at":"2026-11-05T18:46:11.339Z","loop":"reel-ask","client":"","status":"fail","made":0,"kept":0,"cards":0,"note":"Hub: Hub busy, try again"}
+{"at":"2026-11-06T07:17:40.554Z","loop":"engage","client":"open-frame","status":"ok","made":5,"kept":1,"cards":0,"note":"4 skipped as sensitive, 0 failed the check, 0 sent today"}
