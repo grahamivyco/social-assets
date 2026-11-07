@@ -88,3 +88,18 @@
 {"at":"2026-11-05T18:46:11.339Z","loop":"reel-ask","client":"","status":"fail","made":0,"kept":0,"cards":0,"note":"Hub: Hub busy, try again"}
 {"at":"2026-11-06T07:17:40.554Z","loop":"engage","client":"open-frame","status":"ok","made":5,"kept":1,"cards":0,"note":"4 skipped as sensitive, 0 failed the check, 0 sent today"}
 {"at":"2026-11-06T09:37:10.779Z","loop":"templates","client":"open-frame","status":"ok","made":1,"kept":0,"cards":0,"note":""}
+{"at":"2026-11-06T10:00:01.469Z","loop":"reel-ask","client":"","status":"fail","made":0,"kept":0,"cards":0,"note":"fetch failed"}
+{"at":"2026-11-06T10:46:30.427Z","loop":"reel-ask","client":"","status":"fail","made":0,"kept":0,"cards":0,"note":"fetch failed"}
+{"at":"2026-11-06T11:47:31.466Z","loop":"magnet","client":"","status":"fail","made":0,"kept":0,"cards":0,"note":"fetch failed"}
+{"at":"2026-11-06T12:37:00.912Z","loop":"reel-ask","client":"","status":"fail","made":0,"kept":0,"cards":0,"note":"fetch failed"}
+{"at":"2026-11-06T13:08:40.595Z","loop":"site-collect","client":"","status":"fail","made":0,"kept":0,"cards":0,"note":"fetch failed"}
+{"at":"2026-11-06T13:11:34.525Z","loop":"magnet","client":"","status":"fail","made":0,"kept":0,"cards":0,"note":"fetch failed"}
+{"at":"2026-11-06T13:14:24.685Z","loop":"proposal","client":"","status":"fail","made":0,"kept":0,"cards":0,"note":"fetch failed"}
+{"at":"2026-11-06T13:17:25.007Z","loop":"key-radar","client":"","status":"fail","made":0,"kept":0,"cards":0,"note":"fetch failed"}
+{"at":"2026-11-06T13:20:46.386Z","loop":"reel-ask","client":"","status":"fail","made":0,"kept":0,"cards":0,"note":"fetch failed"}
+{"at":"2026-11-06T13:39:29.350Z","loop":"key","client":"open-frame","status":"ok","made":0,"kept":0,"cards":0,"note":"0 touches from 0 key accounts this week"}
+{"at":"2026-11-06T16:06:14.331Z","loop":"reel-ask","client":"","status":"fail","made":0,"kept":0,"cards":0,"note":"fetch failed"}
+{"at":"2026-11-06T17:07:48.183Z","loop":"magnet","client":"","status":"fail","made":0,"kept":0,"cards":0,"note":"fetch failed"}
+{"at":"2026-11-06T18:53:37.625Z","loop":"reel-ask","client":"","status":"fail","made":0,"kept":0,"cards":0,"note":"fetch failed"}
+{"at":"2026-11-06T19:54:38.388Z","loop":"site-collect","client":"","status":"fail","made":0,"kept":0,"cards":0,"note":"fetch failed"}
+{"at":"2026-11-06T20:55:39.634Z","loop":"magnet","client":"","status":"fail","made":0,"kept":0,"cards":0,"note":"fetch failed"}
