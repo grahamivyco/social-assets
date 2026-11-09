@@ -103,3 +103,5 @@
 {"at":"2026-11-06T18:53:37.625Z","loop":"reel-ask","client":"","status":"fail","made":0,"kept":0,"cards":0,"note":"fetch failed"}
 {"at":"2026-11-06T19:54:38.388Z","loop":"site-collect","client":"","status":"fail","made":0,"kept":0,"cards":0,"note":"fetch failed"}
 {"at":"2026-11-06T20:55:39.634Z","loop":"magnet","client":"","status":"fail","made":0,"kept":0,"cards":0,"note":"fetch failed"}
+{"at":"2026-11-09T06:21:40.557Z","loop":"engage","client":"open-frame","status":"ok","made":5,"kept":5,"cards":0,"note":"0 skipped as sensitive, 0 failed the check, 0 sent today"}
+{"at":"2026-11-09T07:03:14.450Z","loop":"leads","client":"open-frame","status":"ok","made":1,"kept":1,"cards":1,"note":"comments 0, key 0, leads 0, consults 0, won 0; drafts/day 5 -> 5"}
