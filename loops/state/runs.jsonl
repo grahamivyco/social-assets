@@ -105,3 +105,15 @@
 {"at":"2026-11-06T20:55:39.634Z","loop":"magnet","client":"","status":"fail","made":0,"kept":0,"cards":0,"note":"fetch failed"}
 {"at":"2026-11-09T06:21:40.557Z","loop":"engage","client":"open-frame","status":"ok","made":5,"kept":5,"cards":0,"note":"0 skipped as sensitive, 0 failed the check, 0 sent today"}
 {"at":"2026-11-09T07:03:14.450Z","loop":"leads","client":"open-frame","status":"ok","made":1,"kept":1,"cards":1,"note":"comments 0, key 0, leads 0, consults 0, won 0; drafts/day 5 -> 5"}
+{"at":"2026-11-09T11:34:19.337Z","loop":"key","client":"open-frame","status":"ok","made":0,"kept":0,"cards":0,"note":"0 touches from 0 key accounts this week"}
+{"at":"2026-11-10T06:52:00.920Z","loop":"engage","client":"","status":"fail","made":0,"kept":0,"cards":0,"note":"fetch failed"}
+{"at":"2026-11-10T07:29:49.533Z","loop":"magnet","client":"","status":"fail","made":0,"kept":0,"cards":0,"note":"fetch failed"}
+{"at":"2026-11-10T08:19:08.569Z","loop":"reel-ask","client":"","status":"fail","made":0,"kept":0,"cards":0,"note":"fetch failed"}
+{"at":"2026-11-10T09:18:15.593Z","loop":"engage","client":"","status":"fail","made":0,"kept":0,"cards":0,"note":"fetch failed"}
+{"at":"2026-11-10T10:34:38.815Z","loop":"site-collect","client":"","status":"fail","made":0,"kept":0,"cards":0,"note":"fetch failed"}
+{"at":"2026-11-10T11:13:57.657Z","loop":"magnet","client":"","status":"fail","made":0,"kept":0,"cards":0,"note":"fetch failed"}
+{"at":"2026-11-10T11:31:59.860Z","loop":"proposal","client":"","status":"fail","made":0,"kept":0,"cards":0,"note":"fetch failed"}
+{"at":"2026-11-10T11:51:37.506Z","loop":"onboard","client":"","status":"fail","made":0,"kept":0,"cards":0,"note":"fetch failed"}
+{"at":"2026-11-10T13:36:38.765Z","loop":"reel-ask","client":"","status":"fail","made":0,"kept":0,"cards":0,"note":"fetch failed"}
+{"at":"2026-11-10T14:28:05.500Z","loop":"engage","client":"open-frame","status":"ok","made":5,"kept":4,"cards":0,"note":"1 skipped as sensitive, 0 failed the check, 0 sent today"}
+{"at":"2026-11-10T14:28:26.697Z","loop":"key","client":"open-frame","status":"ok","made":0,"kept":0,"cards":0,"note":"0 touches from 0 key accounts this week"}
