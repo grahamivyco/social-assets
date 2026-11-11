@@ -118,3 +118,5 @@
 {"at":"2026-11-10T14:28:05.500Z","loop":"engage","client":"open-frame","status":"ok","made":5,"kept":4,"cards":0,"note":"1 skipped as sensitive, 0 failed the check, 0 sent today"}
 {"at":"2026-11-10T14:28:26.697Z","loop":"key","client":"open-frame","status":"ok","made":0,"kept":0,"cards":0,"note":"0 touches from 0 key accounts this week"}
 {"at":"2026-11-11T06:27:50.012Z","loop":"engage","client":"open-frame","status":"ok","made":5,"kept":4,"cards":0,"note":"1 skipped as sensitive, 0 failed the check, 0 sent today"}
+{"at":"2026-11-11T09:54:33.388Z","loop":"spotlight","client":"","status":"fail","made":0,"kept":0,"cards":0,"note":"LM Studio took over 8 min"}
+{"at":"2026-11-11T10:24:09.008Z","loop":"spotlight","client":"open-frame","status":"ok","made":1,"kept":0,"cards":0,"note":"jxta_arts failed the check: em dash"}
