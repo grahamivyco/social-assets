@@ -123,3 +123,5 @@
 {"at":"2026-11-11T11:36:57.276Z","loop":"key","client":"open-frame","status":"ok","made":0,"kept":0,"cards":0,"note":"0 touches from 0 key accounts this week"}
 {"at":"2026-11-12T06:42:22.782Z","loop":"engage","client":"open-frame","status":"ok","made":5,"kept":4,"cards":0,"note":"1 skipped as sensitive, 0 failed the check, 0 sent today"}
 {"at":"2026-11-12T09:15:10.071Z","loop":"gbp","client":"open-frame","status":"ok","made":1,"kept":1,"cards":1,"note":""}
+{"at":"2026-11-12T11:36:51.229Z","loop":"key","client":"open-frame","status":"ok","made":0,"kept":0,"cards":0,"note":"0 touches from 0 key accounts this week"}
+{"at":"2026-11-13T07:54:51.474Z","loop":"engage","client":"","status":"fail","made":0,"kept":0,"cards":0,"note":"LM Studio took over 8 min"}
