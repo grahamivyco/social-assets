@@ -129,3 +129,41 @@
 {"at":"2026-11-13T13:08:05.474Z","loop":"engage","client":"","status":"fail","made":0,"kept":0,"cards":0,"note":"LM Studio took over 8 min"}
 {"at":"2026-11-13T13:08:29.961Z","loop":"templates","client":"open-frame","status":"ok","made":1,"kept":0,"cards":0,"note":""}
 {"at":"2026-11-13T13:08:46.172Z","loop":"key","client":"open-frame","status":"ok","made":0,"kept":0,"cards":0,"note":"0 touches from 0 key accounts this week"}
+{"at":"2026-11-14T11:06:03.419Z","loop":"reel-ask","client":"","status":"fail","made":0,"kept":0,"cards":0,"note":"fetch failed"}
+{"at":"2026-11-14T12:22:52.436Z","loop":"reel-ask","client":"","status":"fail","made":0,"kept":0,"cards":0,"note":"fetch failed"}
+{"at":"2026-11-14T13:24:23.195Z","loop":"site-collect","client":"","status":"fail","made":0,"kept":0,"cards":0,"note":"fetch failed"}
+{"at":"2026-11-14T14:43:25.262Z","loop":"magnet","client":"","status":"fail","made":0,"kept":0,"cards":0,"note":"fetch failed"}
+{"at":"2026-11-14T15:45:37.257Z","loop":"proposal","client":"","status":"fail","made":0,"kept":0,"cards":0,"note":"fetch failed"}
+{"at":"2026-11-14T16:50:01.192Z","loop":"reel-ask","client":"","status":"fail","made":0,"kept":0,"cards":0,"note":"fetch failed"}
+{"at":"2026-11-14T17:47:44.424Z","loop":"site-collect","client":"","status":"fail","made":0,"kept":0,"cards":0,"note":"fetch failed"}
+{"at":"2026-11-14T19:05:04.662Z","loop":"magnet","client":"","status":"fail","made":0,"kept":0,"cards":0,"note":"fetch failed"}
+{"at":"2026-11-14T19:57:34.032Z","loop":"proposal","client":"","status":"fail","made":0,"kept":0,"cards":0,"note":"fetch failed"}
+{"at":"2026-11-14T21:05:01.275Z","loop":"reel-ask","client":"","status":"fail","made":0,"kept":0,"cards":0,"note":"fetch failed"}
+{"at":"2026-11-14T21:51:00.931Z","loop":"site-collect","client":"","status":"fail","made":0,"kept":0,"cards":0,"note":"fetch failed"}
+{"at":"2026-11-14T23:18:09.475Z","loop":"magnet","client":"","status":"fail","made":0,"kept":0,"cards":0,"note":"fetch failed"}
+{"at":"2026-11-15T00:14:08.854Z","loop":"proposal","client":"","status":"fail","made":0,"kept":0,"cards":0,"note":"fetch failed"}
+{"at":"2026-11-15T01:17:33.232Z","loop":"reel-ask","client":"","status":"fail","made":0,"kept":0,"cards":0,"note":"fetch failed"}
+{"at":"2026-11-15T01:42:49.739Z","loop":"reel-ask","client":"","status":"fail","made":0,"kept":0,"cards":0,"note":"fetch failed"}
+{"at":"2026-11-15T03:09:07.655Z","loop":"magnet","client":"","status":"fail","made":0,"kept":0,"cards":0,"note":"fetch failed"}
+{"at":"2026-11-15T04:17:31.682Z","loop":"reel-ask","client":"","status":"fail","made":0,"kept":0,"cards":0,"note":"fetch failed"}
+{"at":"2026-11-15T05:00:59.834Z","loop":"site-collect","client":"","status":"fail","made":0,"kept":0,"cards":0,"note":"fetch failed"}
+{"at":"2026-11-15T05:49:42.541Z","loop":"magnet","client":"","status":"fail","made":0,"kept":0,"cards":0,"note":"fetch failed"}
+{"at":"2026-11-15T08:27:01.992Z","loop":"reel-ask","client":"","status":"fail","made":0,"kept":0,"cards":0,"note":"fetch failed"}
+{"at":"2026-11-15T09:46:50.792Z","loop":"proposal","client":"","status":"fail","made":0,"kept":0,"cards":0,"note":"fetch failed"}
+{"at":"2026-11-15T11:25:16.315Z","loop":"onboard","client":"","status":"fail","made":0,"kept":0,"cards":0,"note":"fetch failed"}
+{"at":"2026-11-15T13:08:44.723Z","loop":"reel-ask","client":"","status":"fail","made":0,"kept":0,"cards":0,"note":"fetch failed"}
+{"at":"2026-11-15T14:33:35.027Z","loop":"site-collect","client":"","status":"fail","made":0,"kept":0,"cards":0,"note":"fetch failed"}
+{"at":"2026-11-15T16:04:00.167Z","loop":"magnet","client":"","status":"fail","made":0,"kept":0,"cards":0,"note":"fetch failed"}
+{"at":"2026-11-15T17:22:59.811Z","loop":"proposal","client":"","status":"fail","made":0,"kept":0,"cards":0,"note":"fetch failed"}
+{"at":"2026-11-15T18:36:34.199Z","loop":"reel-ask","client":"","status":"fail","made":0,"kept":0,"cards":0,"note":"fetch failed"}
+{"at":"2026-11-15T19:58:47.899Z","loop":"site-collect","client":"","status":"fail","made":0,"kept":0,"cards":0,"note":"fetch failed"}
+{"at":"2026-11-15T20:35:00.551Z","loop":"proposal","client":"","status":"fail","made":0,"kept":0,"cards":0,"note":"fetch failed"}
+{"at":"2026-11-15T21:00:18.667Z","loop":"onboard","client":"","status":"fail","made":0,"kept":0,"cards":0,"note":"fetch failed"}
+{"at":"2026-11-15T21:08:01.004Z","loop":"reel-ask","client":"","status":"fail","made":0,"kept":0,"cards":0,"note":"fetch failed"}
+{"at":"2026-11-15T21:28:29.604Z","loop":"site-collect","client":"","status":"fail","made":0,"kept":0,"cards":0,"note":"fetch failed"}
+{"at":"2026-11-15T22:42:40.690Z","loop":"magnet","client":"","status":"fail","made":0,"kept":0,"cards":0,"note":"fetch failed"}
+{"at":"2026-11-15T23:44:10.764Z","loop":"proposal","client":"","status":"fail","made":0,"kept":0,"cards":0,"note":"fetch failed"}
+{"at":"2026-11-16T01:12:01.448Z","loop":"reel-ask","client":"","status":"fail","made":0,"kept":0,"cards":0,"note":"fetch failed"}
+{"at":"2026-11-16T02:30:41.943Z","loop":"site-collect","client":"","status":"fail","made":0,"kept":0,"cards":0,"note":"fetch failed"}
+{"at":"2026-11-16T03:45:26.324Z","loop":"magnet","client":"","status":"fail","made":0,"kept":0,"cards":0,"note":"fetch failed"}
+{"at":"2026-11-16T04:38:39.898Z","loop":"proposal","client":"","status":"fail","made":0,"kept":0,"cards":0,"note":"fetch failed"}
