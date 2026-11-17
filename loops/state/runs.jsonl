@@ -169,3 +169,7 @@
 {"at":"2026-11-16T04:38:39.898Z","loop":"proposal","client":"","status":"fail","made":0,"kept":0,"cards":0,"note":"fetch failed"}
 {"at":"2026-11-16T14:36:55.359Z","loop":"engage","client":"open-frame","status":"ok","made":5,"kept":5,"cards":0,"note":"0 skipped as sensitive, 0 failed the check, 0 sent today"}
 {"at":"2026-11-16T14:37:48.720Z","loop":"leads","client":"open-frame","status":"ok","made":1,"kept":1,"cards":1,"note":"comments 0, key 0, leads 0, consults 0, won 0; drafts/day 5 -> 5"}
+{"at":"2026-11-16T14:39:09.933Z","loop":"key","client":"open-frame","status":"ok","made":0,"kept":0,"cards":0,"note":"0 touches from 0 key accounts this week"}
+{"at":"2026-11-16T16:23:10.533Z","loop":"reel-ask","client":"","status":"fail","made":0,"kept":0,"cards":0,"note":"Hub: This operation is not supported for this document: 1nec5cD5RtjV6yDLzxeKX9vGhI0k123PIaFFDwXqFM6A"}
+{"at":"2026-11-16T18:40:03.110Z","loop":"proposal","client":"","status":"fail","made":0,"kept":0,"cards":0,"note":"Hub: Hub busy, try again"}
+{"at":"2026-11-17T06:21:04.947Z","loop":"engage","client":"open-frame","status":"ok","made":5,"kept":5,"cards":0,"note":"0 skipped as sensitive, 0 failed the check, 0 sent today"}
